@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'database_helper.dart';
 import '../models/chat_message_model.dart';
 
@@ -9,13 +9,11 @@ class LocalMessageDao {
 
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  String getUserId() => FirebaseAuth.instance.currentUser?.uid ?? '';
+  String getUserId() =>
+      Supabase.instance.client.auth.currentUser?.id ?? '';
 
   Future<String> getUserIdAsync() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) return user.uid;
-    await user?.reload();
-    return FirebaseAuth.instance.currentUser?.uid ?? '';
+    return Supabase.instance.client.auth.currentUser?.id ?? '';
   }
 
   Future<void> insert(ChatMessageModel msg) async {
@@ -121,12 +119,6 @@ class LocalMessageDao {
   }
 
   Future<void> migrateUserId(String oldUserId, String newUserId) async {
-    final db = await _dbHelper.database;
-    await db.update(
-      'messages',
-      {'chat_id': newUserId},
-      where: 'chat_id = ?',
-      whereArgs: [oldUserId],
-    );
+    return;
   }
 }

@@ -40,15 +40,6 @@ class ChatMessageModel {
         isDeleted: map['is_deleted'] == 1,
       );
 
-  Map<String, dynamic> toFirestore(String userId) => {
-    'user_id': userId,
-    'chat_id': chatId,
-    'text': text,
-    'is_user': isUser,
-    'timestamp': timestamp,
-    'synced_at': DateTime.now(),
-  };
-
   ChatMessageModel copyWith({
     String? id,
     String? chatId,

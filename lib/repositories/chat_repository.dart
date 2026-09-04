@@ -1,7 +1,7 @@
 // ignore_for_file: empty_catches
 import '../data/local/local_chat_dao.dart';
 import '../data/models/chat_session_model.dart';
-import '../data/remote/firestore_chat_service.dart';
+import '../data/remote/supabase_chat_service.dart';
 import '../core/utils/connectivity_service.dart';
 
 class ChatRepository {
@@ -18,7 +18,7 @@ class ChatRepository {
 
     if (isOnline && userId.isNotEmpty && !userId.startsWith('offline_')) {
       try {
-        final remoteChats = await FirestoreChatService.getChats(userId);
+        final remoteChats = await SupabaseChatService.getChats(userId);
         for (final chat in remoteChats) {
           final syncedChat = chat.copyWith(isSynced: true);
           await _localChatDao.replaceChat(chat.id, syncedChat);
@@ -45,7 +45,7 @@ class ChatRepository {
     }
     if (await _connectivity.isOnline() && uid.isNotEmpty) {
       try {
-        await FirestoreChatService.saveChat(uid, chat);
+        await SupabaseChatService.saveChat(uid, chat);
         await _localChatDao.update(chat.copyWith(isSynced: true));
       } catch (e) {}
     }
@@ -59,7 +59,7 @@ class ChatRepository {
     }
     if (await _connectivity.isOnline() && uid.isNotEmpty) {
       try {
-        await FirestoreChatService.saveChat(uid, chat);
+        await SupabaseChatService.saveChat(uid, chat);
         await _localChatDao.update(chat.copyWith(isSynced: true));
       } catch (e) {}
     }
@@ -73,7 +73,7 @@ class ChatRepository {
     }
     if (await _connectivity.isOnline() && uid.isNotEmpty) {
       try {
-        await FirestoreChatService.deleteChat(uid, chatId);
+        await SupabaseChatService.deleteChat(uid, chatId);
         await _localChatDao.hardDelete(chatId);
       } catch (e) {}
     }

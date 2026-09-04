@@ -23,16 +23,6 @@ jobs:
           flutter-version: "3.44.1"
           cache: true
 
-      - name: Inject google-services.json
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: |
-          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
-            echo "::error::Missing GOOGLE_SERVICES_JSON secret (base64 of google-services.json)"
-            exit 1
-          fi
-          echo "$GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json
-
       - name: Create .env
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -41,7 +31,14 @@ jobs:
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           GEMMA_MODEL_URL: ${{ secrets.GEMMA_MODEL_URL }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          GOOGLE_SERVER_CLIENT_ID: ${{ secrets.GOOGLE_SERVER_CLIENT_ID }}
         run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "::error::Missing SUPABASE_URL secret"
+            exit 1
+          fi
           cat > .env <<EOF
           GROQ_API_KEY=$GROQ_API_KEY
           MINIMAX_API_KEY=$MINIMAX_API_KEY
@@ -49,6 +46,9 @@ jobs:
           KAGGLE_KEY=$KAGGLE_KEY
           GEMMA_MODEL_URL=$GEMMA_MODEL_URL
           HF_TOKEN=$HF_TOKEN
+          SUPABASE_URL=$SUPABASE_URL
+          SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY
+          GOOGLE_SERVER_CLIENT_ID=$GOOGLE_SERVER_CLIENT_ID
           EOF
 
       - run: flutter pub get

@@ -1,10 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+// ignore_for_file: empty_catches
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math';
+import '../../services/auth/auth_service.dart';
 
 class SecurityService {
-  static final FirebaseFirestore _db = FirebaseFirestore.instance;
-  static final FirebaseAuth _auth = FirebaseAuth.instance;
+  static SupabaseClient get _db => Supabase.instance.client;
 
   static String generateRecoveryCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -14,12 +14,16 @@ class SecurityService {
   }
 
   static Future<String> getRecoveryCode() async {
-    final uid = _auth.currentUser?.uid;
+    final uid = AuthService.currentUser?.id;
     if (uid == null) return '';
     try {
-      final doc = await _db.collection('users').doc(uid).get();
-      if (!doc.exists) return '';
-      return doc.data()?['recoveryCode'] as String? ?? '';
+      final row = await _db
+          .from('profiles')
+          .select('recovery_code')
+          .eq('id', uid)
+          .maybeSingle();
+      if (row == null) return '';
+      return row['recovery_code'] as String? ?? '';
     } catch (e) {
       return '';
     }
@@ -32,11 +36,11 @@ class SecurityService {
 
   static Future<bool> deleteAccount() async {
     try {
-      final uid = _auth.currentUser?.uid;
+      final uid = AuthService.currentUser?.id;
       if (uid != null) {
-        await _db.collection('users').doc(uid).delete();
-        await _auth.currentUser?.delete();
+        await _db.from('profiles').delete().eq('id', uid);
       }
+      await AuthService.logout();
       return true;
     } catch (e) {
       return false;

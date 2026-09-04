@@ -42,13 +42,6 @@ class ChatSessionModel {
         isDeleted: map['is_deleted'] == 1,
       );
 
-  Map<String, dynamic> toFirestore() => {
-    'user_id': userId,
-    'title': title,
-    'last_message': lastMessage,
-    'updated_at': updatedAt,
-  };
-
   ChatSessionModel copyWith({bool? isSynced, bool? isDeleted, String? lastMessage, String? title, DateTime? updatedAt}) {
     return ChatSessionModel(
       id: id,

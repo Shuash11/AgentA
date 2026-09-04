@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../services/auth/auth_service.dart';
 import '../../repositories/user_repository.dart';
@@ -70,19 +70,23 @@ class _RegisterPageState extends State<RegisterPage> {
 
     try {
       final cred = await AuthService.register(email, password, displayName);
-      final uid = cred.user!.uid;
+      final uid = cred.uid;
       await UserRepository.createUserProfile(uid, email, displayName, recoveryCode);
       isOnline = true;
-    } on FirebaseAuthException catch (e) {
-      final networkErrors = ['network-request-failed', 'too-many-requests'];
-      if (!networkErrors.contains(e.code)) {
+    } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      final isNetwork = msg.contains('network') ||
+          msg.contains('socket') ||
+          msg.contains('failed host') ||
+          e.statusCode == '408';
+      if (!isNetwork) {
         setState(() {
           _isLoading = false;
-          _errorMessage = _friendlyFirebaseError(e.code);
+          _errorMessage = _friendlyAuthError(msg);
         });
         return;
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -110,6 +114,7 @@ class _RegisterPageState extends State<RegisterPage> {
       password: password,
       displayName: displayName,
       recoveryCode: recoveryCode,
+      isSynced: isOnline,
     );
 
     setState(() => _isLoading = false);
@@ -119,19 +124,23 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  String _friendlyFirebaseError(String code) {
-    switch (code) {
-      case 'email-already-in-use':
-        return 'This email is already registered. Please sign in.';
-      case 'invalid-email':
-        return 'The email address is not valid.';
-      case 'weak-password':
-        return 'Password is too weak. Use at least 6 characters.';
-      case 'operation-not-allowed':
-        return 'Email/password sign-up is not enabled. Contact support.';
-      default:
-        return 'Registration failed ($code). Please try again.';
+  String _friendlyAuthError(String message) {
+    if (message.contains('already registered') ||
+        message.contains('already exists') ||
+        message.contains('already in use')) {
+      return 'This email is already registered. Please sign in.';
     }
+    if (message.contains('invalid email') || message.contains('invalid-email')) {
+      return 'The email address is not valid.';
+    }
+    if (message.contains('password')) {
+      return 'Password is too weak. Use at least 6 characters.';
+    }
+    if (message.contains('signups not allowed') ||
+        message.contains('not enabled')) {
+      return 'Sign-up is not enabled. Contact support.';
+    }
+    return 'Registration failed. Please try again.';
   }
 
   void _togglePassword() {

@@ -10,6 +10,9 @@ import '../../theme/app_theme.dart';
 class OfflineModelBanner extends StatelessWidget {
   const OfflineModelBanner({super.key});
 
+  static const String _offlineDisclaimer =
+      'Offline answers can make mistakes — double-check schoolwork.';
+
   @override
   Widget build(BuildContext context) {
     final colors = context.select((ThemeCubit c) => c.state.colors);
@@ -18,34 +21,36 @@ class OfflineModelBanner extends StatelessWidget {
     final isGemmaReady = context.select((ModelDownloadService m) => m.isReady);
     final modelName = context.select((OnlineAIService o) => o.preferredModel.displayName);
 
-    final (Color bgColor, Color accentColor, IconData icon, String text) = _getStatus(isOnline, isLimited, isGemmaReady, modelName, colors);
+    final (Color bgColor, Color accentColor, IconData icon, String text, String? subtext) = _getStatus(isOnline, isLimited, isGemmaReady, modelName, colors);
 
     return _StatusBanner(
       icon: icon,
       text: text,
+      subtext: subtext,
       bgColor: bgColor,
       accentColor: accentColor,
       textColor: colors.text,
     );
   }
 
-  (Color, Color, IconData, String) _getStatus(bool isOnline, bool isLimited, bool isGemmaReady, String modelName, ThemeColors colors) {
+  (Color, Color, IconData, String, String?) _getStatus(bool isOnline, bool isLimited, bool isGemmaReady, String modelName, ThemeColors colors) {
     if (isOnline) {
-      return (colors.success.withValues(alpha: 0.15), colors.success, Icons.cloud_done_rounded, 'Online - $modelName');
+      return (colors.success.withValues(alpha: 0.15), colors.success, Icons.cloud_done_rounded, 'Online - $modelName', null);
     }
     if (isLimited) {
-      return (colors.amber.withValues(alpha: 0.15), colors.amber, Icons.cloud_queue_rounded, 'Limited - using Gemma (Offline)');
+      return (colors.amber.withValues(alpha: 0.15), colors.amber, Icons.cloud_queue_rounded, 'Limited - using Gemma (Offline)', _offlineDisclaimer);
     }
     if (isGemmaReady) {
-      return (colors.amber.withValues(alpha: 0.12), colors.amber, Icons.memory_rounded, 'Offline - using Gemma');
+      return (colors.amber.withValues(alpha: 0.12), colors.amber, Icons.memory_rounded, 'Offline - using Gemma', _offlineDisclaimer);
     }
-    return (colors.error.withValues(alpha: 0.15), colors.error, Icons.wifi_off_rounded, 'Offline - model not ready');
+    return (colors.error.withValues(alpha: 0.15), colors.error, Icons.wifi_off_rounded, 'Offline - model not ready', null);
   }
 }
 
 class _StatusBanner extends StatelessWidget {
   final IconData icon;
   final String text;
+  final String? subtext;
   final Color bgColor;
   final Color accentColor;
   final Color textColor;
@@ -53,6 +58,7 @@ class _StatusBanner extends StatelessWidget {
   const _StatusBanner({
     required this.icon,
     required this.text,
+    this.subtext,
     required this.bgColor,
     required this.accentColor,
     required this.textColor,
@@ -73,11 +79,24 @@ class _StatusBanner extends StatelessWidget {
           Icon(icon, color: accentColor, size: 16),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: Text(
-              text,
-              style: TextStyle(color: textColor.withValues(alpha: 0.9), fontSize: 13, fontWeight: FontWeight.w500),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  text,
+                  style: TextStyle(color: textColor.withValues(alpha: 0.9), fontSize: 13, fontWeight: FontWeight.w500),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (subtext != null)
+                  Text(
+                    subtext!,
+                    style: TextStyle(color: textColor.withValues(alpha: 0.7), fontSize: 12),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
             ),
           ),
         ],

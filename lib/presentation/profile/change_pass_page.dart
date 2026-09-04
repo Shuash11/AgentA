@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../cubit/theme/theme_cubit.dart';
+import '../../cubit/connectivity/connectivity_cubit.dart';
 import '../../services/auth/auth_service.dart';
 import '../shared/system_keyboard_text_field.dart';
 
@@ -28,21 +28,26 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
 
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    final isOnline = context.read<ConnectivityCubit>().state.isOnline;
+    if (!isOnline) {
+      setState(() {
+        _errorMessage =
+            'Changing password needs internet. Your current password still works offline.';
+      });
+      return;
+    }
     setState(() {
       _isSaving = true;
       _errorMessage = null;
     });
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = AuthService.currentUser;
       if (user == null) throw Exception('Not logged in');
       if (user.email == null) throw Exception('Email not available');
 
-      final credential = EmailAuthProvider.credential(
-        email: user.email!,
-        password: _currentPasswordController.text,
-      );
-      await user.reauthenticateWithCredential(credential);
+      await AuthService.reauthenticate(
+          user.email!, _currentPasswordController.text);
       await AuthService.updatePassword(_newPasswordController.text);
 
       if (mounted) {

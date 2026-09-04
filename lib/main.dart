@@ -1,9 +1,8 @@
 // ignore_for_file: empty_catches
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'firebase_options.dart';
 import 'theme/app_theme.dart';
 import 'cubit/app_providers.dart';
 import 'cubit/connectivity/connectivity_cubit.dart';
@@ -28,8 +27,8 @@ import 'presentation/ai/download_prompt_screen.dart';
 
 enum AppInitStatus {
   initializing,
-  firebaseSuccess,
-  firebaseFailed,
+  backendSuccess,
+  backendFailed,
   databaseReady,
   error,
 }
@@ -101,19 +100,26 @@ class _AppLoaderState extends State<AppLoader> {
     }
 
     try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
+      if (AppConfig.supabaseUrl.isEmpty ||
+          AppConfig.supabasePublishableKey.isEmpty) {
+        throw Exception(
+            'SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY missing from .env');
+      }
+      await Supabase.initialize(
+        url: AppConfig.supabaseUrl,
+        publishableKey: AppConfig.supabasePublishableKey,
       );
       if (!mounted) return;
       setState(() {
-        _initState = const InitState(status: AppInitStatus.firebaseSuccess);
+        _initState = const InitState(status: AppInitStatus.backendSuccess);
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _initState = const InitState(
-          status: AppInitStatus.firebaseFailed,
-          errorMessage: 'Firebase initialization failed. You can continue in offline mode.',
+          status: AppInitStatus.backendFailed,
+          errorMessage:
+              'Backend connection failed. You can continue in offline mode.',
         );
       });
     }
@@ -189,7 +195,7 @@ class _AppLoaderState extends State<AppLoader> {
     );
   }
 
-  Future<void> _retryFirebase() async {
+  Future<void> _retryBackend() async {
     setState(() {
       _isRetrying = true;
     });
@@ -264,13 +270,13 @@ class _AppLoaderState extends State<AppLoader> {
           ],
         );
 
-      case AppInitStatus.firebaseFailed:
+      case AppInitStatus.backendFailed:
         return Column(
           children: [
             const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
             const SizedBox(height: 16),
             Text(
-              _initState.errorMessage ?? 'Firebase initialization failed',
+              _initState.errorMessage ?? 'Backend connection failed',
               style: const TextStyle(color: Colors.orange),
               textAlign: TextAlign.center,
             ),
@@ -279,7 +285,7 @@ class _AppLoaderState extends State<AppLoader> {
               const CircularProgressIndicator(color: Color(0xFFFFD700))
             else ...[
               ElevatedButton(
-                onPressed: _retryFirebase,
+                onPressed: _retryBackend,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFFD700),
                   foregroundColor: Colors.black,
@@ -310,7 +316,7 @@ class _AppLoaderState extends State<AppLoader> {
             ),
             const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: _retryFirebase,
+              onPressed: _retryBackend,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFFD700),
                 foregroundColor: Colors.black,
@@ -320,7 +326,7 @@ class _AppLoaderState extends State<AppLoader> {
           ],
         );
 
-      case AppInitStatus.firebaseSuccess:
+      case AppInitStatus.backendSuccess:
       case AppInitStatus.databaseReady:
         return const Column(
           children: [
@@ -516,17 +522,20 @@ class _AuthGateState extends State<AuthGate> {
     return BlocBuilder<ConnectivityCubit, ConnectivityState>(
       buildWhen: (previous, current) => previous.isOnline != current.isOnline,
       builder: (context, connectivityState) {
-        return StreamBuilder(
+        return StreamBuilder<AuthState>(
           stream: AuthService.authStateChanges,
           builder: (context, authSnapshot) {
-            if (authSnapshot.connectionState == ConnectionState.waiting) {
+            final session = authSnapshot.data?.session ??
+                Supabase.instance.client.auth.currentSession;
+            if (authSnapshot.connectionState == ConnectionState.waiting &&
+                session == null) {
               return const Scaffold(
                 body: Center(
                   child: CircularProgressIndicator(color: Color(0xFFFFC107)),
                 ),
               );
             }
-            if (authSnapshot.hasData) {
+            if (session != null) {
               return AppShell(offlineMode: !connectivityState.isOnline);
             }
             return const LoginPage();

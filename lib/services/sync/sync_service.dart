@@ -1,12 +1,11 @@
 // ignore_for_file: empty_catches
 import 'dart:async';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../data/local/local_message_dao.dart';
 import '../../data/local/local_chat_dao.dart';
 import '../../data/local/local_user_dao.dart';
-import '../../data/remote/firestore_message_service.dart';
-import '../../data/remote/firestore_chat_service.dart';
+import '../../data/remote/supabase_message_service.dart';
+import '../../data/remote/supabase_chat_service.dart';
 import '../../core/utils/connectivity_service.dart';
 import '../auth/auth_service.dart';
 import '../../repositories/user_repository.dart';
@@ -52,7 +51,7 @@ class SyncService {
   Future<void> _flushPending() async {
     await _syncPendingUsers();
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = AuthService.currentUser?.id;
     if (uid == null) return;
 
     final localMsgDao = LocalMessageDao.instance;
@@ -62,7 +61,7 @@ class SyncService {
 
     for (final msg in unsyncedMessages) {
       try {
-        await FirestoreMessageService.saveMessage(uid, msg.chatId, msg);
+        await SupabaseMessageService.saveMessage(uid, msg.chatId, msg);
         await localMsgDao.update(msg.copyWith(isSynced: true));
       } catch (e) {
         
@@ -72,14 +71,12 @@ class SyncService {
     final unsyncedChats = await localChatDao.getUnsynced();
     for (final chat in unsyncedChats) {
       try {
-        await FirestoreChatService.saveChat(uid, chat);
+        await SupabaseChatService.saveChat(uid, chat);
         await localChatDao.update(chat.copyWith(isSynced: true));
       } catch (e) {
         
       }
     }
-
-    await _syncPendingUsers();
   }
 
   Future<void> _syncPendingUsers() async {
@@ -99,11 +96,11 @@ class SyncService {
         
 
         final cred = await AuthService.register(email, password, displayName);
-        final firebaseUid = cred.user!.uid;
+        final supabaseUid = cred.uid;
 
-        await UserRepository.createUserProfile(firebaseUid, email, displayName, recoveryCode);
+        await UserRepository.createUserProfile(supabaseUid, email, displayName, recoveryCode);
 
-        await localUserDao.markAsSynced(localId, firebaseUid);
+        await localUserDao.markAsSynced(localId, supabaseUid);
 
         await AuthService.login(email, password);
 
@@ -124,14 +121,14 @@ class SyncService {
   }
 
   Future<void> _refreshLocalCacheFromRemote() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = AuthService.currentUser?.id;
     if (uid == null) return;
 
     final localChatDao = LocalChatDao.instance;
     final localMsgDao = LocalMessageDao.instance;
 
     try {
-      final remoteChats = await FirestoreChatService.getChats(uid);
+      final remoteChats = await SupabaseChatService.getChats(uid);
       for (final chat in remoteChats) {
         final syncedChat = chat.copyWith(isSynced: true);
         await localChatDao.replaceChat(chat.id, syncedChat);
@@ -144,7 +141,7 @@ class SyncService {
       final chats = await localChatDao.getByUserId(uid);
       for (final chat in chats) {
         try {
-          final remoteMessages = await FirestoreMessageService.getMessages(uid, chat.id);
+          final remoteMessages = await SupabaseMessageService.getMessages(uid, chat.id);
           for (final msg in remoteMessages) {
             await localMsgDao.replaceMessage(msg.id, msg.copyWith(isSynced: true));
           }
@@ -157,11 +154,11 @@ class SyncService {
     }
   }
 
-  Future<void> migrateOfflineUserChats(String oldOfflineId, String newFirebaseId) async {
+  Future<void> migrateOfflineUserChats(String oldOfflineId, String newSupabaseId) async {
     final localChatDao = LocalChatDao.instance;
     final localMsgDao = LocalMessageDao.instance;
-    
-    await localChatDao.migrateUserId(oldOfflineId, newFirebaseId);
-    await localMsgDao.migrateUserId(oldOfflineId, newFirebaseId);
+
+    await localChatDao.migrateUserId(oldOfflineId, newSupabaseId);
+    await localMsgDao.migrateUserId(oldOfflineId, newSupabaseId);
   }
 }

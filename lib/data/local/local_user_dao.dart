@@ -39,11 +39,11 @@ class LocalUserDao {
     return rows.first;
   }
 
-  Future<void> markAsSynced(String localId, String firebaseUid) async {
+  Future<void> markAsSynced(String localId, String supabaseUid) async {
     final db = await _dbHelper.database;
     await db.update(
       'pending_signups',
-      {'is_synced': 1, 'local_id': firebaseUid},
+      {'is_synced': 1, 'local_id': supabaseUid},
       where: 'local_id = ?',
       whereArgs: [localId],
     );
@@ -71,11 +71,11 @@ class LocalUserDao {
     return rows.first;
   }
 
-  Future<void> markUserSyncedByEmail(String email, String firebaseUid) async {
+  Future<void> markUserSyncedByEmail(String email, String supabaseUid) async {
     final db = await _dbHelper.database;
     await db.update(
       'pending_signups',
-      {'is_synced': 1, 'local_id': firebaseUid},
+      {'is_synced': 1, 'local_id': supabaseUid},
       where: 'email = ?',
       whereArgs: [email],
     );

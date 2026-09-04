@@ -1,7 +1,7 @@
 // ignore_for_file: empty_catches
 import '../data/local/local_message_dao.dart';
 import '../data/models/chat_message_model.dart';
-import '../data/remote/firestore_message_service.dart';
+import '../data/remote/supabase_message_service.dart';
 import '../core/utils/connectivity_service.dart';
 
 class MessageRepository {
@@ -20,7 +20,7 @@ class MessageRepository {
       return [];
     }
     try {
-      final remoteMessages = await FirestoreMessageService.getMessages(uid, chatId);
+      final remoteMessages = await SupabaseMessageService.getMessages(uid, chatId);
       final syncedMsgs = remoteMessages.map((m) => m.copyWith(isSynced: true)).toList();
       await _localMsgDao.replaceMessagesPreservingUnsynced(syncedMsgs);
       return remoteMessages;
@@ -35,7 +35,7 @@ class MessageRepository {
 
     if (isOnline && uid.isNotEmpty) {
       try {
-        final remoteMessages = await FirestoreMessageService.getMessages(uid, chatId);
+        final remoteMessages = await SupabaseMessageService.getMessages(uid, chatId);
         final syncedMsgs = remoteMessages.map((m) => m.copyWith(isSynced: true)).toList();
         await _localMsgDao.replaceMessagesPreservingUnsynced(syncedMsgs);
         return remoteMessages;
@@ -50,7 +50,7 @@ class MessageRepository {
     final uid = await _userId;
     if (await _connectivity.isOnline() && uid.isNotEmpty) {
       try {
-        await FirestoreMessageService.saveMessage(uid, msg.chatId, msg);
+        await SupabaseMessageService.saveMessage(uid, msg.chatId, msg);
         await _localMsgDao.update(msg.copyWith(isSynced: true));
       } catch (e) {}
     }
@@ -61,7 +61,7 @@ class MessageRepository {
     final uid = await _userId;
     if (await _connectivity.isOnline() && uid.isNotEmpty) {
       try {
-        await FirestoreMessageService.deleteMessages(uid, chatId);
+        await SupabaseMessageService.deleteMessages(uid, chatId);
         await _localMsgDao.hardDeleteByChat(chatId);
       } catch (e) {}
     }

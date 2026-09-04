@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth/auth_service.dart';
+import '../../services/auth/biometric_auth_service.dart';
+import '../../repositories/user_repository.dart';
 import '../../data/local/local_user_dao.dart';
 import '../shared/app_shell.dart';
 import '../shared/system_keyboard_text_field.dart';
@@ -24,11 +26,19 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _isLoading = false;
   bool _showPassword = false;
+  bool _biometricReady = false;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
+    _checkBiometric();
+  }
+
+  Future<void> _checkBiometric() async {
+    final ready = await BiometricAuthService.isSupported() &&
+        await BiometricAuthService.isEnrolled();
+    if (mounted) setState(() => _biometricReady = ready);
   }
 
   @override
@@ -52,18 +62,20 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     bool isOnline = false;
+    String? onlineUid;
 
     try {
       final cred = await AuthService.login(email, password);
       isOnline = true;
+      onlineUid = cred.uid;
 
-      if (cred.user != null) {
+      if (cred.uid.isNotEmpty) {
         final dao = LocalUserDao();
         await dao.savePendingSignup(
-          localId: cred.user!.uid,
+          localId: cred.uid,
           email: email,
           password: password,
-          displayName: cred.user!.displayName ?? 'User',
+          displayName: cred.displayName ?? 'User',
           recoveryCode: '',
           isSynced: true,
         );
@@ -80,12 +92,18 @@ class _LoginPageState extends State<LoginPage> {
           setState(() {
             _isLoading = false;
             String errorMsg = 'Login failed';
-            if (errorString.contains('user-not-found') || errorString.contains('invalid-email')) {
-              errorMsg = 'User not found';
-            } else if (errorString.contains('wrong-password') || errorString.contains('invalid-credential')) {
+            if (errorString.contains('user-not-found') ||
+                errorString.contains('invalid-email') ||
+                errorString.contains('invalid login credentials')) {
+              errorMsg = 'Invalid email or password';
+            } else if (errorString.contains('wrong-password') ||
+                errorString.contains('invalid-credential')) {
               errorMsg = 'Invalid password';
-            } else if (errorString.contains('too-many-requests')) {
+            } else if (errorString.contains('too-many-requests') ||
+                errorString.contains('rate limit')) {
               errorMsg = 'Too many attempts. Try again later.';
+            } else if (errorString.contains('email not confirmed')) {
+              errorMsg = 'Please confirm your email first';
             }
             _errorMessage = errorMsg;
           });
@@ -96,6 +114,9 @@ class _LoginPageState extends State<LoginPage> {
 
     if (isOnline) {
       setState(() => _isLoading = false);
+      if (onlineUid != null) {
+        await _offerBiometricEnroll(onlineUid);
+      }
       _goToDashboard(isOnline: true);
       return;
     }
@@ -119,6 +140,92 @@ class _LoginPageState extends State<LoginPage> {
       _isLoading = false;
       _errorMessage = 'Invalid email or password';
     });
+  }
+
+  Future<void> _signInWithGoogle() async {
+    if (_isLoading) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final cred = await AuthService.signInWithGoogle();
+      if (cred.uid.isNotEmpty) {
+        final dao = LocalUserDao();
+        await dao.savePendingSignup(
+          localId: cred.uid,
+          email: cred.email ?? '',
+          password: '',
+          displayName: cred.displayName ?? 'User',
+          recoveryCode: '',
+          isSynced: true,
+        );
+        try {
+          final existing = await UserRepository.getUserProfile(cred.uid);
+          if (existing == null) {
+            await UserRepository.createUserProfile(
+                cred.uid, cred.email ?? '', cred.displayName ?? 'User', '');
+          }
+        } catch (_) {}
+        await _offerBiometricEnroll(cred.uid);
+      }
+      if (mounted) setState(() => _isLoading = false);
+      _goToDashboard(isOnline: true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        final msg = e.toString().toLowerCase();
+        _errorMessage = msg.contains('cancel')
+            ? 'Google sign-in cancelled'
+            : 'Google sign-in failed. Check your connection.';
+      });
+    }
+  }
+
+  Future<void> _unlockWithBiometrics() async {
+    if (_isLoading) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final uid = await BiometricAuthService.unlock();
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    if (uid != null) {
+      _goToDashboard(isOnline: false);
+    }
+  }
+
+  Future<void> _offerBiometricEnroll(String uid) async {
+    if (!mounted) return;
+    if (!await BiometricAuthService.isSupported()) return;
+    if (await BiometricAuthService.isEnrolled()) return;
+    if (!mounted) return;
+    final enable = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Quick unlock?'),
+        content: const Text(
+            'Use your fingerprint to get back in quickly, even offline if you forget your password.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Skip'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Enable'),
+          ),
+        ],
+      ),
+    );
+    if (enable == true && mounted) {
+      await BiometricAuthService.enroll(uid);
+      _checkBiometric();
+    }
   }
 
   void _goToDashboard({required bool isOnline}) {
@@ -156,9 +263,12 @@ class _LoginPageState extends State<LoginPage> {
               showPassword: _showPassword,
               errorMessage: _errorMessage,
               isLoading: _isLoading,
+              showBiometric: _biometricReady,
               colors: colors,
               onTogglePassword: _togglePassword,
               onLogin: _login,
+              onGoogleSignIn: _signInWithGoogle,
+              onBiometricUnlock: _unlockWithBiometrics,
               onForgotPassword: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
@@ -182,9 +292,12 @@ class _LoginForm extends StatelessWidget {
   final bool showPassword;
   final String? errorMessage;
   final bool isLoading;
+  final bool showBiometric;
   final ThemeColors colors;
   final VoidCallback onTogglePassword;
   final VoidCallback onLogin;
+  final VoidCallback onGoogleSignIn;
+  final VoidCallback onBiometricUnlock;
   final VoidCallback onForgotPassword;
   final VoidCallback onCreateAccount;
 
@@ -195,9 +308,12 @@ class _LoginForm extends StatelessWidget {
     required this.showPassword,
     this.errorMessage,
     required this.isLoading,
+    required this.showBiometric,
     required this.colors,
     required this.onTogglePassword,
     required this.onLogin,
+    required this.onGoogleSignIn,
+    required this.onBiometricUnlock,
     required this.onForgotPassword,
     required this.onCreateAccount,
   });
@@ -358,6 +474,36 @@ class _LoginForm extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 32),
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: OutlinedButton.icon(
+              onPressed: isLoading ? null : onGoogleSignIn,
+              icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
+              label: const Text("Continue with Google"),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: colors.text,
+                side: BorderSide(color: colors.border),
+              ),
+            ),
+          ),
+          if (showBiometric) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: OutlinedButton.icon(
+                onPressed: isLoading ? null : onBiometricUnlock,
+                icon: Icon(Icons.fingerprint, color: colors.amber),
+                label: const Text("Unlock with fingerprint"),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: colors.text,
+                  side: BorderSide(color: colors.border),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             height: 54,

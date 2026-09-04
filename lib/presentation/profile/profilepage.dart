@@ -1,7 +1,6 @@
 // ignore_for_file: empty_catches
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth/auth_service.dart';
@@ -34,17 +33,21 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _loadProfile() async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = AuthService.currentUser;
       if (user != null) {
-        _displayName = user.displayName;
+        final meta = user.userMetadata;
+        _displayName = meta == null
+            ? null
+            : (meta['display_name'] ?? meta['full_name'] ?? meta['name'])
+                as String?;
         _email = user.email;
 
         if (_displayName == null || _displayName!.isEmpty) {
-          final profile = await UserRepository.getUserProfile(user.uid);
+          final profile = await UserRepository.getUserProfile(user.id);
           if (profile != null) {
             _displayName = profile.displayName;
             try {
-              await user.updateDisplayName(_displayName);
+              await AuthService.updateDisplayName(_displayName!);
             } catch (e) {}
           }
         }

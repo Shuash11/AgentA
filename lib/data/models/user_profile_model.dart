@@ -31,10 +31,15 @@ class UserProfileModel {
       email: map['email'] ?? '',
       photoUrl: map['photo_url'],
       recoveryCode: map['recoveryCode'] ?? map['recovery_code'] ?? '',
-      createdAt: map['created_at'] != null 
-        ? DateTime.fromMillisecondsSinceEpoch(map['created_at']) 
-        : null,
+      createdAt: _parseCreatedAt(map['created_at']),
     );
+
+  static DateTime? _parseCreatedAt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
 
   UserProfileModel copyWith({
     String? displayName,

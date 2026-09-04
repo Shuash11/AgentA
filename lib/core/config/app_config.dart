@@ -19,6 +19,12 @@ class AppConfig {
   static String get gemmaModelUrl => dotenv.env['GEMMA_MODEL_URL'] ?? '';
   static const String gemmaModelFilename = 'gemma-offline.task';
 
+  static String get supabaseUrl => dotenv.env['SUPABASE_URL'] ?? '';
+  static String get supabasePublishableKey =>
+      dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ?? '';
+  static String get googleServerClientId =>
+      dotenv.env['GOOGLE_SERVER_CLIENT_ID'] ?? '';
+
   static bool get hasValidApiKeys =>
       !groqApiKey.contains('your_') &&
       groqApiKey.isNotEmpty &&

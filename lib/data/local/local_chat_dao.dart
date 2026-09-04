@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'database_helper.dart';
 import '../models/chat_session_model.dart';
@@ -23,7 +23,7 @@ class LocalChatDao {
       return 'offline_user';
     }
 
-    return FirebaseAuth.instance.currentUser?.uid ?? '';
+    return Supabase.instance.client.auth.currentUser?.id ?? '';
   }
 
   String _generateOfflineUserId(String email) {

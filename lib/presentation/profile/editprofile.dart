@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../cubit/theme/theme_cubit.dart';
+import '../../services/auth/auth_service.dart';
 import '../../repositories/user_repository.dart';
 import '../shared/system_keyboard_text_field.dart';
 
@@ -21,9 +21,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
   @override
   void initState() {
     super.initState();
-    final user = FirebaseAuth.instance.currentUser;
+    final user = AuthService.currentUser;
     if (user != null) {
-      final displayName = user.displayName ?? '';
+      final meta = user.userMetadata;
+      final displayName = (meta == null
+              ? ''
+              : (meta['display_name'] ?? meta['full_name'] ?? meta['name'] ?? ''))
+          as String;
       final parts = displayName.split(' ');
       _firstNameController.text = parts.isNotEmpty ? parts.first : '';
       _lastNameController.text = parts.length > 1 ? parts.last : '';
@@ -43,12 +47,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     try {
       final newDisplayName = '${_firstNameController.text} ${_lastNameController.text}';
-      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final uid = AuthService.currentUser?.id;
       if (uid == null) {
         throw Exception('No user logged in');
       }
       await UserRepository.updateDisplayName(uid, newDisplayName);
-      await FirebaseAuth.instance.currentUser?.updateDisplayName(newDisplayName);
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
