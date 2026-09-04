@@ -10,10 +10,14 @@ class GemmaService extends ChangeNotifier {
   bool _isLoaded = false;
   bool _isCancelled = false;
   InferenceModel? _model;
-  dynamic _chat;
+  InferenceChat? _chat;
 
   static const Duration _streamFlushInterval = Duration(milliseconds: 45);
   static const int _streamFlushChars = 8;
+  static const int _maxHistoryMessages = 20;
+  static const int _maxTokens = 2048;
+  static const String _greetingText =
+      "Hello! I'm AgentA, What would you like to work on today?";
   static const String _systemInstruction = '''
 You are AgentA, a helpful AI assistant inside this app.
 
@@ -34,11 +38,20 @@ Formatting rules:
   void cancelGeneration() {
     _isCancelled = true;
 
-    if (_chat != null) {
+    final chat = _chat;
+    if (chat != null) {
       try {
-        _chat!.clearHistory();
+        unawaited(chat.stopGeneration());
       } catch (e) {}
     }
+  }
+
+  Future<void> resetSession() async {
+    final chat = _chat;
+    if (chat == null) return;
+    try {
+      await chat.clearHistory();
+    } catch (e) {}
   }
 
   void resetCancel() {
@@ -52,7 +65,7 @@ Formatting rules:
 
     try {
       _model = await FlutterGemma.getActiveModel(
-        maxTokens: 1000,
+        maxTokens: _maxTokens,
         preferredBackend: PreferredBackend.cpu,
       );
 
@@ -99,14 +112,17 @@ Formatting rules:
     if (history.isEmpty) return [];
 
     final usableHistory = List<ChatMessageModel>.from(history);
+    usableHistory.removeWhere((msg) =>
+        msg.text.trim().isEmpty || msg.text.trim() == _greetingText);
     if (usableHistory.isNotEmpty &&
         usableHistory.last.isUser &&
         usableHistory.last.text.trim() == currentMessage.trim()) {
       usableHistory.removeLast();
     }
 
-    final recent = usableHistory.length > 5
-        ? usableHistory.sublist(usableHistory.length - 5)
+    final recent = usableHistory.length > _maxHistoryMessages
+        ? usableHistory.sublist(
+            usableHistory.length - _maxHistoryMessages)
         : usableHistory;
     return recent;
   }
@@ -116,8 +132,9 @@ Formatting rules:
     required String newMessage,
   }) async {
     final ready = await ensureReady();
+    final chat = _chat;
 
-    if (!ready || _chat == null) {
+    if (!ready || chat == null) {
       throw Exception('Gemma model not loaded');
     }
 
@@ -126,18 +143,16 @@ Formatting rules:
         history,
         currentMessage: newMessage,
       );
-      if (recentHistory.isNotEmpty) {
-        await _chat.clearHistory();
-        for (final msg in recentHistory) {
-          await _chat.addQueryChunk(
-            Message.text(text: msg.text, isUser: msg.isUser),
-          );
-        }
+      await chat.clearHistory();
+      for (final msg in recentHistory) {
+        await chat.addQueryChunk(
+          Message.text(text: msg.text, isUser: msg.isUser),
+        );
       }
 
       final prompt = _buildUserPrompt(newMessage);
-      await _chat.addQueryChunk(Message.text(text: prompt, isUser: true));
-      final response = await _chat.generateChatResponse();
+      await chat.addQueryChunk(Message.text(text: prompt, isUser: true));
+      final response = await chat.generateChatResponse();
 
       if (response is TextResponse) {
         return response.token;
@@ -159,8 +174,9 @@ Formatting rules:
     }
 
     final ready = await ensureReady();
+    final chat = _chat;
 
-    if (!ready || _chat == null) {
+    if (!ready || chat == null) {
       throw Exception('Gemma model not loaded');
     }
 
@@ -173,21 +189,19 @@ Formatting rules:
         history,
         currentMessage: newMessage,
       );
-      if (recentHistory.isNotEmpty) {
-        await _chat.clearHistory();
-        for (final msg in recentHistory) {
-          await _chat.addQueryChunk(
-            Message.text(text: msg.text, isUser: msg.isUser),
-          );
-        }
+      await chat.clearHistory();
+      for (final msg in recentHistory) {
+        await chat.addQueryChunk(
+          Message.text(text: msg.text, isUser: msg.isUser),
+        );
       }
 
       final prompt = _buildUserPrompt(newMessage);
-      await _chat.addQueryChunk(Message.text(text: prompt, isUser: true));
+      await chat.addQueryChunk(Message.text(text: prompt, isUser: true));
 
       final flushTimer = Stopwatch()..start();
       final tokenBuffer = StringBuffer();
-      await for (final response in _chat.generateChatResponseAsync()) {
+      await for (final response in chat.generateChatResponseAsync()) {
         if (_isCancelled) {
           break;
         }

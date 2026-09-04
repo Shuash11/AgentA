@@ -125,6 +125,10 @@ class _ChatScreenState extends State<Chats> {
       await _createChatIfNew();
     }
 
+    try {
+      await _aiService.resetOfflineSession();
+    } catch (_) {}
+
     _setActivity(isLoadingMessages: true);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {

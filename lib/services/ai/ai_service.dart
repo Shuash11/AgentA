@@ -89,6 +89,8 @@ class AIService {
     return _onlineAI.buildImageUrl(prompt);
   }
 
+  Future<void> resetOfflineSession() => _offlineAI.resetSession();
+
   void cancelActiveGeneration() {
     _offlineAI.cancelActiveGeneration();
     _onlineAI.cancelActiveGeneration();

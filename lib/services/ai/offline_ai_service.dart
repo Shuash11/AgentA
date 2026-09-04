@@ -26,6 +26,8 @@ class OfflineAIService {
 
   Future<void> loadInstalled() => _gemma.loadInstalled();
 
+  Future<void> resetSession() => _gemma.resetSession();
+
   void cancelActiveGeneration() {
     _gemma.cancelGeneration();
   }
