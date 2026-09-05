@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../../../data/models/chat_message_model.dart';
 import '../../../theme/app_theme.dart';
@@ -44,7 +45,7 @@ class ChatTimelineView extends StatelessWidget {
 
             return ListView.builder(
               controller: scrollController,
-              cacheExtent: 600,
+              scrollCacheExtent: const ScrollCacheExtent.pixels(600),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               itemCount: messages.length + (activity.isTyping ? 1 : 0),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),

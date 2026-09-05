@@ -84,8 +84,10 @@ class _LoginPageState extends State<LoginPage> {
     } catch (e) {
       
       final errorString = e.toString().toLowerCase();
-      if (errorString.contains('network') || errorString.contains('socket')) {
-        // Network error - try offline login
+      if (!AuthService.isBackendReady ||
+          errorString.contains('network') ||
+          errorString.contains('socket')) {
+        // Backend unreachable - try offline login
         isOnline = false;
       } else {
         // Auth error (wrong password, user not found, etc.) - show immediately

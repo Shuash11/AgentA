@@ -9,11 +9,20 @@ class LocalMessageDao {
 
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  String getUserId() =>
-      Supabase.instance.client.auth.currentUser?.id ?? '';
+  String getUserId() {
+    try {
+      return Supabase.instance.client.auth.currentUser?.id ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
 
   Future<String> getUserIdAsync() async {
-    return Supabase.instance.client.auth.currentUser?.id ?? '';
+    try {
+      return Supabase.instance.client.auth.currentUser?.id ?? '';
+    } catch (_) {
+      return '';
+    }
   }
 
   Future<void> insert(ChatMessageModel msg) async {

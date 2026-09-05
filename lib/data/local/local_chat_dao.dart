@@ -13,17 +13,21 @@ class LocalChatDao {
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
   Future<String> getUserId() async {
-    final offlineUser = await _secureStorage.read(key: 'offline_user');
+    try {
+      final offlineUser = await _secureStorage.read(key: 'offline_user');
 
-    if (offlineUser == 'true') {
-      final email = await _secureStorage.read(key: 'offline_email');
-      if (email != null) {
-        return _generateOfflineUserId(email);
+      if (offlineUser == 'true') {
+        final email = await _secureStorage.read(key: 'offline_email');
+        if (email != null) {
+          return _generateOfflineUserId(email);
+        }
+        return 'offline_user';
       }
-      return 'offline_user';
-    }
 
-    return Supabase.instance.client.auth.currentUser?.id ?? '';
+      return Supabase.instance.client.auth.currentUser?.id ?? '';
+    } catch (_) {
+      return '';
+    }
   }
 
   String _generateOfflineUserId(String email) {

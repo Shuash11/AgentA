@@ -93,7 +93,10 @@ class SyncService {
         final displayName = signup['display_name'] as String;
         final recoveryCode = signup['recovery_code'] as String;
 
-        
+        if (password.isEmpty) {
+          await localUserDao.delete(localId);
+          continue;
+        }
 
         final cred = await AuthService.register(email, password, displayName);
         final supabaseUid = cred.uid;
@@ -108,7 +111,23 @@ class SyncService {
 
         
       } catch (e) {
-        
+        final msg = e.toString().toLowerCase();
+        if (msg.contains('already registered') ||
+            msg.contains('already exists') ||
+            msg.contains('user already')) {
+          try {
+            final email = signup['email'] as String;
+            final password = signup['password'] as String;
+            final localId = signup['local_id'] as String;
+            if (password.isEmpty) {
+              await localUserDao.delete(localId);
+              continue;
+            }
+            final cred = await AuthService.login(email, password);
+            await localUserDao.markAsSynced(localId, cred.uid);
+            await _clearOfflineUser();
+          } catch (_) {}
+        }
       }
     }
   }

@@ -60,12 +60,18 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
     super.dispose();
   }
 
+  Future<void> _completeOnce() async {
+    if (_hasCompleted || !mounted) return;
+    _hasCompleted = true;
+    widget.onComplete();
+  }
+
   Future<void> _startAutoDownload() async {
     final modelDownload = context.read<ModelDownloadService>();
     await modelDownload.checkModelExists();
 
     if (modelDownload.isReady && mounted) {
-      widget.onComplete();
+      await _completeOnce();
       return;
     }
 
@@ -89,7 +95,7 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
         try {
           await modelDownload.installModelFromKaggle();
           if (mounted && modelDownload.isReady) {
-            widget.onComplete();
+            await _completeOnce();
             return;
           }
         } catch (e) {}
@@ -98,7 +104,7 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
       await modelDownload.installModel();
 
       if (mounted && modelDownload.isReady) {
-        widget.onComplete();
+        await _completeOnce();
       }
     } catch (e) {
       if (mounted) {

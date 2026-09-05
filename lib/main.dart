@@ -109,6 +109,7 @@ class _AppLoaderState extends State<AppLoader> {
         url: AppConfig.supabaseUrl,
         publishableKey: AppConfig.supabasePublishableKey,
       );
+      AuthService.markBackendReady();
       if (!mounted) return;
       setState(() {
         _initState = const InitState(status: AppInitStatus.backendSuccess);
@@ -519,6 +520,9 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
+    if (!AuthService.isBackendReady) {
+      return const LoginPage();
+    }
     return BlocBuilder<ConnectivityCubit, ConnectivityState>(
       buildWhen: (previous, current) => previous.isOnline != current.isOnline,
       builder: (context, connectivityState) {

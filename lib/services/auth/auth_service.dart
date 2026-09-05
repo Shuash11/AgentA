@@ -17,8 +17,27 @@ class AuthService {
   static SupabaseClient get _db => Supabase.instance.client;
   static GoTrueClient get _auth => _db.auth;
 
-  static User? get currentUser => _auth.currentUser;
-  static Stream<AuthState> get authStateChanges => _auth.onAuthStateChange;
+  static bool _backendReady = false;
+  static bool get isBackendReady => _backendReady;
+  static void markBackendReady() => _backendReady = true;
+
+  static User? get currentUser {
+    if (!_backendReady) return null;
+    try {
+      return _auth.currentUser;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Stream<AuthState> get authStateChanges {
+    if (!_backendReady) return const Stream.empty();
+    try {
+      return _auth.onAuthStateChange;
+    } catch (_) {
+      return const Stream.empty();
+    }
+  }
 
   static AppAuthCredential _toCredential(User user) {
     final meta = user.userMetadata;

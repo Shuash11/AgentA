@@ -472,8 +472,6 @@ class _ChatScreenState extends State<Chats> {
 
     _scrollToBottom(animated: true);
 
-    await _messageRepo.saveMessage(errorMsg);
-
     if (!mounted) return;
   }
 
