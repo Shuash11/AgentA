@@ -1,4 +1,5 @@
 // ignore_for_file: empty_catches
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/config/app_config.dart';
@@ -54,19 +55,49 @@ class AuthService {
     return _toCredential(user);
   }
 
-  static Future<AppAuthCredential> signInWithGoogle() async {
+  static bool _googleInitialized = false;
+
+  static Future<void> ensureGoogleInitialized() async {
+    if (_googleInitialized) return;
     final serverId = AppConfig.googleServerClientId;
+    final webId = serverId.isEmpty ? null : serverId;
     await GoogleSignIn.instance.initialize(
-      serverClientId: serverId.isEmpty ? null : serverId,
+      clientId: kIsWeb ? webId : null,
+      serverClientId: webId,
     );
-    final account = await GoogleSignIn.instance.authenticate();
+    _googleInitialized = true;
+  }
+
+  static Future<AppAuthCredential> signInWithGoogle() async {
+    await ensureGoogleInitialized();
+    final GoogleSignInAccount account;
+    try {
+      account = await GoogleSignIn.instance.authenticate();
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        throw Exception('Google sign-in cancelled by user');
+      }
+      final detail = e.description ?? e.code.name;
+      throw Exception('Google sign-in failed ($detail)');
+    }
     final idToken = account.authentication.idToken;
     if (idToken == null || idToken.isEmpty) {
       throw Exception('Google sign-in failed: no ID token');
     }
+    String? accessToken;
+    try {
+      final authz =
+          await account.authorizationClient.authorizationForScopes(['email', 'profile']);
+      accessToken = authz?.accessToken;
+    } catch (_) {}
+    try {
+      accessToken ??= (await account.authorizationClient.authorizeScopes(['email', 'profile']))
+          .accessToken;
+    } catch (_) {}
     final res = await _auth.signInWithIdToken(
       provider: OAuthProvider.google,
       idToken: idToken,
+      accessToken: accessToken,
     );
     final user = res.user;
     if (user == null) throw Exception('Google sign-in failed: user is null');

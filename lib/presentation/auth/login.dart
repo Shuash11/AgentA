@@ -1,6 +1,7 @@
 // ignore_for_file: empty_catches
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth/auth_service.dart';
@@ -176,10 +177,24 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        final msg = e.toString().toLowerCase();
-        _errorMessage = msg.contains('cancel')
-            ? 'Google sign-in cancelled'
-            : 'Google sign-in failed. Check your connection.';
+        if (e is GoogleSignInException &&
+            e.code == GoogleSignInExceptionCode.canceled) {
+          _errorMessage = 'Google sign-in cancelled';
+        } else {
+          final msg = e.toString().toLowerCase();
+          if (msg.contains('cancelled by user') || msg.contains('code canceled')) {
+            _errorMessage = 'Google sign-in cancelled';
+          } else if (msg.contains('clientconfiguration') ||
+              msg.contains('providerconfiguration') ||
+              msg.contains('no id token')) {
+            _errorMessage =
+                'Google sign-in not configured. Check SHA-1 / OAuth setup.';
+          } else if (msg.contains('network') || msg.contains('socket')) {
+            _errorMessage = 'Google sign-in failed. Check your connection.';
+          } else {
+            _errorMessage = 'Google sign-in failed. Check your connection.';
+          }
+        }
       });
     }
   }

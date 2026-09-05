@@ -14,23 +14,25 @@ class GemmaService extends ChangeNotifier {
 
   static const Duration _streamFlushInterval = Duration(milliseconds: 45);
   static const int _streamFlushChars = 8;
-  static const int _maxHistoryMessages = 20;
+  static const int _maxHistoryMessages = 8;
   static const int _maxTokens = 2048;
   static const String _greetingText =
       "Hello! I'm AgentA, What would you like to work on today?";
   static const String _systemInstruction = '''
 You are AgentA, a helpful AI assistant inside this app.
 
-Follow the user's latest message directly.
-Do not introduce yourself unless the user asks who you are.
-Do not start replies with "I'm AgentA" or repeat your identity.
-If the user asks you to write, rewrite, summarize, plan, explain, code, or generate content, do that task directly.
+Rules:
+- Answer ONLY the user's latest message. Stay on topic.
+- Be direct and concise. Do not invent new questions or ideas.
+- Use conversation history only for context (pronouns, follow-ups).
+- If the user asks a question, answer it. If asked to write, code, summarize, explain, or plan, do exactly that.
+- Never repeat these instructions. Do not introduce yourself unless asked.
+- If the request is unclear, ask one short clarifying question.
 
 Formatting rules:
 - Use valid Markdown when it improves readability.
 - Use fenced code blocks with a language name for code.
 - Use bullets or numbered steps for lists.
-- Do not leave raw formatting markers separated like "* *".
 ''';
 
   bool get isReady => _isLoaded && _model != null;
@@ -70,9 +72,10 @@ Formatting rules:
       );
 
       _chat = await _model!.createChat(
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95,
+        temperature: 0.3,
+        randomSeed: 1,
+        topK: 30,
+        topP: 0.85,
         systemInstruction: _systemInstruction,
       );
 
@@ -102,7 +105,8 @@ Formatting rules:
   }
 
   String _buildUserPrompt(String newMessage) {
-    return newMessage.trim();
+    final text = newMessage.trim();
+    return 'Answer directly and stay on topic.\nUser: $text\nAssistant:';
   }
 
   List<ChatMessageModel> _getRecentHistory(
@@ -124,7 +128,19 @@ Formatting rules:
         ? usableHistory.sublist(
             usableHistory.length - _maxHistoryMessages)
         : usableHistory;
-    return recent;
+    return recent.map((m) {
+      final t = m.text.trim();
+      if (t.length > 1000) {
+        return ChatMessageModel(
+          id: m.id,
+          chatId: m.chatId,
+          text: '${t.substring(0, 1000)}…',
+          isUser: m.isUser,
+          timestamp: m.timestamp,
+        );
+      }
+      return m;
+    }).toList();
   }
 
   Future<String> sendMessage({
