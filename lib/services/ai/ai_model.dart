@@ -19,9 +19,9 @@ extension AIModelExtension on AIModel {
       case AIModel.pollinations:
         return 'Pollinations AI - Generate images';
       case AIModel.groq:
-        return 'Groq - Llama 3.3 70B';
+        return 'Groq - ALLaM 2 7B';
       case AIModel.minimax:
-        return 'MiniMax - abab6.5s';
+        return 'MiniMax - M2.7 free';
       case AIModel.gemma:
         return 'Gemma - Local Offline AI';
     }

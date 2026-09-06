@@ -89,14 +89,19 @@ class AuthService {
 
   static Future<AppAuthCredential> signInWithGoogle() async {
     await ensureGoogleInitialized();
+    if (AppConfig.googleServerClientId.isEmpty) {
+      throw Exception(
+          'Google sign-in not configured: GOOGLE_SERVER_CLIENT_ID missing from .env');
+    }
     final GoogleSignInAccount account;
     try {
       account = await GoogleSignIn.instance.authenticate();
     } on GoogleSignInException catch (e) {
-      if (e.code == GoogleSignInExceptionCode.canceled) {
-        throw Exception('Google sign-in cancelled by user');
-      }
       final detail = e.description ?? e.code.name;
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        throw Exception('Google sign-in canceled ($detail). '
+            'If you did not cancel, this usually means SHA-1 / OAuth client or Supabase Google provider misconfiguration.');
+      }
       throw Exception('Google sign-in failed ($detail)');
     }
     final idToken = account.authentication.idToken;

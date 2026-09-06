@@ -8,6 +8,8 @@ class GroqService {
   String get _model => AppConfig.groqModel;
   static const Duration _timeout = Duration(seconds: 30);
   static const int _maxRetries = 3;
+  static const String _userAgent =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
   bool _isCancelled = false;
   http.Client? _activeClient;
@@ -70,6 +72,7 @@ class GroqService {
           headers: {
             'Authorization': 'Bearer $apiKey',
             'Content-Type': 'application/json',
+            'User-Agent': _userAgent,
           },
           body: jsonEncode({
             'model': _model,
@@ -155,6 +158,7 @@ class GroqService {
       final request = http.Request('POST', Uri.parse(AppConfig.groqEndpoint));
       request.headers['Authorization'] = 'Bearer $apiKey';
       request.headers['Content-Type'] = 'application/json';
+      request.headers['User-Agent'] = _userAgent;
       request.body = jsonEncode({
         'model': _model,
         'messages': messages,

@@ -181,20 +181,28 @@ class _LoginPageState extends State<LoginPage> {
         _isLoading = false;
         if (e is GoogleSignInException &&
             e.code == GoogleSignInExceptionCode.canceled) {
-          _errorMessage = 'Google sign-in cancelled';
+          final detail = e.description ?? '';
+          _errorMessage = detail.isEmpty
+              ? 'Google sign-in cancelled'
+              : 'Google sign-in cancelled ($detail). If not cancelled, check SHA-1 / OAuth setup.';
         } else {
           final msg = e.toString().toLowerCase();
           if (msg.contains('cancelled by user') || msg.contains('code canceled')) {
-            _errorMessage = 'Google sign-in cancelled';
+            _errorMessage =
+                'Google sign-in cancelled. If you did not cancel, check SHA-1 / OAuth / Supabase provider setup.';
           } else if (msg.contains('clientconfiguration') ||
               msg.contains('providerconfiguration') ||
-              msg.contains('no id token')) {
+              msg.contains('no id token') ||
+              msg.contains('not configured') ||
+              msg.contains('serverclientid') ||
+              msg.contains('sha-1') ||
+              msg.contains('oauth')) {
             _errorMessage =
                 'Google sign-in not configured. Check SHA-1 / OAuth setup.';
           } else if (msg.contains('network') || msg.contains('socket')) {
             _errorMessage = 'Google sign-in failed. Check your connection.';
           } else {
-            _errorMessage = 'Google sign-in failed. Check your connection.';
+            _errorMessage = 'Google sign-in failed: ${e.toString().replaceAll('Exception: ', '')}';
           }
         }
       });

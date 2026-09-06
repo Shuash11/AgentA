@@ -13,8 +13,8 @@ class AppConfig {
   static const String groqEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
   static const String minimaxEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
 
-  static const String groqModel = 'llama-3.3-70b-versatile';
-  static const String minimaxModel = 'minimax/minimax-m2.5:free';
+  static const String groqModel = 'allam-2-7b';
+  static const String minimaxModel = 'minimax/minimax-m2.7:free';
 
   static String get gemmaModelUrl => dotenv.env['GEMMA_MODEL_URL'] ?? '';
   static const String gemmaModelFilename = 'gemma-offline.task';
@@ -26,8 +26,6 @@ class AppConfig {
       dotenv.env['GOOGLE_SERVER_CLIENT_ID'] ?? '';
 
   static bool get hasValidApiKeys =>
-      !groqApiKey.contains('your_') &&
-      groqApiKey.isNotEmpty &&
-      !minimaxApiKey.contains('your_') &&
-      minimaxApiKey.isNotEmpty;
+      (groqApiKey.isNotEmpty && !groqApiKey.contains('your_')) ||
+      (minimaxApiKey.isNotEmpty && !minimaxApiKey.contains('your_'));
 }
