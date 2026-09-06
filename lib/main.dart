@@ -11,6 +11,7 @@ import 'services/ai/offline_ai_service.dart';
 import 'services/ai/online_ai_service.dart';
 import 'services/ai/gemma_service.dart';
 import 'services/ai/groq_service.dart';
+import 'services/ai/huggingface_image_service.dart';
 import 'services/ai/minimax_service.dart';
 import 'services/ai/pollinations_service.dart';
 import 'services/ai/ai_service.dart';
@@ -161,12 +162,14 @@ class _AppLoaderState extends State<AppLoader> {
     final groqService = GroqService();
     final minimaxService = MiniMaxService();
     final pollinationsService = PollinationsService();
+    final huggingFaceImageService = HuggingFaceImageService();
     final gemmaService = GemmaService();
     final offlineAIService = OfflineAIService(gemmaService);
     final onlineAIService = OnlineAIService(
       groqService,
       minimaxService,
       pollinationsService,
+      huggingFaceImageService,
     );
     final modelDownloadService = ModelDownloadService();
     final aiService = AIService(
@@ -184,6 +187,7 @@ class _AppLoaderState extends State<AppLoader> {
         groqService: groqService,
         minimaxService: minimaxService,
         pollinationsService: pollinationsService,
+        huggingFaceImageService: huggingFaceImageService,
         offlineAIService: offlineAIService,
         onlineAIService: onlineAIService,
         modelDownloadService: modelDownloadService,

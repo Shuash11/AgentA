@@ -6,12 +6,16 @@ class ImageBubbleContent extends StatefulWidget {
   final String imageUrl;
   final ThemeColors colors;
   final double width;
+  final Future<void> Function()? onFallbackRequested;
+  final bool fallbackAvailable;
 
   const ImageBubbleContent({
     super.key,
     required this.imageUrl,
     required this.colors,
     required this.width,
+    this.onFallbackRequested,
+    this.fallbackAvailable = false,
   });
 
   @override
@@ -37,6 +41,8 @@ class _ImageBubbleContentState extends State<ImageBubbleContent> {
                 imageUrl: widget.imageUrl,
                 colors: widget.colors,
                 width: widget.width,
+                onFallbackRequested: widget.onFallbackRequested,
+                fallbackAvailable: widget.fallbackAvailable,
                 onImageLoaded: _isLoaded ? null : () {
                   if (mounted) {
                     setState(() => _isLoaded = true);

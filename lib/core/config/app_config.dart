@@ -9,9 +9,14 @@ class AppConfig {
   static String get minimaxApiKey => dotenv.env['MINIMAX_API_KEY'] ?? '';
   static String get kaggleUsername => dotenv.env['KAGGLE_USERNAME'] ?? '';
   static String get kaggleKey => dotenv.env['KAGGLE_KEY'] ?? '';
+  static String get hfToken => dotenv.env['HF_TOKEN'] ?? '';
 
   static const String groqEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
   static const String minimaxEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
+  static const String hfImageModel =
+      'stabilityai/stable-diffusion-3-medium-diffusers';
+  static String get hfImageEndpoint =>
+      'https://router.huggingface.co/hf-inference/models/$hfImageModel';
 
   static const String groqModel = 'allam-2-7b';
   static const String minimaxModel = 'minimax/minimax-m2.7:free';

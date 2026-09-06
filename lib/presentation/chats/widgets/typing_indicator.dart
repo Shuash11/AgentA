@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 
@@ -5,12 +6,14 @@ class TypingIndicator extends StatefulWidget {
   final ThemeColors colors;
   final bool isImageGeneration;
   final bool isInitializing;
+  final bool isThinking;
 
   const TypingIndicator({
     super.key,
     required this.colors,
     this.isImageGeneration = false,
     this.isInitializing = false,
+    this.isThinking = false,
   });
 
   @override
@@ -47,7 +50,8 @@ class _TypingIndicatorState extends State<TypingIndicator>
   }
 
   void _syncController() {
-    if (widget.isInitializing || _disableAnimations) {
+    if ((widget.isInitializing && !widget.isThinking) ||
+        _disableAnimations) {
       if (_controller.isAnimating) {
         _controller.stop();
       }
@@ -97,7 +101,23 @@ class _TypingIndicatorState extends State<TypingIndicator>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (widget.isInitializing) ...[
+              if (widget.isThinking) ...[
+                Text(
+                  'Generating response',
+                  style: TextStyle(
+                    color: widget.colors.subtext,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ListenableBuilder(
+                  listenable: _controller,
+                  builder: (context, _) => _BouncingDotRow(
+                    controllerValue: _controller.value,
+                  ),
+                ),
+              ] else if (widget.isInitializing) ...[
                 SizedBox(
                   width: 14,
                   height: 14,
@@ -217,6 +237,43 @@ class _DotShape extends StatelessWidget {
       decoration: const BoxDecoration(
         color: AppColors.amber,
         shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
+class _BouncingDotRow extends StatelessWidget {
+  final double controllerValue;
+
+  const _BouncingDotRow({required this.controllerValue});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        _bouncingDot(0),
+        const SizedBox(width: 6),
+        _bouncingDot(1),
+        const SizedBox(width: 6),
+        _bouncingDot(2),
+      ],
+    );
+  }
+
+  Widget _bouncingDot(int dotIndex) {
+    final phase = (controllerValue + dotIndex * 0.2) % 1.0;
+    final dy = -7.0 * (0.5 - 0.5 * math.cos(phase * 2 * math.pi));
+    return SizedBox(
+      width: 7,
+      height: 15,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Transform.translate(
+          offset: Offset(0, dy),
+          child: const _DotShape(),
+        ),
       ),
     );
   }

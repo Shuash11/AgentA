@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../../data/models/chat_message_model.dart';
 import 'ai_model.dart';
 import 'groq_service.dart';
+import 'huggingface_image_service.dart';
 import 'minimax_service.dart';
 import 'pollinations_service.dart';
 
@@ -9,10 +10,12 @@ class OnlineAIService extends ChangeNotifier {
   final GroqService _groq;
   final MiniMaxService _minimax;
   final PollinationsService _pollinations;
+  final HuggingFaceImageService _huggingFace;
 
   AIModel _preferredModel = AIModel.groq;
 
-  OnlineAIService(this._groq, this._minimax, this._pollinations);
+  OnlineAIService(
+      this._groq, this._minimax, this._pollinations, this._huggingFace);
 
   AIModel get preferredModel => _preferredModel;
 
@@ -75,9 +78,15 @@ class OnlineAIService extends ChangeNotifier {
     return _pollinations.buildImageUrl(prompt: prompt);
   }
 
+  bool get isHuggingFaceAvailable => _huggingFace.isConfigured;
+
+  Future<String> generateImageFallback(String prompt) {
+    return _huggingFace.generateImageFile(prompt: prompt);
+  }
+
   void cancelActiveGeneration() {
-    
     _groq.cancelGeneration();
     _minimax.cancelGeneration();
+    _huggingFace.cancelGeneration();
   }
 }

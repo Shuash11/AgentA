@@ -4,12 +4,15 @@ import 'package:flutter/services.dart';
 import 'package:markdown/markdown.dart' as md;
 import '../../../data/models/chat_message_model.dart';
 import '../../../theme/app_theme.dart';
+import 'auto_retry_image.dart';
 import 'image_bubble.dart';
 
 class MessageBubble extends StatelessWidget {
   final ChatMessageModel message;
   final ThemeColors colors;
   final bool isStreaming;
+  final Future<void> Function(String messageId)? onImageFallback;
+  final bool fallbackAvailable;
   static const double _maxBubbleWidthFactor = 0.75;
 
   const MessageBubble({
@@ -17,6 +20,8 @@ class MessageBubble extends StatelessWidget {
     required this.message,
     required this.colors,
     this.isStreaming = false,
+    this.onImageFallback,
+    this.fallbackAvailable = false,
   });
 
   BoxDecoration _buildDecoration(bool isUser, bool isImageMessage) {
@@ -200,6 +205,7 @@ class MessageBubble extends StatelessWidget {
 
   bool _isImageUrl(String text) {
     final trimmed = text.trim();
+    if (isLocalImagePath(trimmed)) return true;
     if (trimmed.startsWith('http') &&
         trimmed.contains('image.pollinations.ai')) {
       return true;
@@ -223,6 +229,10 @@ class MessageBubble extends StatelessWidget {
       imageUrl: imageUrl,
       colors: colors,
       width: bubbleWidth,
+      fallbackAvailable: fallbackAvailable && !isLocalImagePath(imageUrl),
+      onFallbackRequested: onImageFallback == null
+          ? null
+          : () => onImageFallback!(message.id),
     );
   }
 }

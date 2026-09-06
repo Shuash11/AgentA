@@ -1,11 +1,34 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
+
+bool isLocalImagePath(String path) {
+  final trimmed = path.trim();
+  if (trimmed.startsWith('file://')) return true;
+  if (trimmed.startsWith('http')) return false;
+  final lower = trimmed.toLowerCase();
+  return lower.endsWith('.png') ||
+      lower.endsWith('.jpg') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.webp') ||
+      lower.endsWith('.gif');
+}
+
+String stripFileScheme(String path) {
+  final trimmed = path.trim();
+  if (trimmed.startsWith('file://')) {
+    return Uri.parse(trimmed).toFilePath();
+  }
+  return trimmed;
+}
 
 class AutoRetryImage extends StatefulWidget {
   final String imageUrl;
   final ThemeColors colors;
   final double width;
   final VoidCallback? onImageLoaded;
+  final Future<void> Function()? onFallbackRequested;
+  final bool fallbackAvailable;
 
   const AutoRetryImage({
     super.key,
@@ -13,6 +36,8 @@ class AutoRetryImage extends StatefulWidget {
     required this.colors,
     required this.width,
     this.onImageLoaded,
+    this.onFallbackRequested,
+    this.fallbackAvailable = false,
   });
 
   @override
@@ -23,6 +48,7 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
   int _retryCount = 0;
   bool _hasError = false;
   bool _notifiedLoaded = false;
+  bool _fallbackRunning = false;
 
   @override
   void didUpdateWidget(covariant AutoRetryImage oldWidget) {
@@ -31,6 +57,7 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
       _retryCount = 0;
       _hasError = false;
       _notifiedLoaded = false;
+      _fallbackRunning = false;
     }
   }
 
@@ -45,6 +72,9 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
   @override
   Widget build(BuildContext context) {
     if (_hasError) return _buildErrorPlaceholder();
+    if (isLocalImagePath(widget.imageUrl)) {
+      return _buildLocalImage();
+    }
     final cacheWidth =
         (widget.width * MediaQuery.devicePixelRatioOf(context)).round();
 
@@ -85,6 +115,30 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
           });
         }
 
+        return child;
+      },
+    );
+  }
+
+  Widget _buildLocalImage() {
+    return Image.file(
+      File(stripFileScheme(widget.imageUrl)),
+      key: ValueKey(widget.imageUrl),
+      fit: BoxFit.cover,
+      width: widget.width,
+      height: widget.width,
+      gaplessPlayback: true,
+      errorBuilder: (context, error, stackTrace) => _buildErrorPlaceholder(),
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (frame == null) return _buildStaticPlaceholder();
+        if (!_notifiedLoaded) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !_notifiedLoaded) {
+              _notifiedLoaded = true;
+              widget.onImageLoaded?.call();
+            }
+          });
+        }
         return child;
       },
     );
@@ -180,6 +234,36 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
             label: Text('Retry', style: TextStyle(color: widget.colors.amber)),
             onPressed: _retry,
           ),
+          if (widget.fallbackAvailable && widget.onFallbackRequested != null)
+            TextButton.icon(
+              icon: _fallbackRunning
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: widget.colors.amber,
+                      ),
+                    )
+                  : Icon(Icons.hd_outlined,
+                      color: widget.colors.amber, size: 18),
+              label: Text(
+                _fallbackRunning ? 'Making HD...' : 'Try HD version',
+                style: TextStyle(color: widget.colors.amber),
+              ),
+              onPressed: _fallbackRunning
+                  ? null
+                  : () async {
+                      setState(() => _fallbackRunning = true);
+                      try {
+                        await widget.onFallbackRequested?.call();
+                      } finally {
+                        if (mounted) {
+                          setState(() => _fallbackRunning = false);
+                        }
+                      }
+                    },
+            ),
         ],
       ),
     );

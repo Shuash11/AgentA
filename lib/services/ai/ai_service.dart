@@ -89,6 +89,12 @@ class AIService {
     return _onlineAI.buildImageUrl(prompt);
   }
 
+  bool get isHuggingFaceAvailable => _onlineAI.isHuggingFaceAvailable;
+
+  Future<String> generateImageFallback(String prompt) {
+    return _onlineAI.generateImageFallback(prompt);
+  }
+
   Future<void> resetOfflineSession() => _offlineAI.resetSession();
 
   void cancelActiveGeneration() {

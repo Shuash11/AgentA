@@ -16,6 +16,9 @@ class ChatTimelineView extends StatelessWidget {
   final ThemeColors colors;
   final bool animateEmpty;
   final bool isImageGeneration;
+  final bool isThinking;
+  final Future<void> Function(String messageId)? onImageFallback;
+  final bool fallbackAvailable;
 
   const ChatTimelineView({
     super.key,
@@ -25,6 +28,9 @@ class ChatTimelineView extends StatelessWidget {
     required this.colors,
     required this.animateEmpty,
     required this.isImageGeneration,
+    this.isThinking = false,
+    this.onImageFallback,
+    this.fallbackAvailable = false,
   });
 
   @override
@@ -56,6 +62,7 @@ class ChatTimelineView extends StatelessWidget {
                     colors: colors,
                     isImageGeneration: isImageGeneration,
                     isInitializing: activity.isInitializingModel,
+                    isThinking: isThinking,
                   );
                 }
 
@@ -72,6 +79,8 @@ class ChatTimelineView extends StatelessWidget {
                     message: msg,
                     colors: colors,
                     isStreaming: isStreamingMessage,
+                    onImageFallback: onImageFallback,
+                    fallbackAvailable: fallbackAvailable,
                   ),
                 );
               },

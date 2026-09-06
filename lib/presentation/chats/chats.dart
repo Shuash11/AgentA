@@ -7,6 +7,7 @@ import '../../cubit/theme/theme_cubit.dart';
 import '../../cubit/connectivity/connectivity_cubit.dart';
 import '../../theme/app_theme.dart';
 import '../../services/ai/ai_service.dart';
+import '../../services/ai/ai_model.dart';
 import '../shared/offline_model_banner.dart';
 import '../ai/download_prompt_screen.dart';
 import '../../data/models/chat_message_model.dart';
@@ -68,6 +69,10 @@ class _ChatScreenState extends State<Chats> {
   bool get _isImageGenerationModel {
     final modelName = _aiService.activeModel.name.toLowerCase();
     return modelName.contains('pollinations') || modelName.contains('image');
+  }
+
+  bool get _isOfflineThinking {
+    return _aiService.activeModel == AIModel.gemma;
   }
 
   @override
@@ -447,6 +452,61 @@ class _ChatScreenState extends State<Chats> {
     _setActivity(isTyping: false, isInitializingModel: false);
   }
 
+  Future<void> _retryImageWithHuggingFace(String messageId) async {
+    final index = _messages.indexWhere((msg) => msg.id == messageId);
+    if (index == -1 || !mounted) return;
+
+    String prompt = '';
+    for (int i = index - 1; i >= 0; i--) {
+      if (_messages[i].isUser && _messages[i].text.trim().isNotEmpty) {
+        prompt = _messages[i].text.trim();
+        break;
+      }
+    }
+    if (prompt.isEmpty) {
+      final failedUrl = _messages[index].text.trim();
+      final match = RegExp(r'pollinations\.ai/prompt/([^?]+)').firstMatch(failedUrl);
+      if (match != null) {
+        prompt = Uri.decodeComponent(match.group(1)!);
+      }
+    }
+    if (prompt.isEmpty || !mounted) return;
+
+    _setActivity(isTyping: true, isInitializingModel: true);
+    try {
+      final localPath = await _aiService.generateImageFallback(prompt);
+      if (!mounted) return;
+      final messages = [..._messages];
+      final currentIndex = messages.indexWhere((msg) => msg.id == messageId);
+      if (currentIndex != -1) {
+        final old = messages[currentIndex];
+        final updated = ChatMessageModel(
+          id: old.id,
+          chatId: old.chatId,
+          text: localPath,
+          isUser: false,
+          timestamp: old.timestamp,
+        );
+        messages[currentIndex] = updated;
+        _setMessages(messages);
+        await _messageRepo.saveMessage(updated);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_friendlyErrorMessage(e.toString())),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        _setActivity(isTyping: false, isInitializingModel: false);
+      }
+    }
+  }
+
   Future<void> _handleGenerationError(Object error) async {
     if (!mounted) return;
 
@@ -491,6 +551,18 @@ class _ChatScreenState extends State<Chats> {
     }
     if (lower.contains('minimax api key not configured')) {
       return 'MiniMax API key is missing in .env.';
+    }
+    if (lower.contains('huggingface') || lower.contains('hf_token')) {
+      if (lower.contains('credits exhausted') || lower.contains('rate limit')) {
+        return 'HuggingFace free limit reached. Wait a bit or stick with Pollinations.';
+      }
+      if (lower.contains('warming up') || lower.contains('timed out')) {
+        return 'HuggingFace model is warming up. Try HD again in a moment.';
+      }
+      if (lower.contains('not configured') || lower.contains('invalid')) {
+        return 'HuggingFace token missing or invalid. Set HF_TOKEN in .env.';
+      }
+      return 'HD image generation failed. Please try again.';
     }
     if (lower.contains('pollinations')) {
       return 'Image generation failed. Please try again.';
@@ -605,6 +677,9 @@ class _ChatScreenState extends State<Chats> {
               colors: colors,
               animateEmpty: widget.isNew,
               isImageGeneration: _isImageGenerationModel,
+              isThinking: _isOfflineThinking,
+              onImageFallback: _retryImageWithHuggingFace,
+              fallbackAvailable: _aiService.isHuggingFaceAvailable,
             ),
           ),
           ValueListenableBuilder<ChatActivityState>(
