@@ -16,7 +16,8 @@ migrate_working_dir/
 .env
 .env.local
 
-# Firebase config injected via gh secret in CI
+# No Firebase in this project (Supabase-only auth).
+# Leftover google-services files are never read; ignore them if present.
 google-services.json
 **/google-services.json
 GoogleService-Info.plist

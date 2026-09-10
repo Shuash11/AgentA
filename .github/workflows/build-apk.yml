@@ -54,17 +54,6 @@ jobs:
           GOOGLE_SERVER_CLIENT_ID=$GOOGLE_SERVER_CLIENT_ID
           EOF
 
-      - name: Restore google-services.json
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: |
-          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
-            python3 -c "import json,sys; d=json.load(open('android/app/google-services.json')); assert d.get('client'), 'no clients'; print('google-services.json OK, clients:', len(d['client']))" || { echo "::error::GOOGLE_SERVICES_JSON secret is not valid JSON"; exit 1; }
-          else
-            echo "::warning::GOOGLE_SERVICES_JSON secret empty, continuing without it"
-          fi
-
       - run: flutter pub get
       - run: flutter analyze || true
       - run: flutter build apk --release
