@@ -14,23 +14,30 @@ class ChatRepository {
   }
 
   Future<List<ChatSessionModel>> getChatsForUser(String userId) async {
-    final isOnline = await _connectivity.isOnline();
-
-    if (isOnline && userId.isNotEmpty && !userId.startsWith('offline_')) {
-      try {
-        final remoteChats = await SupabaseChatService.getChats(userId);
-        for (final chat in remoteChats) {
-          final syncedChat = chat.copyWith(isSynced: true);
-          await _localChatDao.replaceChat(chat.id, syncedChat);
-        }
-        return remoteChats;
-      } catch (e) {}
-    }
-
     if (userId.isEmpty) {
-      return await _localChatDao.getAllChats();
+      return [];
     }
-    return await _localChatDao.getByUserId(userId);
+    final local = await _localChatDao.getByUserId(userId);
+    final isOnline = await _connectivity.isOnline();
+    if (!isOnline) {
+      return local;
+    }
+
+    try {
+      final remoteChats = await SupabaseChatService.getChats(userId);
+      final merged = <String, ChatSessionModel>{
+        for (final chat in local) chat.id: chat,
+      };
+      for (final chat in remoteChats) {
+        final syncedChat = chat.copyWith(isSynced: true);
+        await _localChatDao.replaceChat(chat.id, syncedChat);
+        merged[chat.id] = syncedChat;
+      }
+      final list = merged.values.toList()
+        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      return list;
+    } catch (e) {}
+    return local;
   }
 
   Future<ChatSessionModel?> getChat(String chatId) async {
@@ -40,9 +47,6 @@ class ChatRepository {
   Future<void> createChat(ChatSessionModel chat) async {
     await _localChatDao.insert(chat);
     final uid = await _userId;
-    if (uid.isNotEmpty && uid.startsWith('offline_')) {
-      return;
-    }
     if (await _connectivity.isOnline() && uid.isNotEmpty) {
       try {
         await SupabaseChatService.saveChat(uid, chat);
@@ -54,9 +58,6 @@ class ChatRepository {
   Future<void> updateChat(ChatSessionModel chat) async {
     await _localChatDao.update(chat);
     final uid = await _userId;
-    if (uid.isNotEmpty && uid.startsWith('offline_')) {
-      return;
-    }
     if (await _connectivity.isOnline() && uid.isNotEmpty) {
       try {
         await SupabaseChatService.saveChat(uid, chat);
@@ -68,9 +69,6 @@ class ChatRepository {
   Future<void> deleteChat(String userId, String chatId) async {
     await _localChatDao.markDeleted(chatId);
     final uid = await _userId;
-    if (uid.isNotEmpty && uid.startsWith('offline_')) {
-      return;
-    }
     if (await _connectivity.isOnline() && uid.isNotEmpty) {
       try {
         await SupabaseChatService.deleteChat(uid, chatId);

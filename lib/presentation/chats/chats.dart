@@ -128,6 +128,23 @@ class _ChatScreenState extends State<Chats> {
   Future<void> _initializeChat() async {
     if (widget.isNew) {
       await _createChatIfNew();
+    } else {
+      final uid = await _localChatDao.getUserId();
+      final existing = await _chatRepo.getChat(widget.chatId);
+      if (existing != null &&
+          existing.userId.isNotEmpty &&
+          uid.isNotEmpty &&
+          existing.userId != uid) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You do not have access to this chat.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.of(context).pop();
+        return;
+      }
     }
 
     try {

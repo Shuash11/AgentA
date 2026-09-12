@@ -80,6 +80,13 @@ class _LoginPageState extends State<LoginPage> {
       onlineUid = cred.uid;
 
       if (cred.uid.isNotEmpty) {
+        try {
+          final existing = await UserRepository.getUserProfile(cred.uid);
+          if (existing == null) {
+            await UserRepository.createUserProfile(
+                cred.uid, email, cred.displayName ?? 'User', '');
+          }
+        } catch (_) {}
         final dao = LocalUserDao();
         await dao.savePendingSignup(
           localId: cred.uid,

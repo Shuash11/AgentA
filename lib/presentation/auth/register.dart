@@ -69,13 +69,18 @@ class _RegisterPageState extends State<RegisterPage> {
 
     bool isOnline = false;
     String? onlineUid;
+    bool emailConfirmationPending = false;
 
     try {
       final cred = await AuthService.register(email, password, displayName);
-      final uid = cred.uid;
-      await UserRepository.createUserProfile(uid, email, displayName, recoveryCode);
-      isOnline = true;
-      onlineUid = uid;
+      onlineUid = cred.uid;
+      try {
+        await UserRepository.createUserProfile(
+            cred.uid, email, displayName, recoveryCode);
+        isOnline = true;
+      } catch (_) {
+        emailConfirmationPending = true;
+      }
     } on AuthException catch (e) {
       final msg = e.message.toLowerCase();
       final isNetwork = msg.contains('network') ||
@@ -130,7 +135,9 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => _isLoading = false);
 
     if (mounted) {
-      await _showRecoveryCodeDialog(recoveryCode, isOffline: !isOnline);
+      await _showRecoveryCodeDialog(recoveryCode,
+          isOffline: !isOnline,
+          confirmEmail: emailConfirmationPending);
     }
   }
 
@@ -140,7 +147,15 @@ class _RegisterPageState extends State<RegisterPage> {
         message.contains('already in use')) {
       return 'This email is already registered. Please sign in.';
     }
-    if (message.contains('invalid email') || message.contains('invalid-email')) {
+    if (message.contains('rate limit') ||
+        message.contains('429') ||
+        message.contains('too many') ||
+        message.contains('over_email_send_rate_limit')) {
+      return 'Too many attempts. Email limit reached — try again in an hour.';
+    }
+    if (message.contains('email_address_invalid') ||
+        message.contains('invalid email') ||
+        message.contains('invalid-email')) {
       return 'The email address is not valid.';
     }
     if (message.contains('password')) {
@@ -165,13 +180,15 @@ class _RegisterPageState extends State<RegisterPage> {
     });
   }
 
-  Future<void> _showRecoveryCodeDialog(String recoveryCode, {bool isOffline = false}) async {
+  Future<void> _showRecoveryCodeDialog(String recoveryCode,
+      {bool isOffline = false, bool confirmEmail = false}) async {
     await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => _RecoveryCodeDialog(
         recoveryCode: recoveryCode,
         isOffline: isOffline,
+        confirmEmail: confirmEmail,
         colors: _colors,
       ),
     );
@@ -559,11 +576,13 @@ class _RegisterForm extends StatelessWidget {
 class _RecoveryCodeDialog extends StatelessWidget {
   final String recoveryCode;
   final bool isOffline;
+  final bool confirmEmail;
   final ThemeColors colors;
 
   const _RecoveryCodeDialog({
     required this.recoveryCode,
     required this.isOffline,
+    this.confirmEmail = false,
     required this.colors,
   });
 
@@ -627,6 +646,34 @@ class _RecoveryCodeDialog extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         color: colors.warning,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (confirmEmail) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: colors.withOpacity(colors.amber, 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: colors.withOpacity(colors.amber, 0.4)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.mark_email_read_outlined,
+                      color: colors.amber, size: 16),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'Check your email for a confirmation link, then sign in.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.amber,
                       ),
                     ),
                   ),

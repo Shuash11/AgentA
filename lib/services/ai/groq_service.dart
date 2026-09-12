@@ -44,6 +44,7 @@ class GroqService {
     required List<ChatMessageModel> history,
     required String newMessage,
   }) async {
+    resetCancel();
     final apiKey = AppConfig.groqApiKey.trim();
     if (apiKey.isEmpty || apiKey.contains('your_')) {
       throw Exception('Groq API key not configured. Please set GROQ_API_KEY in .env file.');

@@ -6,6 +6,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../shared/bottomnavbar.dart';
 import '../shared/offline_model_banner.dart';
 import '../../cubit/theme/theme_cubit.dart';
+import '../../cubit/connectivity/connectivity_cubit.dart';
+import '../../core/utils/connectivity_service.dart';
 import '../../theme/app_theme.dart';
 import '../chats/chats.dart';
 import '../../data/models/chat_session_model.dart';
@@ -30,6 +32,9 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> {
   List<ChatSessionModel> _chats = [];
   bool _isLoading = true;
+  bool _initialized = false;
+  bool _wasOnline = true;
+  StreamSubscription? _connectivitySubscription;
   late final LocalChatDao _localChatDao;
   late final ChatRepository _chatRepo;
 
@@ -55,8 +60,30 @@ class _DashboardState extends State<Dashboard> {
   void initState() {
     super.initState();
     _localChatDao = LocalChatDao.instance;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
     _chatRepo = context.read<ChatRepository>();
+    final connectivity = context.read<ConnectivityCubit>();
+    _wasOnline = connectivity.state.isOnline;
+    _connectivitySubscription = connectivity.statusStream.listen((status) {
+      final isNowOnline = status == InternetStatus.online;
+      if (!_wasOnline && isNowOnline && mounted) {
+        _loadChats();
+      }
+      _wasOnline = isNowOnline;
+    });
     _loadChats();
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadChats() async {
@@ -248,7 +275,7 @@ void _newChat() async {
                         child: RepaintBoundary(
                           child: ListView.builder(
                             padding: const EdgeInsets.fromLTRB(AppSpacing.base, AppSpacing.base, AppSpacing.base, 88),
-                            itemExtent: 88,
+                            itemExtent: 108,
                             itemCount: _chats.length,
                             itemBuilder: (context, index) {
                               final chat = _chats[index];

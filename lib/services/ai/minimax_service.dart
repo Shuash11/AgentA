@@ -47,6 +47,7 @@ class MiniMaxService {
     required List<ChatMessageModel> history,
     required String newMessage,
   }) async {
+    resetCancel();
     final apiKey = AppConfig.minimaxApiKey.replaceAll(RegExp(r'[\s\u200B-\u200D\uFEFF]'), '').trim();
     if (apiKey.isEmpty || apiKey.contains('your_')) {
       throw Exception('MiniMax API key not configured. Please set MINIMAX_API_KEY in .env file.');
