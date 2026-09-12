@@ -1,43 +1,25 @@
-import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'database_helper.dart';
 import '../models/chat_session_model.dart';
+import '../../services/auth/session_manager.dart';
 
 class LocalChatDao {
   LocalChatDao._();
   static final LocalChatDao instance = LocalChatDao._();
 
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
-  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
   Future<String> getUserId() async {
     try {
-      final offlineUser = await _secureStorage.read(key: 'offline_user');
-
-      if (offlineUser == 'true') {
-        final email = await _secureStorage.read(key: 'offline_email');
-        if (email != null) {
-          return _generateOfflineUserId(email);
-        }
-        return 'offline_user';
-      }
-
-      return Supabase.instance.client.auth.currentUser?.id ?? '';
-    } catch (_) {
-      return '';
-    }
-  }
-
-  String _generateOfflineUserId(String email) {
-    final bytes = utf8.encode(email);
-    int hash = 0;
-    for (var byte in bytes) {
-      hash = ((hash << 5) - hash) + byte;
-      hash = hash & 0xFFFFFFFF;
-    }
-    return 'offline_${hash.toRadixString(16)}';
+      final supabaseUid = Supabase.instance.client.auth.currentUser?.id;
+      if (supabaseUid != null && supabaseUid.isNotEmpty) return supabaseUid;
+    } catch (_) {}
+    try {
+      final session = await SessionManager.currentSession();
+      if (session != null) return session.uid;
+    } catch (_) {}
+    return '';
   }
 
   Future<void> insert(ChatSessionModel chat) async {

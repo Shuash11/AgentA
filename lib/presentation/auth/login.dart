@@ -6,6 +6,7 @@ import '../../cubit/theme/theme_cubit.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/auth/biometric_auth_service.dart';
+import '../../services/auth/session_manager.dart';
 import '../../repositories/user_repository.dart';
 import '../../data/local/local_user_dao.dart';
 import '../shared/app_shell.dart';
@@ -39,7 +40,15 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _checkBiometric() async {
     final ready = await BiometricAuthService.isSupported() &&
         await BiometricAuthService.isEnrolled();
-    if (mounted) setState(() => _biometricReady = ready);
+    final lastEmail = await SessionManager.lastEmail();
+    if (mounted) {
+      setState(() => _biometricReady = ready);
+      if (lastEmail != null &&
+          lastEmail.isNotEmpty &&
+          _emailController.text.isEmpty) {
+        _emailController.text = lastEmail;
+      }
+    }
   }
 
   @override
@@ -75,10 +84,17 @@ class _LoginPageState extends State<LoginPage> {
         await dao.savePendingSignup(
           localId: cred.uid,
           email: email,
-          password: password,
+          password: SessionManager.hashPassword(password),
           displayName: cred.displayName ?? 'User',
           recoveryCode: '',
           isSynced: true,
+          provider: 'password',
+        );
+        await SessionManager.stashPassword(cred.uid, password);
+        await SessionManager.saveSession(
+          uid: cred.uid,
+          email: email,
+          provider: 'password',
         );
       }
     } catch (e) {
@@ -129,8 +145,26 @@ class _LoginPageState extends State<LoginPage> {
       final localUser = await dao.getUserByEmail(email);
 
       if (localUser != null) {
-        final storedPassword = localUser['password'] as String;
-        if (storedPassword == password) {
+        final provider =
+            (localUser['provider'] as String?) ?? 'password';
+        if (provider == 'google') {
+          await SessionManager.saveSession(
+            uid: localUser['local_id'] as String,
+            email: email,
+            provider: 'google',
+          );
+          setState(() => _isLoading = false);
+          _goToDashboard(isOnline: false);
+          return;
+        }
+        final storedHash = localUser['password'] as String;
+        if (storedHash.isNotEmpty &&
+            storedHash == SessionManager.hashPassword(password)) {
+          await SessionManager.saveSession(
+            uid: localUser['local_id'] as String,
+            email: email,
+            provider: 'password',
+          );
           setState(() => _isLoading = false);
           _goToDashboard(isOnline: false);
           return;
@@ -163,6 +197,12 @@ class _LoginPageState extends State<LoginPage> {
           displayName: cred.displayName ?? 'User',
           recoveryCode: '',
           isSynced: true,
+          provider: 'google',
+        );
+        await SessionManager.saveSession(
+          uid: cred.uid,
+          email: cred.email ?? '',
+          provider: 'google',
         );
         try {
           final existing = await UserRepository.getUserProfile(cred.uid);
@@ -220,6 +260,13 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
     setState(() => _isLoading = false);
     if (uid != null) {
+      final dao = LocalUserDao();
+      final row = await dao.getPendingSignupByLocalId(uid);
+      await SessionManager.saveSession(
+        uid: uid,
+        email: (row?['email'] as String?) ?? '',
+        provider: (row?['provider'] as String?) ?? 'password',
+      );
       _goToDashboard(isOnline: false);
     }
   }

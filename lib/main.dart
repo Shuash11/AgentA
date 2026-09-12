@@ -7,6 +7,7 @@ import 'theme/app_theme.dart';
 import 'cubit/app_providers.dart';
 import 'cubit/connectivity/connectivity_cubit.dart';
 import 'services/auth/auth_service.dart';
+import 'services/auth/session_manager.dart';
 import 'services/ai/offline_ai_service.dart';
 import 'services/ai/online_ai_service.dart';
 import 'services/ai/gemma_service.dart';
@@ -522,10 +523,32 @@ class _AuthGateState extends State<AuthGate> {
     context.read<SyncService>().init();
   }
 
+  Future<bool> _hasOfflineSession() async {
+    try {
+      if (Supabase.instance.client.auth.currentSession != null) return true;
+    } catch (_) {}
+    return (await SessionManager.currentSession()) != null;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!AuthService.isBackendReady) {
-      return const LoginPage();
+      return FutureBuilder<bool>(
+        future: _hasOfflineSession(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(color: Color(0xFFFFC107)),
+              ),
+            );
+          }
+          if (snapshot.data == true) {
+            return const AppShell(offlineMode: true);
+          }
+          return const LoginPage();
+        },
+      );
     }
     return BlocBuilder<ConnectivityCubit, ConnectivityState>(
       buildWhen: (previous, current) => previous.isOnline != current.isOnline,

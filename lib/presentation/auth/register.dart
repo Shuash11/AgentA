@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../services/auth/auth_service.dart';
+import '../../services/auth/session_manager.dart';
 import '../../repositories/user_repository.dart';
 import '../../data/local/local_user_dao.dart';
 import '../../presentation/shared/app_shell.dart';
@@ -67,12 +68,14 @@ class _RegisterPageState extends State<RegisterPage> {
     final localUserDao = LocalUserDao();
 
     bool isOnline = false;
+    String? onlineUid;
 
     try {
       final cred = await AuthService.register(email, password, displayName);
       final uid = cred.uid;
       await UserRepository.createUserProfile(uid, email, displayName, recoveryCode);
       isOnline = true;
+      onlineUid = uid;
     } on AuthException catch (e) {
       final msg = e.message.toLowerCase();
       final isNetwork = msg.contains('network') ||
@@ -107,14 +110,21 @@ class _RegisterPageState extends State<RegisterPage> {
       }
     }
 
-    final localId = const Uuid().v4();
+    final localId = onlineUid ?? const Uuid().v4();
     await localUserDao.savePendingSignup(
       localId: localId,
       email: email,
-      password: password,
+      password: SessionManager.hashPassword(password),
       displayName: displayName,
       recoveryCode: recoveryCode,
       isSynced: isOnline,
+      provider: 'password',
+    );
+    await SessionManager.stashPassword(localId, password);
+    await SessionManager.saveSession(
+      uid: localId,
+      email: email,
+      provider: 'password',
     );
 
     setState(() => _isLoading = false);

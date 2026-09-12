@@ -8,7 +8,7 @@ class MessageRepository {
   final LocalMessageDao _localMsgDao = LocalMessageDao.instance;
   ConnectivityService get _connectivity => ConnectivityService.instance;
 
-  Future<String> get _userId async => _localMsgDao.getUserId();
+  Future<String> get _userId async => _localMsgDao.getUserIdAsync();
 
   Future<List<ChatMessageModel>> getLocalMessages(String chatId) async {
     return await _localMsgDao.getByChat(chatId);

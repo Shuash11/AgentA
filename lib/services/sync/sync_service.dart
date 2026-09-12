@@ -1,6 +1,5 @@
 // ignore_for_file: empty_catches
 import 'dart:async';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../data/local/local_message_dao.dart';
 import '../../data/local/local_chat_dao.dart';
 import '../../data/local/local_user_dao.dart';
@@ -9,11 +8,11 @@ import '../../data/remote/supabase_chat_service.dart';
 import '../../core/utils/connectivity_service.dart';
 import '../auth/auth_service.dart';
 import '../../repositories/user_repository.dart';
+import '../auth/session_manager.dart';
 
 class SyncService {
   final ConnectivityService _connectivity;
   StreamSubscription? _statusSubscription;
-  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   bool _isSyncing = false;
 
   SyncService(this._connectivity);
@@ -82,61 +81,64 @@ class SyncService {
   Future<void> _syncPendingUsers() async {
     final localUserDao = LocalUserDao();
     final pendingSignups = await localUserDao.getPendingSignups();
-    
-    
+    final session = await SessionManager.currentSession();
 
     for (final signup in pendingSignups) {
       try {
         final localId = signup['local_id'] as String;
         final email = signup['email'] as String;
-        final password = signup['password'] as String;
+        final provider = (signup['provider'] as String?) ?? 'password';
         final displayName = signup['display_name'] as String;
         final recoveryCode = signup['recovery_code'] as String;
 
-        if (password.isEmpty) {
-          await localUserDao.delete(localId);
+        if (provider == 'google') {
+          await localUserDao.markAsSynced(localId, localId);
           continue;
         }
 
-        final cred = await AuthService.register(email, password, displayName);
-        final supabaseUid = cred.uid;
+        if (session == null ||
+            session.email.trim().toLowerCase() !=
+                email.trim().toLowerCase()) {
+          continue;
+        }
 
-        await UserRepository.createUserProfile(supabaseUid, email, displayName, recoveryCode);
+        final password =
+            await SessionManager.takeStashedPassword(localId) ?? '';
+        if (password.isEmpty) {
+          continue;
+        }
+
+        String supabaseUid;
+        try {
+          final cred =
+              await AuthService.register(email, password, displayName);
+          supabaseUid = cred.uid;
+          await UserRepository.createUserProfile(
+              supabaseUid, email, displayName, recoveryCode);
+        } catch (e) {
+          final msg = e.toString().toLowerCase();
+          if (!(msg.contains('already registered') ||
+              msg.contains('already exists') ||
+              msg.contains('user already'))) {
+            rethrow;
+          }
+          final cred = await AuthService.login(email, password);
+          supabaseUid = cred.uid;
+          await AuthService.signOutOnly();
+        }
 
         await localUserDao.markAsSynced(localId, supabaseUid);
-
-        await AuthService.login(email, password);
-
-        await _clearOfflineUser();
-
-        
-      } catch (e) {
-        final msg = e.toString().toLowerCase();
-        if (msg.contains('already registered') ||
-            msg.contains('already exists') ||
-            msg.contains('user already')) {
-          try {
-            final email = signup['email'] as String;
-            final password = signup['password'] as String;
-            final localId = signup['local_id'] as String;
-            if (password.isEmpty) {
-              await localUserDao.delete(localId);
-              continue;
-            }
-            final cred = await AuthService.login(email, password);
-            await localUserDao.markAsSynced(localId, cred.uid);
-            await _clearOfflineUser();
-          } catch (_) {}
+        await SessionManager.dropStashedPassword(localId);
+        if (localId != supabaseUid) {
+          await migrateOfflineUserChats(localId, supabaseUid);
         }
-      }
+        await SessionManager.saveSession(
+          uid: supabaseUid,
+          email: email,
+          provider: 'password',
+        );
+      } catch (_) {}
     }
-  }
-
-  Future<void> _clearOfflineUser() async {
-    await _secureStorage.delete(key: 'offline_user');
-    await _secureStorage.delete(key: 'offline_email');
-    await _secureStorage.delete(key: 'offline_display_name');
-    await _secureStorage.delete(key: 'offline_recovery_code');
   }
 
   Future<void> _refreshLocalCacheFromRemote() async {

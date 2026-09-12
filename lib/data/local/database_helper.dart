@@ -1,6 +1,8 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/constants/app_constants.dart';
+import '../../services/auth/session_manager.dart';
 
 class DatabaseHelper {
   DatabaseHelper._internal();
@@ -57,6 +59,37 @@ class DatabaseHelper {
     if (oldVersion < 5) {
       await _createIndexes(db);
     }
+    if (oldVersion < 6) {
+      await db.execute(
+          'ALTER TABLE pending_signups ADD COLUMN provider TEXT DEFAULT \'password\'');
+      final rows = await db.query('pending_signups');
+      const storage = FlutterSecureStorage();
+      for (final row in rows) {
+        final localId = row['local_id'] as String;
+        final stored = (row['password'] as String?) ?? '';
+        if (stored.isEmpty) {
+          await db.update('pending_signups', {'provider': 'google'},
+              where: 'local_id = ?', whereArgs: [localId]);
+          continue;
+        }
+        if (stored.length == 64 &&
+            RegExp(r'^[0-9a-f]{64}$').hasMatch(stored)) {
+          continue;
+        }
+        try {
+          await storage.write(key: 'pwd_$localId', value: stored);
+        } catch (_) {}
+        await db.update(
+          'pending_signups',
+          {
+            'password': SessionManager.hashPassword(stored),
+            'provider': 'password',
+          },
+          where: 'local_id = ?',
+          whereArgs: [localId],
+        );
+      }
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -104,7 +137,8 @@ class DatabaseHelper {
         display_name TEXT NOT NULL,
         recovery_code TEXT NOT NULL,
         created_at INTEGER NOT NULL,
-        is_synced INTEGER DEFAULT 0
+        is_synced INTEGER DEFAULT 0,
+        provider TEXT DEFAULT 'password'
       )
     ''');
 

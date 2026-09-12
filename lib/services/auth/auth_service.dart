@@ -4,6 +4,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/config/app_config.dart';
 import 'biometric_auth_service.dart';
+import 'session_manager.dart';
 
 class AppAuthCredential {
   final String uid;
@@ -133,6 +134,14 @@ class AuthService {
       await GoogleSignIn.instance.signOut();
     } catch (_) {}
     await BiometricAuthService.disable();
+    await SessionManager.clear();
+    await _auth.signOut();
+  }
+
+  static Future<void> signOutOnly() async {
+    try {
+      await GoogleSignIn.instance.signOut();
+    } catch (_) {}
     await _auth.signOut();
   }
 

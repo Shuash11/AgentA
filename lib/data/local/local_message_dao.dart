@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'database_helper.dart';
 import '../models/chat_message_model.dart';
+import '../../services/auth/session_manager.dart';
 
 class LocalMessageDao {
   LocalMessageDao._();
@@ -9,20 +10,16 @@ class LocalMessageDao {
 
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  String getUserId() {
-    try {
-      return Supabase.instance.client.auth.currentUser?.id ?? '';
-    } catch (_) {
-      return '';
-    }
-  }
-
   Future<String> getUserIdAsync() async {
     try {
-      return Supabase.instance.client.auth.currentUser?.id ?? '';
-    } catch (_) {
-      return '';
-    }
+      final supabaseUid = Supabase.instance.client.auth.currentUser?.id;
+      if (supabaseUid != null && supabaseUid.isNotEmpty) return supabaseUid;
+    } catch (_) {}
+    try {
+      final session = await SessionManager.currentSession();
+      if (session != null) return session.uid;
+    } catch (_) {}
+    return '';
   }
 
   Future<void> insert(ChatMessageModel msg) async {
