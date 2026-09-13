@@ -78,7 +78,7 @@ jobs:
             || gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --dir ./artifacts
           echo "--- artifacts ---"
           find ./artifacts -type f | sort
-          SRC="$(find ./artifacts -name 'AgentA-*.apk' | head -n 1)"
+          SRC="$(find ./artifacts -type f -name 'AgentA-*.apk' | head -n 1)"
           if [ -z "$SRC" ]; then
             echo "::error::No AgentA-*.apk artifact found in run $RUN_ID"
             exit 1
