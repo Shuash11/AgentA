@@ -1,0 +1,166 @@
+name: Promote to Landing (latest)
+
+# Option B cross-repo auto-promotion:
+# Every successful "Build APK" run on main automatically publishes its APK as the
+# stable `AgentA.apk` asset on the rolling `latest` release of the public landing
+# repo (Shuash11/AgentA-landing), then patches the version pill in index.html so
+# Vercel auto-deploys. No manual `gh run download` needed.
+#
+# REQUIRED SECRET — LANDING_RELEASE_PAT (never hardcode the value here):
+#   - Type: fine-grained Personal Access Token, scoped ONLY to
+#     Shuash11/AgentA-landing (Repository access: "Only select repositories").
+#   - Permissions on that repo: Contents read+write, Releases read+write.
+#   - Add it at: AgentA repo > Settings > Secrets and variables > Actions >
+#     New repository secret > Name = LANDING_RELEASE_PAT.
+#   - Rotation: create a replacement token (same scope), update the secret value,
+#     then revoke the old token. No workflow change needed (reference by name).
+#   - Same-repo reads (artifact download) keep using the built-in GITHUB_TOKEN;
+#     only cross-repo landing writes use the PAT.
+#
+# ROLLING RELEASE: tag `latest` on Shuash11/AgentA-landing (created if missing).
+# Public URL stays stable:
+#   https://github.com/Shuash11/AgentA-landing/releases/latest/download/AgentA.apk
+# Existing v* tag releases in THIS repo are untouched (see build-apk.yml).
+
+"on":
+  workflow_run:
+    workflows: ["Build APK"]
+    types: [completed]
+    branches: [main]
+
+# `actions: read` covers reading workflow runs + downloading their artifacts.
+permissions:
+  actions: read
+
+env:
+  LANDING_REPO: Shuash11/AgentA-landing
+  ROLLING_TAG: latest
+  STABLE_ASSET: AgentA.apk
+
+jobs:
+  promote:
+    # Only promote green main-branch builds (ignores v* tag runs and failures).
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    steps:
+      - name: Guard required secret
+        run: |
+          if [ -z "${{ secrets.LANDING_RELEASE_PAT }}" ]; then
+            echo "::error::Missing LANDING_RELEASE_PAT secret. Add a fine-grained PAT scoped only to Shuash11/AgentA-landing (Contents read+write, Releases read+write) under AgentA repo Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Download build artifact from triggering run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
+          SHA7="$(echo "$HEAD_SHA" | cut -c1-7)"
+          echo "SHA7=${SHA7}" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=$(date -u +%m-%d)" >> "$GITHUB_ENV"
+          echo "Triggering run: $RUN_ID @ $HEAD_SHA"
+          rm -rf ./artifacts && mkdir -p ./artifacts
+          # Artifact name is dynamic (AgentA-<SHA7>.apk, maybe -nogoogle suffix).
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "AgentA-*.apk" --dir ./artifacts \
+            || gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --dir ./artifacts
+          echo "--- artifacts ---"
+          find ./artifacts -type f | sort
+          SRC="$(find ./artifacts -name 'AgentA-*.apk' | head -n 1)"
+          if [ -z "$SRC" ]; then
+            echo "::error::No AgentA-*.apk artifact found in run $RUN_ID"
+            exit 1
+          fi
+          echo "SRC_APK=${SRC}" >> "$GITHUB_ENV"
+          ls -lh "$SRC"
+
+      - name: Prepare stable + dated assets
+        run: |
+          cp "${{ env.SRC_APK }}" "./${{ env.STABLE_ASSET }}"
+          cp "${{ env.SRC_APK }}" "./AgentA-${{ env.SHA7 }}.apk"
+          ls -lh ./*.apk
+
+      - name: Upload to landing rolling release (retry for ~283MB)
+        env:
+          GH_TOKEN: ${{ secrets.LANDING_RELEASE_PAT }}
+        run: |
+          set -u
+          # Create rolling release if missing (idempotent).
+          if ! gh release view "$ROLLING_TAG" --repo "$LANDING_REPO" >/dev/null 2>&1; then
+            gh release create "$ROLLING_TAG" --repo "$LANDING_REPO" \
+              --title "Latest build" \
+              --notes "Rolling stable build promoted automatically from AgentA main. Download: AgentA.apk"
+          fi
+          # Upload the single stable asset with clobber (no duplicate pile-up).
+          for i in 1 2 3; do
+            echo "Upload attempt $i: $STABLE_ASSET"
+            if gh release upload "$ROLLING_TAG" "./$STABLE_ASSET" --clobber --repo "$LANDING_REPO"; then
+              break
+            fi
+            if [ "$i" = "3" ]; then
+              echo "::error::Stable asset upload failed after 3 attempts"
+              exit 1
+            fi
+            sleep $((i * 15))
+          done
+          # Optional dated copy for rollback visibility, then prune to newest 2.
+          gh release upload "$ROLLING_TAG" "./AgentA-${{ env.SHA7 }}.apk" --clobber --repo "$LANDING_REPO" || true
+          echo "--- assets after upload ---"
+          gh release view "$ROLLING_TAG" --repo "$LANDING_REPO" --json assets --jq '.assets[] | "\(.name)\t\(.createdAt)\t\(.size)"' || true
+          PRUNE_LIST="$(gh release view "$ROLLING_TAG" --repo "$LANDING_REPO" --json assets --jq -r '.assets | map(select(.name | test("^AgentA-[0-9a-f]{7}(-nogoogle)?\\.apk$"))) | sort_by(.createdAt) | .[0:-2] | .[].name' || true)"
+          if [ -n "$PRUNE_LIST" ]; then
+            echo "$PRUNE_LIST" | while read -r OLD; do
+              [ -n "$OLD" ] || continue
+              echo "Pruning old dated asset: $OLD"
+              gh release delete-asset "$ROLLING_TAG" "$OLD" --yes --repo "$LANDING_REPO" || true
+            done
+          else
+            echo "Nothing to prune (<= 2 dated copies)."
+          fi
+
+      - name: Verify public download URL
+        run: |
+          curl -L -I -f "https://github.com/${{ env.LANDING_REPO }}/releases/latest/download/${{ env.STABLE_ASSET }}" | head -n 20
+
+      - name: Checkout landing repo
+        uses: actions/checkout@v4
+        with:
+          repository: Shuash11/AgentA-landing
+          token: ${{ secrets.LANDING_RELEASE_PAT }}
+          path: landing
+          ref: main
+
+      - name: Patch version pill (CSP-safe static HTML, 1-line diff)
+        run: |
+          SHA7="${{ env.SHA7 }}"
+          BUILD_DATE="${{ env.BUILD_DATE }}"
+          if [ -z "$SHA7" ]; then LABEL="Android • latest"; else LABEL="latest • ${BUILD_DATE} • ${SHA7}"; fi
+          echo "Pill label: $LABEL"
+          python3 - "$LABEL" <<'EOF'
+          import re, sys, pathlib
+          label = sys.argv[1]
+          p = pathlib.Path("landing/index.html")
+          s = p.read_text(encoding="utf-8")
+          new, n = re.subn(r'(<div class="pill">.*?<b>).*?(</b>\s*</div>)', rf'\1{label}\2', s, count=1, flags=re.DOTALL)
+          if n == 0:
+              print("::error::pill div not found in landing/index.html")
+              raise SystemExit(1)
+          p.write_text(new, encoding="utf-8")
+          print(f"pill patched ({n} line block)")
+          EOF
+          git -C landing diff -- index.html | head -n 30
+
+      - name: Commit + push pill (triggers Vercel auto-deploy)
+        run: |
+          cd landing
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- index.html; then
+            echo "Pill unchanged, nothing to commit."
+            exit 0
+          fi
+          git add index.html
+          git commit -m "chore: promote ${{ env.SHA7 }} (${{ env.BUILD_DATE }})"
+          git push origin main
