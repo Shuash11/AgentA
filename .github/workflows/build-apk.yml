@@ -39,8 +39,17 @@ jobs:
             echo "::error::Missing SUPABASE_URL secret"
             exit 1
           fi
+          # Trim whitespace (secrets pasted with trailing newlines are a classic instant-cancel cause).
+          GOOGLE_SERVER_CLIENT_ID="$(echo "$GOOGLE_SERVER_CLIENT_ID" | tr -d '[:space:]')"
+          export GOOGLE_SERVER_CLIENT_ID
           if [ -z "$GOOGLE_SERVER_CLIENT_ID" ]; then
             echo "::warning::GOOGLE_SERVER_CLIENT_ID secret empty - Google sign-in will report 'not configured'"
+            echo "GOOGLE_AUTH_STATUS=missing" >> "$GITHUB_ENV"
+          elif [[ "$GOOGLE_SERVER_CLIENT_ID" != *.apps.googleusercontent.com ]]; then
+            echo "::error::GOOGLE_SERVER_CLIENT_ID malformed (must be the Web OAuth client ending in .apps.googleusercontent.com, not an Android client ID). See docs/google-signin-setup.md"
+            echo "GOOGLE_AUTH_STATUS=invalid" >> "$GITHUB_ENV"
+          else
+            echo "GOOGLE_AUTH_STATUS=ok" >> "$GITHUB_ENV"
           fi
           cat > .env <<EOF
           GROQ_API_KEY=$GROQ_API_KEY
@@ -55,7 +64,13 @@ jobs:
           EOF
 
       - run: flutter pub get
-      - run: flutter analyze || true
+      - name: Validate Google auth config
+        run: |
+          if [ "${GOOGLE_AUTH_STATUS:-missing}" = "invalid" ]; then
+            echo "::error::Refusing to ship with malformed GOOGLE_SERVER_CLIENT_ID. Fix the secret (Web client, see docs/google-signin-setup.md)."
+            exit 1
+          fi
+      - run: flutter analyze
       - run: flutter build apk --release
 
       - name: Rename APK
@@ -67,6 +82,10 @@ jobs:
             NAME="AgentA-${TAG}.apk"
           else
             NAME="AgentA-${SHA}.apk"
+          fi
+          if [ "${GOOGLE_AUTH_STATUS:-ok}" = "missing" ]; then
+            NAME="${NAME%.apk}-nogoogle.apk"
+            echo "::warning::APK tagged ${NAME} - built without Google sign-in (GOOGLE_SERVER_CLIENT_ID empty)"
           fi
           cp build/app/outputs/flutter-apk/app-release.apk "dist/${NAME}"
           echo "APK_NAME=${NAME}" >> "$GITHUB_ENV"

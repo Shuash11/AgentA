@@ -68,3 +68,12 @@ flutter pub run flutter_launcher_icons:main
 - **App Name:** AgentA
 - **Core Theme:** Lightning Intelligence
 - **Accent Color:** Amber (#FFB300)
+
+---
+
+## 4. Google Sign-In Setup (Android)
+
+Native Google sign-in shows an instant "cancelled" sheet when the SHA-1 /
+OAuth / Supabase config mismatches. Full runbook (package
+`com.agenta.AgentA`, keytool commands, Cloud Console + Supabase steps, adb
+logcat diagnosis, signing debt note): [docs/google-signin-setup.md](docs/google-signin-setup.md).

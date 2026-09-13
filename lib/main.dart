@@ -1,4 +1,4 @@
-// ignore_for_file: empty_catches
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
@@ -83,6 +83,9 @@ class _AppLoaderState extends State<AppLoader> {
   }
 
   Future<void> _initializeApp() async {
+    // Config change: allow Google to re-initialize with new env values.
+    AuthService.resetGoogleInit();
+
     setState(() {
       _initState = const InitState(status: AppInitStatus.initializing);
     });
@@ -91,6 +94,9 @@ class _AppLoaderState extends State<AppLoader> {
       await AppConfig.init();
       if (!mounted) return;
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Main] AppConfig.init failed: $e');
+      }
       if (!mounted) return;
       setState(() {
         _initState = InitState(
@@ -112,11 +118,41 @@ class _AppLoaderState extends State<AppLoader> {
         publishableKey: AppConfig.supabasePublishableKey,
       );
       AuthService.markBackendReady();
+      if (kDebugMode) {
+        debugPrint('[Main] Supabase initialized successfully');
+      }
+
+      // ── Env validation split: validate Google ID at startup, set flag ──
+      // Allow app to boot even if Google is misconfigured; expose flag for banner.
+      final googleOk = AppConfig.validateGoogleConfigAtStartup();
+      if (googleOk) {
+        try {
+          await AuthService.ensureGoogleInitialized();
+          if (kDebugMode) {
+            debugPrint(
+                '[Main] GoogleSignIn pre-initialized at startup | suffix: ...${AppConfig.googleIdSuffixForLog}');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint(
+                '[Main] GoogleSignIn startup init failed (non-fatal, will retry on sign-in): $e | suffix: ...${AppConfig.googleIdSuffixForLog}');
+          }
+        }
+      } else {
+        if (kDebugMode) {
+          debugPrint(
+              '[Main] GoogleSignIn not configured at startup | error: ${AppConfig.googleConfigError} | suffix: ...${AppConfig.googleIdSuffixForLog}');
+        }
+      }
+
       if (!mounted) return;
       setState(() {
         _initState = const InitState(status: AppInitStatus.backendSuccess);
       });
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Main] Supabase init failed: $e');
+      }
       if (!mounted) return;
       setState(() {
         _initState = const InitState(
@@ -129,7 +165,11 @@ class _AppLoaderState extends State<AppLoader> {
 
     try {
       await FlutterGemma.initialize();
-} catch (e) {}
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Main] FlutterGemma.initialize failed (ignored): $e');
+      }
+    }
     if (!mounted) return;
 
     try {
@@ -140,6 +180,9 @@ class _AppLoaderState extends State<AppLoader> {
         _initState = _initState.copyWith(status: AppInitStatus.databaseReady);
       });
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Main] Database init failed: $e');
+      }
       if (!mounted) return;
       setState(() {
         _initState = InitState(
@@ -205,6 +248,9 @@ class _AppLoaderState extends State<AppLoader> {
     setState(() {
       _isRetrying = true;
     });
+    // Reset Google init so retry re-validates env and re-initializes.
+    AuthService.resetGoogleInit();
+    AppConfig.notifyGoogleConfigChanged();
     await _initializeApp();
     if (!mounted) return;
     setState(() {
@@ -220,6 +266,33 @@ class _AppLoaderState extends State<AppLoader> {
       );
     });
     _startMainApp();
+  }
+
+  Widget _googleConfigBanner() {
+    if (AppConfig.googleConfigured) return const SizedBox.shrink();
+    final err = AppConfig.googleConfigError ?? 'Google sign-in not configured';
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              err,
+              style: const TextStyle(color: Colors.orange, fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -254,6 +327,7 @@ class _AppLoaderState extends State<AppLoader> {
                 ),
                 const SizedBox(height: 48),
                 _buildStatusWidget(),
+                _googleConfigBanner(),
               ],
             ),
           ),
@@ -415,6 +489,9 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
         _isLoadingModel = false;
       });
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[OfflineModelGate] loadInstalled failed: $e');
+      }
       if (!mounted) return;
       setState(() {
         _modelReady = false;
@@ -526,7 +603,9 @@ class _AuthGateState extends State<AuthGate> {
   Future<bool> _hasOfflineSession() async {
     try {
       if (Supabase.instance.client.auth.currentSession != null) return true;
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[AuthGate] currentSession check failed: $e');
+    }
     return (await SessionManager.currentSession()) != null;
   }
 
@@ -556,8 +635,15 @@ class _AuthGateState extends State<AuthGate> {
         return StreamBuilder<AuthState>(
           stream: AuthService.authStateChanges,
           builder: (context, authSnapshot) {
-            final session = authSnapshot.data?.session ??
-                Supabase.instance.client.auth.currentSession;
+            AuthState? data = authSnapshot.data;
+            SupabaseClient client;
+            try {
+              client = Supabase.instance.client;
+            } catch (e) {
+              if (kDebugMode) debugPrint('[AuthGate] Supabase client unavailable: $e');
+              return const LoginPage();
+            }
+            final session = data?.session ?? client.auth.currentSession;
             if (authSnapshot.connectionState == ConnectionState.waiting &&
                 session == null) {
               return const Scaffold(

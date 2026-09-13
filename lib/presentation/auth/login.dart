@@ -1,7 +1,7 @@
-// ignore_for_file: empty_catches
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import '../../core/config/app_config.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth/auth_service.dart';
@@ -13,6 +13,99 @@ import '../shared/app_shell.dart';
 import '../shared/system_keyboard_text_field.dart';
 import 'register.dart';
 import 'forgot_password.dart';
+
+/// User-facing result of mapping a Google sign-in error.
+class _GoogleSignInPresentation {
+  final String message;
+  final GoogleSignInFailure? failure;
+  final bool isCancel;
+
+  const _GoogleSignInPresentation({
+    required this.message,
+    this.failure,
+    this.isCancel = false,
+  });
+}
+
+/// Single label/value line inside the diagnostics dialog.
+class _DiagnosticsRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DiagnosticsRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+          ),
+          Expanded(
+            child: SelectableText(value, style: const TextStyle(fontSize: 13)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Non-blocking warning shown at the top of login when
+/// [AppConfig.googleConfigured] is false. Never blocks sign-in.
+class _GoogleConfigBanner extends StatelessWidget {
+  final ThemeColors colors;
+  final String message;
+
+  const _GoogleConfigBanner({required this.colors, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.withOpacity(colors.amber, 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.withOpacity(colors.amber, 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded, color: colors.amber, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Google sign-in needs setup',
+                  style: TextStyle(
+                    color: colors.text,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$message Check the setup docs for SHA-1 / OAuth / Supabase steps.',
+                  style: TextStyle(color: colors.subtext, fontSize: 12, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -30,6 +123,17 @@ class _LoginPageState extends State<LoginPage> {
   bool _showPassword = false;
   bool _biometricReady = false;
   String? _errorMessage;
+
+  // Google sign-in UX state: distinguishes genuine user-cancel from
+  // repeated cancel (almost certainly a setup issue).
+  int _consecutiveGoogleCancel = 0;
+  GoogleSignInFailure? _lastGoogleFailure;
+  bool _showGoogleFailureDetails = false;
+
+  /// Android applicationId (must match SHA-1 registration in
+  /// Google Cloud Console / Firebase). Kept as a constant so the
+  /// diagnostics dialog never needs a new platform plugin.
+  static const String _androidPackageName = 'com.agenta.AgentA';
 
   @override
   void initState() {
@@ -86,7 +190,11 @@ class _LoginPageState extends State<LoginPage> {
             await UserRepository.createUserProfile(
                 cred.uid, email, cred.displayName ?? 'User', '');
           }
-        } catch (_) {}
+        } catch (e, stack) {
+          if (kDebugMode) {
+            debugPrint('[Login] _login ensure profile failed: $e | $stack');
+          }
+        }
         final dao = LocalUserDao();
         await dao.savePendingSignup(
           localId: cred.uid,
@@ -104,8 +212,10 @@ class _LoginPageState extends State<LoginPage> {
           provider: 'password',
         );
       }
-    } catch (e) {
-      
+    } catch (e, stack) {
+      if (kDebugMode) {
+        debugPrint('[Login] _login online attempt failed: $e | $stack');
+      }
       final errorString = e.toString().toLowerCase();
       if (!AuthService.isBackendReady ||
           errorString.contains('network') ||
@@ -177,7 +287,11 @@ class _LoginPageState extends State<LoginPage> {
           return;
         }
       }
-} catch (e) {}
+} catch (e, stack) {
+      if (kDebugMode) {
+        debugPrint('[Login] _login offline fallback failed: $e | $stack');
+      }
+    }
 
     if (!mounted) return;
     setState(() {
@@ -217,43 +331,188 @@ class _LoginPageState extends State<LoginPage> {
             await UserRepository.createUserProfile(
                 cred.uid, cred.email ?? '', cred.displayName ?? 'User', '');
           }
-        } catch (_) {}
-        await _offerBiometricEnroll(cred.uid);
-      }
-      if (mounted) setState(() => _isLoading = false);
-      _goToDashboard(isOnline: true);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        if (e is GoogleSignInException &&
-            e.code == GoogleSignInExceptionCode.canceled) {
-          final detail = e.description ?? '';
-          _errorMessage = detail.isEmpty
-              ? 'Google sign-in cancelled'
-              : 'Google sign-in cancelled ($detail). If not cancelled, check SHA-1 / OAuth setup.';
-        } else {
-          final msg = e.toString().toLowerCase();
-          if (msg.contains('cancelled by user') || msg.contains('code canceled')) {
-            _errorMessage =
-                'Google sign-in cancelled. If you did not cancel, check SHA-1 / OAuth / Supabase provider setup.';
-          } else if (msg.contains('clientconfiguration') ||
-              msg.contains('providerconfiguration') ||
-              msg.contains('no id token') ||
-              msg.contains('not configured') ||
-              msg.contains('serverclientid') ||
-              msg.contains('sha-1') ||
-              msg.contains('oauth')) {
-            _errorMessage =
-                'Google sign-in not configured. Check SHA-1 / OAuth setup.';
-          } else if (msg.contains('network') || msg.contains('socket')) {
-            _errorMessage = 'Google sign-in failed. Check your connection.';
-          } else {
-            _errorMessage = 'Google sign-in failed: ${e.toString().replaceAll('Exception: ', '')}';
+        } catch (e, stack) {
+          if (kDebugMode) {
+            debugPrint('[Login] Google sign-in ensure profile failed: $e | $stack');
           }
         }
+        await _offerBiometricEnroll(cred.uid);
+      }
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _consecutiveGoogleCancel = 0;
+          _lastGoogleFailure = null;
+          _showGoogleFailureDetails = false;
+        });
+      }
+      _goToDashboard(isOnline: true);
+    } catch (e, stack) {
+      if (kDebugMode) {
+        debugPrint('[Login] Google sign-in failed: $e | $stack');
+      }
+      if (!mounted) return;
+      final presentation = _mapGoogleError(e);
+      setState(() {
+        _isLoading = false;
+        if (presentation.isCancel) {
+          _consecutiveGoogleCancel += 1;
+        } else {
+          _consecutiveGoogleCancel = 0;
+        }
+        _lastGoogleFailure = presentation.failure;
+        _showGoogleFailureDetails = false;
+        _errorMessage = presentation.message;
       });
     }
+  }
+
+  /// Maps a sign-in error to user-facing copy.
+  ///
+  /// Prefers the typed [GoogleSignInFailure] contract
+  /// (`code` / `detail` / `hint`) from [AuthService]; falls back to
+  /// legacy string matching only for unknown exception shapes.
+  /// `failure.code == 'canceled'` is the single source of truth for
+  /// genuine user-cancel — no substring checks on the typed path.
+  _GoogleSignInPresentation _mapGoogleError(Object e) {
+    if (e is GoogleSignInFailure) {
+      if (e.code == 'canceled') {
+        if (_consecutiveGoogleCancel >= 1) {
+          return _GoogleSignInPresentation(
+            message:
+                'Repeated cancel — almost certainly a setup issue (SHA-1 / OAuth / Supabase). '
+                'If you kept cancelling by hand, just try again.',
+            failure: e,
+            isCancel: true,
+          );
+        }
+        return _GoogleSignInPresentation(
+          message: 'You cancelled — try again.',
+          failure: e,
+          isCancel: true,
+        );
+      }
+      switch (e.code) {
+        case 'not_configured':
+        case 'init_failed':
+        case 'no_id_token':
+          return _GoogleSignInPresentation(
+            message: 'Google sign-in not configured. Check SHA-1 / OAuth setup.',
+            failure: e,
+          );
+        case 'supabase_rejected':
+        case 'no_user':
+          return _GoogleSignInPresentation(
+            message:
+                'Google sign-in was rejected. Check the Supabase Google provider setup.',
+            failure: e,
+          );
+        default:
+          final detail = (e.detail ?? '').trim();
+          return _GoogleSignInPresentation(
+            message: detail.isEmpty
+                ? 'Google sign-in failed (${e.code}).'
+                : 'Google sign-in failed: $detail',
+            failure: e,
+          );
+      }
+    }
+
+    // Legacy fallback for non-typed exceptions (old plugin shapes).
+    final msg = e.toString().toLowerCase();
+    if (msg.contains('cancelled by user') ||
+        msg.contains('canceled') ||
+        msg.contains('code canceled')) {
+      if (_consecutiveGoogleCancel >= 1) {
+        return const _GoogleSignInPresentation(
+          message:
+              'Repeated cancel — almost certainly a setup issue (SHA-1 / OAuth / Supabase). '
+              'If you kept cancelling by hand, just try again.',
+          isCancel: true,
+        );
+      }
+      return const _GoogleSignInPresentation(
+        message: 'You cancelled — try again.',
+        isCancel: true,
+      );
+    }
+    if (msg.contains('clientconfiguration') ||
+        msg.contains('providerconfiguration') ||
+        msg.contains('no id token') ||
+        msg.contains('not configured') ||
+        msg.contains('serverclientid') ||
+        msg.contains('sha-1') ||
+        msg.contains('oauth')) {
+      return const _GoogleSignInPresentation(
+        message: 'Google sign-in not configured. Check SHA-1 / OAuth setup.',
+      );
+    }
+    if (msg.contains('network') || msg.contains('socket')) {
+      return const _GoogleSignInPresentation(
+        message: 'Google sign-in failed. Check your connection.',
+      );
+    }
+    return _GoogleSignInPresentation(
+      message:
+          'Google sign-in failed: ${e.toString().replaceAll('Exception: ', '')}',
+    );
+  }
+
+  /// Hidden diagnostics: long-press on the Google button.
+  /// Shows package name + client-ID suffix + backend flag.
+  /// Never shows the full client ID or any token.
+  Future<void> _showGoogleDiagnostics() async {
+    if (kDebugMode) {
+      debugPrint(
+          '[Login] Google diagnostics opened | suffix: ...${AppConfig.googleIdSuffixForLog} '
+          '| configured: ${AppConfig.googleConfigured} '
+          '| backendReady: ${AuthService.isBackendReady}');
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Google sign-in diagnostics'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _DiagnosticsRow(
+                label: 'Package', value: _androidPackageName),
+            _DiagnosticsRow(
+                label: 'Client ID suffix',
+                value: '...${AppConfig.googleIdSuffixForLog}'),
+            _DiagnosticsRow(
+                label: 'Configured',
+                value: AppConfig.googleConfigured ? 'yes' : 'no'),
+            _DiagnosticsRow(
+                label: 'Backend ready',
+                value: AuthService.isBackendReady ? 'yes' : 'no'),
+            if (AppConfig.googleConfigError != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                AppConfig.googleConfigError!,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(ctx).colorScheme.error,
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            const Text(
+              'Full client ID and tokens are never shown here.',
+              style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _unlockWithBiometrics() async {
@@ -341,12 +600,17 @@ class _LoginPageState extends State<LoginPage> {
               passwordController: _passwordController,
               showPassword: _showPassword,
               errorMessage: _errorMessage,
+              googleFailure: _lastGoogleFailure,
+              showGoogleFailureDetails: _showGoogleFailureDetails,
               isLoading: _isLoading,
               showBiometric: _biometricReady,
               colors: colors,
               onTogglePassword: _togglePassword,
+              onToggleGoogleDetails: () => setState(
+                  () => _showGoogleFailureDetails = !_showGoogleFailureDetails),
               onLogin: _login,
               onGoogleSignIn: _signInWithGoogle,
+              onGoogleLongPress: _showGoogleDiagnostics,
               onBiometricUnlock: _unlockWithBiometrics,
               onForgotPassword: () => Navigator.push(
                 context,
@@ -370,12 +634,16 @@ class _LoginForm extends StatelessWidget {
   final TextEditingController passwordController;
   final bool showPassword;
   final String? errorMessage;
+  final GoogleSignInFailure? googleFailure;
+  final bool showGoogleFailureDetails;
   final bool isLoading;
   final bool showBiometric;
   final ThemeColors colors;
   final VoidCallback onTogglePassword;
+  final VoidCallback onToggleGoogleDetails;
   final VoidCallback onLogin;
   final VoidCallback onGoogleSignIn;
+  final VoidCallback onGoogleLongPress;
   final VoidCallback onBiometricUnlock;
   final VoidCallback onForgotPassword;
   final VoidCallback onCreateAccount;
@@ -386,12 +654,16 @@ class _LoginForm extends StatelessWidget {
     required this.passwordController,
     required this.showPassword,
     this.errorMessage,
+    this.googleFailure,
+    this.showGoogleFailureDetails = false,
     required this.isLoading,
     required this.showBiometric,
     required this.colors,
     required this.onTogglePassword,
+    required this.onToggleGoogleDetails,
     required this.onLogin,
     required this.onGoogleSignIn,
+    required this.onGoogleLongPress,
     required this.onBiometricUnlock,
     required this.onForgotPassword,
     required this.onCreateAccount,
@@ -405,6 +677,12 @@ class _LoginForm extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 60),
+          if (!AppConfig.googleConfigured)
+            _GoogleConfigBanner(
+              colors: colors,
+              message: AppConfig.googleConfigError ??
+                  'Google sign-in is not configured.',
+            ),
           Center(
             child: Container(
               padding: const EdgeInsets.all(20),
@@ -518,14 +796,61 @@ class _LoginForm extends StatelessWidget {
           const SizedBox(height: 30),
           if (errorMessage != null)
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: colors.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: colors.error.withValues(alpha: 0.25)),
               ),
-              child: Text(errorMessage!,
-                  style: TextStyle(color: colors.error)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(errorMessage!,
+                      style: TextStyle(color: colors.error)),
+                  if (googleFailure != null) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: onToggleGoogleDetails,
+                        child: Text(
+                          showGoogleFailureDetails
+                              ? 'Hide details'
+                              : 'Show details',
+                          style: TextStyle(
+                              color: colors.error,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                    if (showGoogleFailureDetails)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: colors.error.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: SelectableText(
+                          'code: ${googleFailure!.code}\n'
+                          'detail: ${googleFailure!.detail ?? '(none)'}\n'
+                          'hint: ${googleFailure!.hint}',
+                          style: TextStyle(
+                            color: colors.error,
+                            fontSize: 12,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
             ),
           const SizedBox(height: 16),
           SizedBox(
@@ -558,6 +883,7 @@ class _LoginForm extends StatelessWidget {
             height: 54,
             child: OutlinedButton.icon(
               onPressed: isLoading ? null : onGoogleSignIn,
+              onLongPress: onGoogleLongPress,
               icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
               label: const Text("Continue with Google"),
               style: OutlinedButton.styleFrom(
