@@ -52,13 +52,17 @@ jobs:
       actions: read
     steps:
       - name: Guard required secret
+        id: guard
         run: |
           if [ -z "${{ secrets.LANDING_RELEASE_PAT }}" ]; then
-            echo "::error::Missing LANDING_RELEASE_PAT secret. Add a fine-grained PAT scoped only to Shuash11/AgentA-landing (Contents read+write, Releases read+write) under AgentA repo Settings > Secrets and variables > Actions."
-            exit 1
+            echo "::warning::LANDING_RELEASE_PAT not set — skipping promotion (not a failure). Add a fine-grained PAT scoped only to Shuash11/AgentA-landing (Contents read+write, Releases read+write) under AgentA repo Settings > Secrets and variables > Actions to enable auto-promotion."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Download build artifact from triggering run
+        if: steps.guard.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -83,12 +87,14 @@ jobs:
           ls -lh "$SRC"
 
       - name: Prepare stable + dated assets
+        if: steps.guard.outputs.skip != 'true'
         run: |
           cp "${{ env.SRC_APK }}" "./${{ env.STABLE_ASSET }}"
           cp "${{ env.SRC_APK }}" "./AgentA-${{ env.SHA7 }}.apk"
           ls -lh ./*.apk
 
       - name: Upload to landing rolling release (retry for ~283MB)
+        if: steps.guard.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.LANDING_RELEASE_PAT }}
         run: |
@@ -127,11 +133,13 @@ jobs:
           fi
 
       - name: Verify public download URL
+        if: steps.guard.outputs.skip != 'true'
         run: |
           set -euo pipefail
           curl -L -I -f "https://github.com/${{ env.LANDING_REPO }}/releases/latest/download/${{ env.STABLE_ASSET }}" | head -n 20
 
       - name: Checkout landing repo
+        if: steps.guard.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
           repository: Shuash11/AgentA-landing
@@ -140,6 +148,7 @@ jobs:
           ref: main
 
       - name: Patch version pill (CSP-safe static HTML, 1-line diff)
+        if: steps.guard.outputs.skip != 'true'
         run: |
           SHA7="${{ env.SHA7 }}"
           BUILD_DATE="${{ env.BUILD_DATE }}"
@@ -160,6 +169,7 @@ jobs:
           git -C landing diff -- index.html | head -n 30
 
       - name: Commit + push pill (triggers Vercel auto-deploy)
+        if: steps.guard.outputs.skip != 'true'
         run: |
           cd landing
           git config user.name "github-actions[bot]"
