@@ -59,7 +59,6 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           # M21: trim all env — whitespace/newlines stripped, log lengths-only (never values)
-          trim() { echo "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '\r\n' | xargs 2>/dev/null || echo "$1" | tr -d '[:space:]'; }
           # Use xargs trimming for each
           SUPABASE_URL_TRIMMED="$(echo "$SUPABASE_URL" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r')"
           SUPABASE_URL_TRIMMED="$(echo "$SUPABASE_URL_TRIMMED" | xargs)"
@@ -192,12 +191,16 @@ jobs:
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         run: |
           # M21: trim all dart-defines (use trimmed env from earlier step)
+          MINIMAX_API_KEY_TRIMMED="$(echo "$MINIMAX_API_KEY" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
+          KAGGLE_USERNAME_TRIMMED="$(echo "$KAGGLE_USERNAME" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
+          KAGGLE_KEY_TRIMMED="$(echo "$KAGGLE_KEY" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
+          GEMMA_MODEL_URL_TRIMMED="$(echo "$GEMMA_MODEL_URL" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
           flutter build apk --release \
             --dart-define=GROQ_API_KEY="${GROQ_API_KEY_TRIMMED:-$GROQ_API_KEY}" \
-            --dart-define=MINIMAX_API_KEY="$MINIMAX_API_KEY" \
-            --dart-define=KAGGLE_USERNAME="$KAGGLE_USERNAME" \
-            --dart-define=KAGGLE_KEY="$KAGGLE_KEY" \
-            --dart-define=GEMMA_MODEL_URL="$GEMMA_MODEL_URL" \
+            --dart-define=MINIMAX_API_KEY="$MINIMAX_API_KEY_TRIMMED" \
+            --dart-define=KAGGLE_USERNAME="$KAGGLE_USERNAME_TRIMMED" \
+            --dart-define=KAGGLE_KEY="$KAGGLE_KEY_TRIMMED" \
+            --dart-define=GEMMA_MODEL_URL="$GEMMA_MODEL_URL_TRIMMED" \
             --dart-define=HF_TOKEN="${HF_TOKEN_TRIMMED:-$HF_TOKEN}" \
             --dart-define=SUPABASE_URL="${SUPABASE_URL_TRIMMED:-$SUPABASE_URL}" \
             --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY_TRIMMED:-$SUPABASE_PUBLISHABLE_KEY}" \

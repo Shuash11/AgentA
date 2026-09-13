@@ -50,7 +50,10 @@ class SessionManager {
       final email = await _storage.read(key: _emailKey) ?? '';
       final provider = await _storage.read(key: _providerKey) ?? 'password';
       return LocalSession(uid: uid, email: email, provider: provider);
-    } catch (_) {
+    } catch (e, stack) {
+      if (kDebugMode) {
+        debugPrint('[SessionManager] currentSession failed: $e | $stack');
+      }
       return null;
     }
   }
@@ -58,7 +61,10 @@ class SessionManager {
   static Future<String?> lastEmail() async {
     try {
       return await _storage.read(key: _lastEmailKey);
-    } catch (_) {
+    } catch (e, stack) {
+      if (kDebugMode) {
+        debugPrint('[SessionManager] lastEmail failed: $e | $stack');
+      }
       return null;
     }
   }

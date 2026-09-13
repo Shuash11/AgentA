@@ -53,8 +53,10 @@ jobs:
     steps:
       - name: Guard required secret
         id: guard
+        env:
+          PAT: ${{ secrets.LANDING_RELEASE_PAT }}
         run: |
-          if [ -z "${{ secrets.LANDING_RELEASE_PAT }}" ]; then
+          if [ -z "$PAT" ]; then
             echo "::warning::LANDING_RELEASE_PAT not set — skipping promotion (not a failure). Add a fine-grained PAT scoped only to Shuash11/AgentA-landing (Contents read+write, Releases read+write) under AgentA repo Settings > Secrets and variables > Actions to enable auto-promotion."
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -132,13 +134,31 @@ jobs:
           gh release upload "$ROLLING_TAG" "./AgentA-${{ env.SHA7 }}.apk" --clobber --repo "$LANDING_REPO" || true
           echo "--- assets after upload ---"
           gh release view "$ROLLING_TAG" --repo "$LANDING_REPO" --json assets --jq '.assets[] | "\(.name)\t\(.createdAt)\t\(.size)"' || true
-          PRUNE_LIST="$(gh release view "$ROLLING_TAG" --repo "$LANDING_REPO" --json assets --jq -r '.assets | map(select(.name | test("^AgentA-[0-9a-f]{7}(-nogoogle)?\\.apk$"))) | sort_by(.createdAt) | .[0:-2] | .[].name' || true)"
-          if [ -n "$PRUNE_LIST" ]; then
+
+          ASSETS_URL="repos/$LANDING_REPO/releases/tags/$ROLLING_TAG/assets"
+          DATED_JQ='[.[] | select(.name | test("^AgentA-[0-9a-f]{7}(-nogoogle)?\\.apk$"))]'
+          DATED_COUNT="$(gh api "$ASSETS_URL" --jq "($DATED_JQ) | length")"
+          echo "Dated assets on $ROLLING_TAG: $DATED_COUNT"
+          if [ -z "$DATED_COUNT" ]; then
+            echo "::error::Could not list release assets (gh api failed)"
+            exit 1
+          fi
+          if [ "$DATED_COUNT" -gt 2 ]; then
+            PRUNE_LIST="$(gh api "$ASSETS_URL" --jq "($DATED_JQ) | sort_by(.created_at) | .[0:(length-2)] | .[].name")"
+            if [ -z "$PRUNE_LIST" ]; then
+              echo "::error::Prune expected $((DATED_COUNT-2)) deletions but got an empty list"
+              exit 1
+            fi
             echo "$PRUNE_LIST" | while read -r OLD; do
               [ -n "$OLD" ] || continue
               echo "Pruning old dated asset: $OLD"
               gh release delete-asset "$ROLLING_TAG" "$OLD" --yes --repo "$LANDING_REPO" || true
             done
+            REMAINING="$(gh api "$ASSETS_URL" --jq "($DATED_JQ) | length")"
+            if [ "$REMAINING" -gt 2 ]; then
+              echo "::error::Prune failed: $REMAINING dated assets remain (policy: newest 2)"
+              exit 1
+            fi
           else
             echo "Nothing to prune (<= 2 dated copies)."
           fi
