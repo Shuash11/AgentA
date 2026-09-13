@@ -26,6 +26,13 @@ class ModelDownloadService extends ChangeNotifier {
 
   static const String _modelUrl =
       'https://huggingface.co/AfiOne/gemma3-1b-it-int4.task/resolve/main/gemma3-1b-it-int4.task';
+  static const String _modelType = 'gemma3-1b-it-int4';
+
+  /// The effective download URL (env override wins). Shared by the install
+  /// path and [ensureModelActive] so the plugin's idempotency key (derived
+  /// from the URL filename) always matches.
+  static String get resolvedModelUrl =>
+      AppConfig.gemmaModelUrl.isNotEmpty ? AppConfig.gemmaModelUrl : _modelUrl;
 
   bool get canUseKaggle =>
       AppConfig.kaggleUsername.isNotEmpty && AppConfig.kaggleKey.isNotEmpty;
@@ -45,6 +52,25 @@ class ModelDownloadService extends ChangeNotifier {
     }
   }
 
+  void _onDownloadProgress(int progress) {
+    _progress = progress.toDouble();
+
+    // Slow-connection heuristic: 60s without a progress increase.
+    final now = DateTime.now();
+    if (_progress > _lastProgressValue) {
+      _lastProgressTime = now;
+      _lastProgressValue = _progress;
+      _isSlowConnection = false;
+    } else if (_lastProgressTime != null) {
+      final secondsSinceLastUpdate = now.difference(_lastProgressTime!).inSeconds;
+      if (secondsSinceLastUpdate > 60 && !_isSlowConnection) {
+        _isSlowConnection = true;
+        notifyListeners();
+      }
+    }
+    _notifyProgress();
+  }
+
   Future<void> checkModelExists() async {
     if (_status == ModelStatus.installing) return;
 
@@ -53,9 +79,11 @@ class ModelDownloadService extends ChangeNotifier {
 
     try {
       final sqliteReady = await _dao.isModelReady();
-      
 
-      if (sqliteReady) {
+      if (!sqliteReady) {
+        _status = ModelStatus.notInstalled;
+        _progress = 0.0;
+      } else {
         final modelStatus = await _dao.getModelStatus();
         final storedPath = modelStatus?['file_path'] as String?;
 
@@ -64,31 +92,26 @@ class ModelDownloadService extends ChangeNotifier {
           if (await file.exists()) {
             _status = ModelStatus.ready;
             _progress = 100.0;
-            
           } else {
-            
             await _dao.setModelNotInstalled();
             _status = ModelStatus.notInstalled;
             _progress = 0.0;
           }
         } else {
-          final hasActiveModel = FlutterGemma.hasActiveModel();
-          if (hasActiveModel) {
-            _status = ModelStatus.ready;
-            _progress = 100.0;
-            
-          } else if (_status != ModelStatus.installing) {
-            _status = ModelStatus.notInstalled;
-            _progress = 0.0;
-          }
+          // No path recorded — the plugin owns the model storage (app-private,
+          // cleared together with our DB). Trust the DB flag: it is only
+          // written after a completed install. Never gate on
+          // FlutterGemma.hasActiveModel() here — that spec is in-memory only
+          // (null after every restart), so requiring it would downgrade a
+          // fully downloaded model and keep the download gate closed forever.
+          // If the plugin's copy were truly lost, ensureModelActive() at load
+          // time re-downloads it transparently.
+          _status = ModelStatus.ready;
+          _progress = 100.0;
         }
-      } else {
-        _status = ModelStatus.notInstalled;
-        _progress = 0.0;
-        
       }
     } catch (e) {
-       
+      if (kDebugMode) debugPrint('[ModelDownload] checkModelExists failed: $e');
       _status = ModelStatus.notInstalled;
       _progress = 0.0;
     }
@@ -110,94 +133,63 @@ class ModelDownloadService extends ChangeNotifier {
     _lastNotifiedProgress = -1.0;
     notifyListeners();
 
-    final url = AppConfig.gemmaModelUrl.isNotEmpty ? AppConfig.gemmaModelUrl : _modelUrl;
-    final completer = Completer<void>();
-
     try {
-      final installFuture = FlutterGemma.installModel(
-        modelType: ModelType.gemmaIt,
-      ).fromNetwork(url).withProgress((progress) {
-        _progress = progress.toDouble();
-        
-        // Check for slow connection (60s without progress increase)
-        final now = DateTime.now();
-        if (_progress > _lastProgressValue) {
-          _lastProgressTime = now;
-          _lastProgressValue = _progress;
-          _isSlowConnection = false;
-        } else if (_lastProgressTime != null) {
-          final secondsSinceLastUpdate = now.difference(_lastProgressTime!).inSeconds;
-          if (secondsSinceLastUpdate > 60 && !_isSlowConnection) {
-            _isSlowConnection = true;
-            notifyListeners();
-          }
-        }
-        
-        if (_progress >= 100.0) {
-          _status = ModelStatus.ready;
-          _dao.setModelReady(modelType: 'gemma3-1b-it-int4', filePath: null);
-          if (!completer.isCompleted) completer.complete();
-        }
-        _notifyProgress();
-      }).install();
+      // install() is idempotent (skips the download when the file is already
+      // in the plugin's storage) and resolves only AFTER finalization, when
+      // the active spec is set. Completing early — at the 100% progress
+      // event — raced the plugin's file move and left the gate stuck, so
+      // readiness is marked strictly after this future resolves.
+      await FlutterGemma.installModel(modelType: ModelType.gemmaIt)
+          .fromNetwork(resolvedModelUrl)
+          .withProgress(_onDownloadProgress)
+          .install()
+          .timeout(const Duration(minutes: 30));
 
-      // We complete if the install future finishes OR progress reaches 100%
-      installFuture.then((_) {
-        _status = ModelStatus.ready;
-        _progress = 100.0;
-        _dao.setModelReady(modelType: 'gemma3-1b-it-int4', filePath: null);
-        if (!completer.isCompleted) completer.complete();
-        _notifyProgress();
-      }).catchError((e) {
-        // If we're already at 100%, ignore minor connection closure errors
-        if (_progress < 100.0) {
-          if (!completer.isCompleted) completer.completeError(e);
-        } else {
-          if (!completer.isCompleted) completer.complete();
-        }
-      });
-
-      // Increase timeout significantly. 500MB can take several minutes on slow connections.
-      await completer.future.timeout(const Duration(minutes: 20));
-      
-      // Give time for model extraction to complete (async process)
-      // Then retry hasActiveModel() a few times with backoff
-      await _waitForModelReady(filePath: null);
+      _progress = 100.0;
+      await _dao.setModelReady(modelType: _modelType);
+      _status = ModelStatus.ready;
     } catch (e) {
-      await _waitForModelReady(filePath: null);
-      if (!isReady) {
+      // Tolerance: some devices close the connection right after the final
+      // byte while the install future unwinds. If the transfer reached 100%,
+      // the file is complete — settle briefly and mark ready (load-time
+      // rehydration covers any residual plugin-side finalization).
+      if (_progress >= 100.0) {
+        await Future.delayed(const Duration(seconds: 2));
+        await _dao.setModelReady(modelType: _modelType);
+        _status = ModelStatus.ready;
+        if (kDebugMode) {
+          debugPrint('[ModelDownload] install failed at 100% — treated as complete: $e');
+        }
+      } else {
         _status = ModelStatus.error;
         _errorMessage = e.toString();
         await _dao.setModelError(e.toString());
+        if (kDebugMode) debugPrint('[ModelDownload] installModel failed: $e');
       }
     }
 
     notifyListeners();
   }
 
-  Future<void> _waitForModelReady({String? filePath}) async {
-    await Future.delayed(const Duration(seconds: 3));
-
-    for (int attempt = 0; attempt < 2; attempt++) {
-      final hasActiveModel = FlutterGemma.hasActiveModel();
-      
-
-      if (hasActiveModel) {
-        final oldStatus = _status;
-        final oldProgress = _progress;
-        await _dao.setModelReady(
-          modelType: 'gemma3-1b-it-int4',
-          filePath: filePath,
-        );
-        _status = ModelStatus.ready;
-        _progress = 100.0;
-        
-        _notifyStateChanged(oldStatus, oldProgress);
-        return;
-      }
-      await Future.delayed(Duration(seconds: (2 << attempt)));
+  /// Rehydrates the plugin's in-memory active-model spec after a process
+  /// restart. [FlutterGemma.getActiveModel] throws StateError until
+  /// install()/setActiveModel has run in THIS process. install() is
+  /// idempotent: when the model file is already in the plugin's private
+  /// storage it skips the download and only sets the active spec — so this
+  /// is cheap whenever the model is truly on disk, and it transparently
+  /// re-downloads when the storage was lost.
+  static Future<bool> ensureModelActive() async {
+    if (FlutterGemma.hasActiveModel()) return true;
+    try {
+      await FlutterGemma.installModel(modelType: ModelType.gemmaIt)
+          .fromNetwork(resolvedModelUrl)
+          .install()
+          .timeout(const Duration(minutes: 30));
+      return FlutterGemma.hasActiveModel();
+    } catch (e) {
+      if (kDebugMode) debugPrint('[ModelDownload] ensureModelActive failed: $e');
+      return false;
     }
-
   }
 
   Future<void> installModelFromKaggle() async {
@@ -238,19 +230,16 @@ class ModelDownloadService extends ChangeNotifier {
       );
 
       if (filePath != null) {
-        await FlutterGemma.installModel(
-          modelType: ModelType.gemmaIt,
-        ).fromAsset(filePath).install();
+        // The Kaggle download is a local file on disk, NOT a bundled Flutter
+        // asset — fromAsset() would fail to resolve it. fromFile() installs
+        // from the filesystem.
+        await FlutterGemma.installModel(modelType: ModelType.gemmaIt)
+            .fromFile(filePath)
+            .install();
 
-        await _waitForModelReady(filePath: filePath);
-
-        if (isReady) {
-          
-        } else {
-          _status = ModelStatus.error;
-          _errorMessage = 'Model installed but failed to initialize';
-          await _dao.setModelError('Model installed but failed to initialize');
-        }
+        _progress = 100.0;
+        await _dao.setModelReady(modelType: _modelType);
+        _status = ModelStatus.ready;
       } else {
         _status = ModelStatus.error;
         _errorMessage = 'Failed to download from Kaggle';
@@ -260,6 +249,7 @@ class ModelDownloadService extends ChangeNotifier {
       _status = ModelStatus.error;
       _errorMessage = e.toString();
       await _dao.setModelError(e.toString());
+      if (kDebugMode) debugPrint('[ModelDownload] kaggle install failed: $e');
     }
 
     notifyListeners();

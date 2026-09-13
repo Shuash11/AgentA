@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import '../../data/local/offline_model_dao.dart';
 import '../../data/models/chat_message_model.dart';
+import 'model_download_service.dart';
 
 class GemmaService extends ChangeNotifier {
   final OfflineModelDao _dao = OfflineModelDao();
@@ -69,6 +70,18 @@ Formatting rules:
     }
 
     try {
+      // Fresh process: the plugin's active-model spec is memory-only and is
+      // null until install()/setActiveModel runs in THIS process —
+      // getActiveModel() throws StateError otherwise. Rehydrate first;
+      // install() is idempotent and skips the download when the file is
+      // already in the plugin's storage.
+      if (!FlutterGemma.hasActiveModel()) {
+        final rehydrated = await ModelDownloadService.ensureModelActive();
+        if (kDebugMode && !rehydrated) {
+          debugPrint('[GemmaService] model rehydration failed — load will retry via gate');
+        }
+      }
+
       _model = await FlutterGemma.getActiveModel(
         maxTokens: _maxTokens,
         preferredBackend: PreferredBackend.cpu,

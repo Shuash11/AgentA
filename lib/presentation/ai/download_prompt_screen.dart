@@ -110,8 +110,21 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
 
       await modelDownload.installModel();
 
+      if (mounted && !modelDownload.isReady) {
+        // Defensive: close any residual DB-write race before deciding the
+        // outcome (installModel marks ready itself; this is belt-and-braces).
+        await modelDownload.checkModelExists();
+      }
+
       if (mounted && modelDownload.isReady) {
         await _completeOnce();
+      } else if (mounted) {
+        // Never leave the UI in a dead progress state — surface the retry
+        // button instead of an eternal bar.
+        setState(() {
+          _downloading = false;
+          _errorMessage = 'Download did not finish. Tap to retry.';
+        });
       }
     } catch (e) {
       if (mounted) {
