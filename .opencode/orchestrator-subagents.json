@@ -1,0 +1,27 @@
+{
+  "orchestrator": {
+    "model": "muse-spark-1.3-contributor-free",
+    "provider": "opencode",
+    "variant": "xhigh"
+  },
+  "frontend": {
+    "model": "muse-spark-1.3-contributor-free",
+    "provider": "opencode",
+    "variant": "xhigh"
+  },
+  "middle_end": {
+    "model": "muse-spark-1.2-contributor-free",
+    "provider": "opencode",
+    "variant": "xhigh"
+  },
+  "backend": {
+    "model": "muse-spark-1.3-contributor-free",
+    "provider": "opencode",
+    "variant": "xhigh"
+  },
+  "reviewer": {
+    "model": "muse-spark-1.3-contributor-free",
+    "provider": "opencode",
+    "variant": "xhigh"
+  }
+}

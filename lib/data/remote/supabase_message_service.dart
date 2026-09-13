@@ -1,4 +1,3 @@
-// ignore_for_file: empty_catches
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/chat_message_model.dart';
 

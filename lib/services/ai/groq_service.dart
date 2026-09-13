@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show HttpDate;
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../../data/models/chat_message_model.dart';
 import '../../core/config/app_config.dart';
@@ -8,8 +10,47 @@ class GroqService {
   String get _model => AppConfig.groqModel;
   static const Duration _timeout = Duration(seconds: 30);
   static const int _maxRetries = 3;
-  static const String _userAgent =
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+  // L19: SDK user-agent — never spoof a browser.
+  static const String _userAgent = 'AgentA/1.0.0 (Flutter; Groq)';
+  // L20: malformed SSE chunks are counted + logged; too many triggers a
+  // partial-response warning instead of silently dropping data.
+  static const int _malformedChunkWarnThreshold = 10;
+  int _malformedChunks = 0;
+
+  /// Regression/test hook for L20.
+  @visibleForTesting
+  int get malformedChunkCountForTest => _malformedChunks;
+
+  Duration _retryDelay(int attempt, {String? retryAfter}) {
+    // L19: honor server Retry-After (seconds or HTTP date) on 429.
+    if (retryAfter != null && retryAfter.isNotEmpty) {
+      final secs = int.tryParse(retryAfter.trim());
+      if (secs != null && secs >= 0 && secs <= 300) {
+        return Duration(seconds: secs);
+      }
+      try {
+        final date = HttpDate.parse(retryAfter.trim());
+        final diff = date.difference(DateTime.now().toUtc());
+        if (!diff.isNegative && diff.inSeconds <= 300) return diff;
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[GroqService] unparseable Retry-After "$retryAfter" — using backoff: $e');
+        }
+      }
+    }
+    return Duration(seconds: 2 << attempt);
+  }
+
+  void _noteMalformedChunk(String context, Object e, String raw) {
+    _malformedChunks++;
+    final preview = raw.length > 120 ? '${raw.substring(0, 120)}…' : raw;
+    debugPrint('[GroqService] malformed SSE chunk #$context '
+        '($_malformedChunks total): $e | raw: $preview');
+    if (_malformedChunks == _malformedChunkWarnThreshold) {
+      debugPrint('[GroqService] WARNING: $_malformedChunkWarnThreshold+ '
+          'malformed chunks — response may be partial');
+    }
+  }
 
   bool _isCancelled = false;
   http.Client? _activeClient;
@@ -97,8 +138,12 @@ class GroqService {
         } else if (response.statusCode == 401) {
           throw Exception('Invalid Groq API key. Please check your GROQ_API_KEY in .env file.');
         } else if (response.statusCode == 429) {
-          final waitTime = Duration(seconds: 2 << attempt);
-          
+          // L19: honor the server's Retry-After hint when present,
+          // fall back to exponential backoff.
+          final waitTime = _retryDelay(
+            attempt,
+            retryAfter: response.headers['retry-after'],
+          );
           await Future.delayed(waitTime);
           continue;
         } else {
@@ -201,8 +246,12 @@ class GroqService {
                 if (content != null) yield content;
               }
             }
-          // ignore: empty_catches
-          } catch (e) {}
+          // L20: malformed SSE chunks are counted + logged via the shared
+          // helper (threshold warning after repeated failures) instead of
+          // being silently dropped.
+          } catch (e) {
+            _noteMalformedChunk('stream', e, data);
+          }
         }
       }
     } on TimeoutException {

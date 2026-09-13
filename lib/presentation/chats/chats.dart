@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
@@ -149,7 +150,11 @@ class _ChatScreenState extends State<Chats> {
 
     try {
       await _aiService.resetOfflineSession();
-    } catch (_) {}
+    } catch (e) {
+      // L20: reset failures are logged instead of silently swallowed;
+      // they are non-fatal (the chat can still proceed offline).
+      if (kDebugMode) debugPrint('[Chats] resetOfflineSession failed: $e');
+    }
 
     _setActivity(isLoadingMessages: true);
 

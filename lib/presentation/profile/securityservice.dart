@@ -1,7 +1,7 @@
-// ignore_for_file: empty_catches
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math';
 import '../../services/auth/auth_service.dart';
+import '../../services/auth/recovery_code_hasher.dart';
 
 class SecurityService {
   static SupabaseClient get _db => Supabase.instance.client;
@@ -13,7 +13,9 @@ class SecurityService {
     return '${code.substring(0, 3)}-${code.substring(3)}';
   }
 
-  static Future<String> getRecoveryCode() async {
+  /// H8: returns the stored hash (single-row select by auth uid),
+  /// never the raw code. Prefer RPC verification below.
+  static Future<String> getRecoveryCodeHash() async {
     final uid = AuthService.currentUser?.id;
     if (uid == null) return '';
     try {
@@ -29,9 +31,12 @@ class SecurityService {
     }
   }
 
+  /// Server-side RPC stub — deploy `verify_recovery_code` (see
+  /// supabase/migrations) and switch this body to `_db.rpc(...)`.
   static Future<bool> verifyRecoveryCode(String entered) async {
-    final stored = await getRecoveryCode();
-    return entered.trim().toUpperCase() == stored.toUpperCase();
+    final storedHash = await getRecoveryCodeHash();
+    if (storedHash.isEmpty) return false;
+    return RecoveryCodeHasher.verify(entered, storedHash);
   }
 
   static Future<bool> deleteAccount() async {

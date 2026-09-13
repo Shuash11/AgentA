@@ -12,6 +12,7 @@ class LocalUserDao {
     required String recoveryCode,
     bool isSynced = false,
     String provider = 'password',
+    String passwordSalt = '',
   }) async {
     final db = await _dbHelper.database;
     await db.insert('pending_signups', {
@@ -23,6 +24,7 @@ class LocalUserDao {
       'created_at': DateTime.now().millisecondsSinceEpoch,
       'is_synced': isSynced ? 1 : 0,
       'provider': provider,
+      'password_salt': passwordSalt,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 

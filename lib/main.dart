@@ -575,8 +575,8 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
     }
 
     if (!_modelReady) {
+      // M17: forced gate is mandatory by design — no fake skip is offered.
       return DownloadPromptScreen(
-        onSkip: () {},
         onComplete: _onModelReady,
         isForcedGate: true,
       );

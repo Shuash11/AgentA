@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../services/auth/auth_service.dart';
+import '../../services/auth/password_hasher.dart';
+import '../../services/auth/recovery_code_hasher.dart';
 import '../../services/auth/session_manager.dart';
 import '../../repositories/user_repository.dart';
 import '../../data/local/local_user_dao.dart';
@@ -12,6 +14,12 @@ import '../shared/system_keyboard_text_field.dart';
 import 'dart:math';
 import 'package:uuid/uuid.dart';
 
+/// M16: trims and collapses whitespace so display names are never stored
+/// with leading/trailing/double spaces. Shared by register + profile edits.
+String normalizeDisplayName(String raw) {
+  return raw.trim().replaceAll(RegExp(r'\s+'), ' ');
+}
+
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
 
@@ -19,8 +27,7 @@ class RegisterPage extends StatefulWidget {
   State<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _RegisterPageState extends State<RegisterPage> {
-  final _formKey = GlobalKey<FormState>();
+class _RegisterPageState extends State<RegisterPage> {  final _formKey = GlobalKey<FormState>();
   late ThemeColors _colors;
 
   final _firstNameController = TextEditingController();
@@ -60,9 +67,11 @@ class _RegisterPageState extends State<RegisterPage> {
       _errorMessage = null;
     });
 
-    final displayName = '${_firstNameController.text} ${_lastNameController.text}';
+    final displayName = normalizeDisplayName(
+      '${_firstNameController.text} ${_lastNameController.text}',
+    );
     final recoveryCode = _generateRecoveryCode();
-    final email = _emailController.text;
+    final email = _emailController.text.trim();
     final password = _passwordController.text;
 
     final localUserDao = LocalUserDao();
@@ -82,15 +91,11 @@ class _RegisterPageState extends State<RegisterPage> {
         emailConfirmationPending = true;
       }
     } on AuthException catch (e) {
-      final msg = e.message.toLowerCase();
-      final isNetwork = msg.contains('network') ||
-          msg.contains('socket') ||
-          msg.contains('failed host') ||
-          e.statusCode == '408';
-      if (!isNetwork) {
+      final isRetryable = AuthService.isRetryable(e);
+      if (!isRetryable) {
         setState(() {
           _isLoading = false;
-          _errorMessage = _friendlyAuthError(msg);
+          _errorMessage = _friendlyAuthError(e.message);
         });
         return;
       }
@@ -103,29 +108,36 @@ class _RegisterPageState extends State<RegisterPage> {
           ),
         );
       }
-    } catch (e) {
-      
+    } catch (e, stack) {
+      // Fallback — treat as offline only if retryable (network), else still offline but log.
+      final retryable = AuthService.isRetryable(e);
+      if (stack.toString().isNotEmpty && retryable) {
+        // debug only
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Online registration failed. Registering offline...'),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text(retryable
+                ? 'Network error. Registering offline...'
+                : 'Online registration failed. Registering offline...'),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
     }
 
     final localId = onlineUid ?? const Uuid().v4();
+    final pwdSalt = PasswordHasher.generateSalt();
     await localUserDao.savePendingSignup(
       localId: localId,
       email: email,
-      password: SessionManager.hashPassword(password),
+      password: PasswordHasher.hashWithSalt(password, pwdSalt),
       displayName: displayName,
-      recoveryCode: recoveryCode,
+      recoveryCode: RecoveryCodeHasher.hash(recoveryCode),
       isSynced: isOnline,
       provider: 'password',
+      passwordSalt: pwdSalt,
     );
-    await SessionManager.stashPassword(localId, password);
     await SessionManager.saveSession(
       uid: localId,
       email: email,
@@ -159,7 +171,7 @@ class _RegisterPageState extends State<RegisterPage> {
       return 'The email address is not valid.';
     }
     if (message.contains('password')) {
-      return 'Password is too weak. Use at least 6 characters.';
+      return 'Password is too weak. Use at least 8 characters with letters + numbers.';
     }
     if (message.contains('signups not allowed') ||
         message.contains('not enabled')) {

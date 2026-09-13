@@ -1,15 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Scoped storage only: app-private files via path_provider; no
+         READ/WRITE/MANAGE_EXTERNAL_STORAGE and no legacy flag. -->
     <application
-        android:label="aiproject"
+        android:label="AgentA"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
-        android:enableOnBackInvokedCallback="true"
-        android:requestLegacyExternalStorage="true">
+        android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -26,6 +24,15 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- M14: password-reset deep link (matches AuthService
+                 emailRedirectTo com.agenta.agenta://reset). Also allowlist
+                 this URL in Supabase Dashboard > Auth > URL Configuration. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="com.agenta.agenta" android:host="reset"/>
             </intent-filter>
         </activity>
         <meta-data

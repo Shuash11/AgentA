@@ -1,4 +1,4 @@
-// ignore_for_file: empty_catches
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/ai/model_download_service.dart';
@@ -7,13 +7,16 @@ import '../../cubit/theme/theme_cubit.dart';
 import '../../theme/app_theme.dart';
 
 class DownloadPromptScreen extends StatefulWidget {
-  final VoidCallback onSkip;
+  /// Optional skip handler. Null (or [isForcedGate]) means no skip affordance
+  /// is shown — the gate is honest about being mandatory instead of showing
+  /// a fake no-op skip button.
+  final VoidCallback? onSkip;
   final VoidCallback onComplete;
   final bool isForcedGate;
 
   const DownloadPromptScreen({
     super.key,
-    required this.onSkip,
+    this.onSkip,
     required this.onComplete,
     this.isForcedGate = false,
   });
@@ -98,7 +101,11 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
             await _completeOnce();
             return;
           }
-        } catch (e) {}
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[DownloadPrompt] Kaggle install failed, falling back to direct download: $e');
+          }
+        }
       }
 
       await modelDownload.installModel();
@@ -319,7 +326,7 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                       ),
                     ),
                   ),
-                  if (!widget.isForcedGate) ...[
+                  if (!widget.isForcedGate && widget.onSkip != null) ...[
                     const SizedBox(height: AppSpacing.base),
                     TextButton(
                       onPressed: widget.onSkip,

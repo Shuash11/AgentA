@@ -2,15 +2,43 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AppConfig {
-  static Future<void> init() async {
-    await dotenv.load(fileName: '.env');
+  // C1: build-time --dart-define is the source of truth in release;
+  // `.env` (dotenv) is a local-dev fallback only and is never bundled
+  // as a Flutter asset (see pubspec.yaml) nor committed (see .gitignore).
+  static String _withFallback(String defined, String key) {
+    if (defined.isNotEmpty) return defined;
+    try {
+      return dotenv.env[key] ?? '';
+    } catch (_) {
+      return '';
+    }
   }
 
-  static String get groqApiKey => dotenv.env['GROQ_API_KEY'] ?? '';
-  static String get minimaxApiKey => dotenv.env['MINIMAX_API_KEY'] ?? '';
-  static String get kaggleUsername => dotenv.env['KAGGLE_USERNAME'] ?? '';
-  static String get kaggleKey => dotenv.env['KAGGLE_KEY'] ?? '';
-  static String get hfToken => dotenv.env['HF_TOKEN'] ?? '';
+  // NOTE: String.fromEnvironment requires a literal key (compile-time),
+  // so each secret gets its own const + dotenv fallback (dev only).
+  static const _dGroq = String.fromEnvironment('GROQ_API_KEY');
+  static const _dMinimax = String.fromEnvironment('MINIMAX_API_KEY');
+  static const _dKaggleUser = String.fromEnvironment('KAGGLE_USERNAME');
+  static const _dKaggleKey = String.fromEnvironment('KAGGLE_KEY');
+  static const _dHf = String.fromEnvironment('HF_TOKEN');
+  static const _dGemmaUrl = String.fromEnvironment('GEMMA_MODEL_URL');
+  static const _dSupaUrl = String.fromEnvironment('SUPABASE_URL');
+  static const _dSupaKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+  static const _dGoogleId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
+
+  static Future<void> init() async {
+    try {
+      await dotenv.load(fileName: '.env');
+    } catch (_) {
+      // Missing .env in release/CI is expected — dart-define covers it.
+    }
+  }
+
+  static String get groqApiKey => _withFallback(_dGroq, 'GROQ_API_KEY').trim();
+  static String get minimaxApiKey => _withFallback(_dMinimax, 'MINIMAX_API_KEY').trim();
+  static String get kaggleUsername => _withFallback(_dKaggleUser, 'KAGGLE_USERNAME').trim();
+  static String get kaggleKey => _withFallback(_dKaggleKey, 'KAGGLE_KEY').trim();
+  static String get hfToken => _withFallback(_dHf, 'HF_TOKEN').trim();
 
   static const String groqEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
   static const String minimaxEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
@@ -22,16 +50,16 @@ class AppConfig {
   static const String groqModel = 'allam-2-7b';
   static const String minimaxModel = 'minimax/minimax-m2.7:free';
 
-  static String get gemmaModelUrl => dotenv.env['GEMMA_MODEL_URL'] ?? '';
+  static String get gemmaModelUrl => _withFallback(_dGemmaUrl, 'GEMMA_MODEL_URL').trim();
   static const String gemmaModelFilename = 'gemma-offline.task';
 
-  static String get supabaseUrl => dotenv.env['SUPABASE_URL'] ?? '';
+  static String get supabaseUrl => _withFallback(_dSupaUrl, 'SUPABASE_URL').trim();
   static String get supabasePublishableKey =>
-      dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ?? '';
+      _withFallback(_dSupaKey, 'SUPABASE_PUBLISHABLE_KEY').trim();
 
   /// Trimmed Web Client ID — whitespace / newline stripped per reviewer finding #1.
   static String get googleServerClientId =>
-      (dotenv.env['GOOGLE_SERVER_CLIENT_ID'] ?? '').trim();
+      _withFallback(_dGoogleId, 'GOOGLE_SERVER_CLIENT_ID').trim();
 
   static const String _googleSuffix = '.apps.googleusercontent.com';
 
@@ -120,4 +148,22 @@ class AppConfig {
   static bool get hasValidApiKeys =>
       (groqApiKey.isNotEmpty && !groqApiKey.contains('your_')) ||
       (minimaxApiKey.isNotEmpty && !minimaxApiKey.contains('your_'));
+
+  /// Logs only lengths (never values) for trimmed env — satisfies M21.
+  static void logTrimmedLengths() {
+    if (!kDebugMode) return;
+    debugPrint(
+        '[AppConfig] env lengths — SUPABASE_URL:${supabaseUrl.length} '
+        'SUPABASE_PUBLISHABLE_KEY:${supabasePublishableKey.length} '
+        'GOOGLE_SERVER_CLIENT_ID:${googleServerClientId.length} '
+        'GROQ_API_KEY:${groqApiKey.length} '
+        'HF_TOKEN:${hfToken.length}');
+  }
+
+  /// Returns lengths map for badge/debug UI without exposing secrets.
+  static Map<String, int> get envLengths => {
+        'SUPABASE_URL': supabaseUrl.length,
+        'SUPABASE_PUBLISHABLE_KEY': supabasePublishableKey.length,
+        'GOOGLE_SERVER_CLIENT_ID': googleServerClientId.length,
+      };
 }

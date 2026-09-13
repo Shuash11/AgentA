@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/config/app_config.dart';
+import '../../core/utils/auth_retry.dart';
 import 'biometric_auth_service.dart';
 import 'session_manager.dart';
 
@@ -41,6 +43,22 @@ class AuthService {
   static bool get isBackendReady => _backendReady;
   static void markBackendReady() => _backendReady = true;
 
+  /// Centralized retry check — delegates to AuthRetryPolicy (H10).
+  static bool isRetryable(Object e) => AuthRetryPolicy.isRetryable(e);
+
+  static void _guardBackendReady(String caller) {
+    if (!_backendReady) {
+      _log('[AuthService] $caller blocked — backend not ready');
+      throw StateError('Backend not ready: $caller');
+    }
+    try {
+      Supabase.instance.client;
+    } catch (e) {
+      _log('[AuthService] $caller blocked — client unavailable: $e');
+      throw StateError('Supabase client unavailable: $caller');
+    }
+  }
+
   static User? get currentUser {
     if (!_backendReady) return null;
     try {
@@ -77,25 +95,43 @@ class AuthService {
   }
 
   static Future<AppAuthCredential> login(String email, String password) async {
-    final res = await _auth.signInWithPassword(
-      email: email.trim(),
-      password: password,
-    );
-    final user = res.user;
-    if (user == null) throw Exception('Login failed: user is null');
-    return _toCredential(user);
+    _guardBackendReady('login');
+    try {
+      final res = await _auth.signInWithPassword(
+        email: email.trim(),
+        password: password,
+      );
+      final user = res.user;
+      if (user == null) throw Exception('Login failed: user is null');
+      _log('[AuthService] login success uid=${user.id}');
+      return _toCredential(user);
+    } on StateError {
+      rethrow;
+    } catch (e, st) {
+      _log('[AuthService] login failed: $e | $st | retryable=${isRetryable(e)}');
+      rethrow;
+    }
   }
 
   static Future<AppAuthCredential> register(
       String email, String password, String name) async {
-    final res = await _auth.signUp(
-      email: email.trim(),
-      password: password,
-      data: {'display_name': name},
-    );
-    final user = res.user;
-    if (user == null) throw Exception('Registration failed: user is null');
-    return _toCredential(user);
+    _guardBackendReady('register');
+    try {
+      final res = await _auth.signUp(
+        email: email.trim(),
+        password: password,
+        data: {'display_name': name},
+      );
+      final user = res.user;
+      if (user == null) throw Exception('Registration failed: user is null');
+      _log('[AuthService] register success uid=${user.id}');
+      return _toCredential(user);
+    } on StateError {
+      rethrow;
+    } catch (e, st) {
+      _log('[AuthService] register failed: $e | $st | retryable=${isRetryable(e)}');
+      rethrow;
+    }
   }
 
   // ── Google Sign-In: modular, logged, typed failures ───────────────
@@ -137,6 +173,10 @@ class AuthService {
     if (_googleInitialized) {
       _log('[AuthService] ensureGoogleInitialized: already initialized, skipping');
       return;
+    }
+    // No backend guard here — Google init is independent, but log backend state.
+    if (!_backendReady) {
+      _log('[AuthService] ensureGoogleInitialized — backend not ready (proceeding, will guard at exchange)');
     }
     final serverId = AppConfig.googleServerClientId.trim();
 
@@ -287,6 +327,7 @@ class AuthService {
   }
 
   static Future<AppAuthCredential> signInWithGoogle() async {
+    _guardBackendReady('signInWithGoogle');
     await ensureGoogleInitialized();
 
     final account = await _authenticateWithGoogle();
@@ -309,6 +350,7 @@ class AuthService {
   }
 
   static Future<void> logout() async {
+    // logout should work offline too — only guard Supabase signOut
     try {
       await GoogleSignIn.instance.signOut();
       _log('[AuthService] Google signOut success');
@@ -318,7 +360,15 @@ class AuthService {
     resetGoogleInit();
     await BiometricAuthService.disable();
     await SessionManager.clear();
-    await _auth.signOut();
+    if (_backendReady) {
+      try {
+        await _auth.signOut();
+      } catch (e, st) {
+        _log('[AuthService] Supabase signOut failed (offline?): $e | $st');
+      }
+    } else {
+      _log('[AuthService] logout — backend not ready, skipped Supabase signOut');
+    }
     _log('[AuthService] logout complete');
   }
 
@@ -331,38 +381,70 @@ class AuthService {
           '[AuthService] Google signOutOnly failed (ignored): $e | stack: $stack');
     }
     resetGoogleInit();
-    await _auth.signOut();
+    if (_backendReady) {
+      try {
+        await _auth.signOut();
+      } catch (e, st) {
+        _log('[AuthService] signOutOnly Supabase failed: $e | $st');
+      }
+    }
     _log('[AuthService] signOutOnly complete');
   }
 
   static Future<void> updatePassword(String newPassword) async {
+    _guardBackendReady('updatePassword');
     await _auth.updateUser(UserAttributes(password: newPassword));
   }
 
   static Future<void> updateDisplayName(String displayName) async {
+    _guardBackendReady('updateDisplayName');
     await _auth.updateUser(
       UserAttributes(data: {'display_name': displayName}),
     );
   }
 
   static Future<void> sendPasswordResetEmail(String email) async {
-    await _auth.resetPasswordForEmail(email.trim());
+    _guardBackendReady('sendPasswordResetEmail');
+    // M14: deep-link redirect so the reset flow returns to the app.
+    // Requires the com.agenta.agenta://reset intent-filter in
+    // AndroidManifest.xml + Supabase Dashboard > Auth > URL Configuration
+    // (Additional Redirect URLs must allow com.agenta.agenta://reset).
+    await _auth.resetPasswordForEmail(
+      email.trim(),
+      // gotrue >=2.x names this `redirectTo` (older `emailRedirectTo`).
+      redirectTo: 'com.agenta.agenta://reset',
+    );
   }
 
   static Future<AppAuthCredential> reauthenticate(
       String email, String password) async {
+    _guardBackendReady('reauthenticate');
     return login(email, password);
   }
 
+  static final RegExp _emailPattern = RegExp(
+    r"^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$",
+  );
+
+  static String normalizeEmail(String value) => value.trim().toLowerCase();
+
   static String? validateEmail(String? value) {
     if (value == null || value.trim().isEmpty) return 'Email is required';
-    if (!value.contains('@')) return 'Enter a valid email';
+    final normalized = normalizeEmail(value);
+    if (normalized.length > 254 || !_emailPattern.hasMatch(normalized)) {
+      return 'Enter a valid email';
+    }
     return null;
   }
 
   static String? validatePassword(String? value) {
     if (value == null || value.isEmpty) return 'Password is required';
-    if (value.length < 6) return 'At least 6 characters';
+    if (value.length < 8) return 'At least 8 characters';
+    final hasLetter = RegExp(r'[A-Za-z]').hasMatch(value);
+    final hasDigit = RegExp(r'[0-9]').hasMatch(value);
+    if (!hasLetter || !hasDigit) {
+      return 'Use letters + numbers for a stronger password';
+    }
     return null;
   }
 }

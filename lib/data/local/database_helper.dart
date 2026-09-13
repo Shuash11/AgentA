@@ -1,6 +1,5 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/constants/app_constants.dart';
 import '../../services/auth/session_manager.dart';
 
@@ -62,8 +61,10 @@ class DatabaseHelper {
     if (oldVersion < 6) {
       await db.execute(
           'ALTER TABLE pending_signups ADD COLUMN provider TEXT DEFAULT \'password\'');
+      // C2+C5 migration: never stash plaintext. Legacy unsalted/plaintext
+      // rows are forced to re-enroll (password cleared) instead of being
+      // copied into secure storage.
       final rows = await db.query('pending_signups');
-      const storage = FlutterSecureStorage();
       for (final row in rows) {
         final localId = row['local_id'] as String;
         final stored = (row['password'] as String?) ?? '';
@@ -72,23 +73,21 @@ class DatabaseHelper {
               where: 'local_id = ?', whereArgs: [localId]);
           continue;
         }
-        if (stored.length == 64 &&
-            RegExp(r'^[0-9a-f]{64}$').hasMatch(stored)) {
-          continue;
-        }
-        try {
-          await storage.write(key: 'pwd_$localId', value: stored);
-        } catch (_) {}
+        await SessionManager.dropStashedPassword(localId);
         await db.update(
           'pending_signups',
           {
-            'password': SessionManager.hashPassword(stored),
+            // Force re-enroll: wipe unverifiable legacy secret.
+            'password': '',
             'provider': 'password',
           },
           where: 'local_id = ?',
           whereArgs: [localId],
         );
       }
+    }
+    if (oldVersion < 7) {
+      await _migrateToSaltedPasswords(db);
     }
   }
 
@@ -138,7 +137,8 @@ class DatabaseHelper {
         recovery_code TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         is_synced INTEGER DEFAULT 0,
-        provider TEXT DEFAULT 'password'
+        provider TEXT DEFAULT 'password',
+        password_salt TEXT DEFAULT ''
       )
     ''');
 
@@ -156,6 +156,33 @@ class DatabaseHelper {
     ''');
 
     await _createIndexes(db);
+  }
+
+  /// C5: add per-user salt; force re-enroll for legacy unsalted rows.
+  /// Plaintext DB note: app-private scoped storage only; sqlcipher
+  /// upgrade tracked in docs/backend-rls.md (keystore-bound key).
+  Future<void> _migrateToSaltedPasswords(Database db) async {
+    final cols = await db.rawQuery('PRAGMA table_info(pending_signups)');
+    final names = cols.map((c) => c['name'] as String).toSet();
+    if (!names.contains('password_salt')) {
+      await db.execute(
+          'ALTER TABLE pending_signups ADD COLUMN password_salt TEXT DEFAULT \'\'');
+    }
+    final rows = await db.query('pending_signups');
+    for (final row in rows) {
+      final localId = row['local_id'] as String;
+      final salt = (row['password_salt'] as String?) ?? '';
+      final stored = (row['password'] as String?) ?? '';
+      if (stored.isEmpty) continue;
+      // Legacy unsalted hash or plaintext cannot be upgraded without the
+      // original password — wipe and require re-entry.
+      if (salt.isEmpty) {
+        await SessionManager.dropStashedPassword(localId);
+        await db.update('pending_signups',
+            {'password': '', 'password_salt': ''},
+            where: 'local_id = ?', whereArgs: [localId]);
+      }
+    }
   }
 
   Future<void> _createIndexes(Database db) async {

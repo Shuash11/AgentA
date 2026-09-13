@@ -1,6 +1,6 @@
 import 'dart:async';
-// ignore_for_file: empty_catches
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../../data/models/chat_message_model.dart';
 import '../../core/config/app_config.dart';
@@ -221,7 +221,13 @@ class MiniMaxService {
                 }
               }
             }
-          } catch (e) {}
+          } catch (e) {
+            // L20: malformed SSE chunks are logged (length-only, never the
+            // payload) instead of being silently dropped.
+            if (kDebugMode) {
+              debugPrint('[MiniMaxService] malformed SSE chunk: $e | raw len: ${data.length}');
+            }
+          }
         }
       }
     } on TimeoutException {

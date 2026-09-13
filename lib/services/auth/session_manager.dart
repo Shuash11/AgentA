@@ -1,6 +1,6 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'password_hasher.dart';
 
 class LocalSession {
   final String uid;
@@ -19,11 +19,15 @@ class SessionManager {
   static const String _emailKey = 'session_email';
   static const String _providerKey = 'session_provider';
   static const String _lastEmailKey = 'session_last_email';
+  static const String _biometricEnabledKey = 'biometric_enabled';
+  static const String _biometricUidKey = 'biometric_uid';
 
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
 
-  static String hashPassword(String password) {
-    return sha256.convert(utf8.encode(password)).toString();
+  /// Salted hash (C5). Prefer [PasswordHasher.hashWithSalt] for new code.
+  static String hashPassword(String password, {String salt = ''}) {
+    if (salt.isEmpty) return PasswordHasher.hashWithSalt(password, '');
+    return PasswordHasher.hashWithSalt(password, salt);
   }
 
   static Future<void> saveSession({
@@ -64,29 +68,48 @@ class SessionManager {
       await _storage.delete(key: _uidKey);
       await _storage.delete(key: _emailKey);
       await _storage.delete(key: _providerKey);
-    } catch (_) {}
-  }
-
-  static String _pwdKey(String localId) => 'pwd_$localId';
-
-  static Future<void> stashPassword(String localId, String password) async {
-    if (password.isEmpty) return;
-    try {
-      await _storage.write(key: _pwdKey(localId), value: password);
-    } catch (_) {}
-  }
-
-  static Future<String?> takeStashedPassword(String localId) async {
-    try {
-      return await _storage.read(key: _pwdKey(localId));
-    } catch (_) {
-      return null;
+      // M16: logout must not leave identity hints, stashed secrets, or a
+      // lingering biometric opt-in behind.
+      await _storage.delete(key: _lastEmailKey);
+      await _storage.delete(key: _biometricEnabledKey);
+      await _storage.delete(key: _biometricUidKey);
+      try {
+        final all = await _storage.readAll();
+        for (final key in all.keys) {
+          if (key.startsWith('pwd_')) {
+            await _storage.delete(key: key);
+          }
+        }
+      } catch (e) {
+        // L20: best-effort wipe, but never silently — log so a failing
+        // storage layer is diagnosable.
+        if (kDebugMode) debugPrint('[SessionManager] legacy pwd_* sweep failed: $e');
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[SessionManager] session clear failed: $e');
     }
   }
 
+  // ── C2: plaintext password vault REMOVED ──────────────────────────
+  // Sessions store only uid/email/provider. No password is ever stashed.
+  // The two helpers below exist solely for one-time migration cleanup:
+  // delete a single legacy `pwd_<id>` key, or best-effort wipe for a
+  // list of known ids. Sync now requires password re-entry instead of
+  // reading a stashed secret (see SyncService._syncPendingUsers).
+
+  static String legacyPwdKey(String localId) => 'pwd_$localId';
+
   static Future<void> dropStashedPassword(String localId) async {
     try {
-      await _storage.delete(key: _pwdKey(localId));
-    } catch (_) {}
+      await _storage.delete(key: legacyPwdKey(localId));
+    } catch (e) {
+      if (kDebugMode) debugPrint('[SessionManager] dropStashedPassword failed: $e');
+    }
+  }
+
+  static Future<void> wipeLegacyPasswordVault(List<String> knownIds) async {
+    for (final id in knownIds) {
+      await dropStashedPassword(id);
+    }
   }
 }

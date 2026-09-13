@@ -1,0 +1,16 @@
+# Release signing (C4) — placeholder only, never commit the real file
+
+# CI restores this file from secrets before `flutter build apk --release`:
+#   ANDROID_KEYSTORE_BASE64   — base64 of the .jks/.keystore
+#   ANDROID_KEYSTORE_PASSWORD — store password
+#   ANDROID_KEY_ALIAS         — key alias
+#   ANDROID_KEY_PASSWORD      — key password
+#
+# Local release test: copy this file to android/key.properties and fill in
+# your own keystore path. The real keystore (*.jks, *.keystore) and the
+# filled key.properties are git-ignored — never commit them.
+
+storeFile=/path/to/release.keystore
+storePassword=CHANGE_ME
+keyAlias=CHANGE_ME
+keyPassword=CHANGE_ME

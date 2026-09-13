@@ -1,4 +1,3 @@
-// ignore_for_file: empty_catches
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
@@ -44,7 +43,9 @@ Formatting rules:
     if (chat != null) {
       try {
         unawaited(chat.stopGeneration());
-      } catch (e) {}
+      } catch (e) {
+        if (kDebugMode) debugPrint('[GemmaService] stopGeneration failed: $e');
+      }
     }
   }
 
@@ -53,7 +54,9 @@ Formatting rules:
     if (chat == null) return;
     try {
       await chat.clearHistory();
-    } catch (e) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[GemmaService] clearHistory failed: $e');
+    }
   }
 
   void resetCancel() {

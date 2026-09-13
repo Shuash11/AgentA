@@ -1,4 +1,4 @@
-// ignore_for_file: empty_catches
+import 'package:flutter/foundation.dart';
 import '../data/local/local_message_dao.dart';
 import '../data/models/chat_message_model.dart';
 import '../data/remote/supabase_message_service.dart';
@@ -23,8 +23,10 @@ class MessageRepository {
       final remoteMessages = await SupabaseMessageService.getMessages(uid, chatId);
       final syncedMsgs = remoteMessages.map((m) => m.copyWith(isSynced: true)).toList();
       await _localMsgDao.replaceMessagesPreservingUnsynced(syncedMsgs);
+      if (kDebugMode) debugPrint('[MessageRepository] refresh ${remoteMessages.length} for $chatId');
       return remoteMessages;
-    } catch (e) {
+    } catch (e, stack) {
+      if (kDebugMode) debugPrint('[MessageRepository] refreshMessagesFromRemote failed: $e | $stack');
       return [];
     }
   }
@@ -39,7 +41,9 @@ class MessageRepository {
         final syncedMsgs = remoteMessages.map((m) => m.copyWith(isSynced: true)).toList();
         await _localMsgDao.replaceMessagesPreservingUnsynced(syncedMsgs);
         return remoteMessages;
-      } catch (e) {}
+      } catch (e, stack) {
+        if (kDebugMode) debugPrint('[MessageRepository] getMessages remote failed (keeps local): $e | $stack');
+      }
     }
 
     return await _localMsgDao.getByChat(chatId);
@@ -52,7 +56,11 @@ class MessageRepository {
       try {
         await SupabaseMessageService.saveMessage(uid, msg.chatId, msg);
         await _localMsgDao.update(msg.copyWith(isSynced: true));
-      } catch (e) {}
+        if (kDebugMode) debugPrint('[MessageRepository] saveMessage ${msg.id} synced');
+      } catch (e, stack) {
+        if (kDebugMode) debugPrint('[MessageRepository] saveMessage ${msg.id} failed keeps is_synced=0: $e | $stack');
+        // keep is_synced=0
+      }
     }
   }
 
@@ -63,7 +71,10 @@ class MessageRepository {
       try {
         await SupabaseMessageService.deleteMessages(uid, chatId);
         await _localMsgDao.hardDeleteByChat(chatId);
-      } catch (e) {}
+        if (kDebugMode) debugPrint('[MessageRepository] deleteMessages $chatId synced');
+      } catch (e, stack) {
+        if (kDebugMode) debugPrint('[MessageRepository] deleteMessages $chatId failed: $e | $stack');
+      }
     }
   }
 

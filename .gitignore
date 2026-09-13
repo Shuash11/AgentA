@@ -16,6 +16,11 @@ migrate_working_dir/
 .env
 .env.local
 
+# C4: release signing — never commit keystores or filled key.properties
+android/key.properties
+*.jks
+*.keystore
+
 # No Firebase in this project (Supabase-only auth).
 # Leftover google-services files are never read; ignore them if present.
 google-services.json

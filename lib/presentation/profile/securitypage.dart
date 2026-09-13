@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../theme/app_theme.dart';
@@ -11,7 +10,8 @@ class SecurityPage extends StatelessWidget {
 
   void _showRecoveryCode(BuildContext context) async {
     final colors = context.read<ThemeCubit>().state.colors;
-    final code = await SecurityService.getRecoveryCode();
+    // H8: raw codes are shown once at creation only; only the hash is
+    // stored, so there is nothing to "view" afterwards.
     if (!context.mounted) return;
     
     showDialog(
@@ -19,40 +19,19 @@ class SecurityPage extends StatelessWidget {
       builder: (_) => AlertDialog(
         backgroundColor: colors.card,
         title: Text("Recovery Code", style: TextStyle(color: colors.text)),
-        content: code.isEmpty
-            ? Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.key_off, color: colors.subtext, size: 40),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No recovery code found.\nPlease sign in online to sync your account.',
-                    style: TextStyle(color: colors.subtext),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              )
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.key, color: colors.amber, size: 40),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: colors.amber.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                    child: Text(code, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: colors.amber, letterSpacing: 4)),
-                  ),
-                ],
-              ),
-        actions: [
-          if (code.isNotEmpty)
-            TextButton(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: code));
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied!')));
-              },
-              child: Text('Copy', style: TextStyle(color: colors.amber)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.key_off, color: colors.subtext, size: 40),
+            const SizedBox(height: 16),
+            Text(
+              'For your security, the raw code was shown once at sign-up and only its hash is stored. Use it on the recovery screen — it cannot be displayed again.',
+              style: TextStyle(color: colors.subtext),
+              textAlign: TextAlign.center,
             ),
+          ],
+        ),
+        actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: Text('Close', style: TextStyle(color: colors.subtext))),
         ],
       ),

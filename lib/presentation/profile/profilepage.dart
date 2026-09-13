@@ -1,4 +1,4 @@
-// ignore_for_file: empty_catches
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../cubit/theme/theme_cubit.dart';
@@ -48,7 +48,9 @@ class _ProfilePageState extends State<ProfilePage> {
             _displayName = profile.displayName;
             try {
               await AuthService.updateDisplayName(_displayName!);
-            } catch (e) {}
+            } catch (e) {
+              if (kDebugMode) debugPrint('[Profile] display-name backfill failed: $e');
+            }
           }
         }
       }

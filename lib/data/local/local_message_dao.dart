@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'database_helper.dart';
@@ -14,11 +15,17 @@ class LocalMessageDao {
     try {
       final supabaseUid = Supabase.instance.client.auth.currentUser?.id;
       if (supabaseUid != null && supabaseUid.isNotEmpty) return supabaseUid;
-    } catch (_) {}
+    } catch (e) {
+      // L20: supabase client may be unavailable offline — log and fall
+      // through to the local-session fallback instead of silently dropping.
+      if (kDebugMode) debugPrint('[LocalMessageDao] supabase uid read failed: $e');
+    }
     try {
       final session = await SessionManager.currentSession();
       if (session != null) return session.uid;
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[LocalMessageDao] local session read failed: $e');
+    }
     return '';
   }
 

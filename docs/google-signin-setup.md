@@ -17,9 +17,10 @@ Server client type: **Web OAuth client** (`GOOGLE_SERVER_CLIENT_ID`).
   `com.agenta.AgentA` (case-sensitive — the capital `A` matters).
 - Every SHA-1 you register in Google Cloud Console must be under this exact
   package name. A SHA registered under `com.agenta.agenta` will not work.
-- Current signing strategy (known debt): `android/app/build.gradle` lines
-  30-34 sign **release with `signingConfigs.debug`**. Do not ship to Play
-  like this long-term — see [Signing strategy](#7-signing-strategy).
+- Current signing strategy (C4 fixed): `android/app/build.gradle` reads
+  `android/key.properties` (CI secrets) for a real `signingConfigs.release`;
+  without the file it falls back to debug keys for local
+  `flutter run --release` only. Tag builds fail CI without a keystore.
 
 ## 2. Collect SHA-1 fingerprints
 

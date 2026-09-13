@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -23,7 +25,151 @@ jobs:
           flutter-version: "3.44.1"
           cache: true
 
-      - name: Create .env
+      # C1: .env is never bundled (pubspec has no `.env` asset) and never
+      # committed. Secrets reach the app via --dart-define at build time.
+      - name: Assert no .env asset + backend RLS guards
+        run: |
+          if grep -qE '^\s*-\s*\.env\s*$' pubspec.yaml; then
+            echo "::error::pubspec.yaml still bundles .env as a Flutter asset (C1). Remove it."
+            exit 1
+          fi
+          if [ ! -f supabase/migrations/0001_rls.sql ]; then
+            echo "::error::Missing supabase/migrations/0001_rls.sql (H11)."
+            exit 1
+          fi
+          grep -q 'auth.uid()' supabase/migrations/0001_rls.sql || {
+            echo "::error::RLS migration lacks auth.uid() policies (H11)."
+            exit 1
+          }
+          if grep -q 'READ_EXTERNAL_STORAGE\|WRITE_EXTERNAL_STORAGE\|MANAGE_EXTERNAL_STORAGE\|requestLegacyExternalStorage' android/app/src/main/AndroidManifest.xml; then
+            echo "::error::AndroidManifest still requests broad storage (H7)."
+            exit 1
+          fi
+          grep -q 'key.properties' android/app/build.gradle || {
+            echo "::error::android/app/build.gradle lacks key.properties release signing (C4)."
+            exit 1
+          }
+
+      - name: Validate secrets (no .env file written)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          GOOGLE_SERVER_CLIENT_ID: ${{ secrets.GOOGLE_SERVER_CLIENT_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          # M21: trim all env — whitespace/newlines stripped, log lengths-only (never values)
+          trim() { echo "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '\r\n' | xargs 2>/dev/null || echo "$1" | tr -d '[:space:]'; }
+          # Use xargs trimming for each
+          SUPABASE_URL_TRIMMED="$(echo "$SUPABASE_URL" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r')"
+          SUPABASE_URL_TRIMMED="$(echo "$SUPABASE_URL_TRIMMED" | xargs)"
+          SUPABASE_PUBLISHABLE_KEY_TRIMMED="$(echo "$SUPABASE_PUBLISHABLE_KEY" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
+          GOOGLE_SERVER_CLIENT_ID_TRIMMED="$(echo "$GOOGLE_SERVER_CLIENT_ID" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
+          GROQ_API_KEY_TRIMMED="$(echo "$GROQ_API_KEY" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
+          HF_TOKEN_TRIMMED="$(echo "$HF_TOKEN" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
+
+          echo "SUPABASE_URL_TRIMMED=${SUPABASE_URL_TRIMMED}" >> "$GITHUB_ENV"
+          echo "SUPABASE_PUBLISHABLE_KEY_TRIMMED=${SUPABASE_PUBLISHABLE_KEY_TRIMMED}" >> "$GITHUB_ENV"
+          echo "GOOGLE_SERVER_CLIENT_ID_TRIMMED=${GOOGLE_SERVER_CLIENT_ID_TRIMMED}" >> "$GITHUB_ENV"
+          echo "GROQ_API_KEY_TRIMMED=${GROQ_API_KEY_TRIMMED}" >> "$GITHUB_ENV"
+          echo "HF_TOKEN_TRIMMED=${HF_TOKEN_TRIMMED}" >> "$GITHUB_ENV"
+
+          # Lengths-only logging (never values) — M21
+          echo "env lengths — SUPABASE_URL:${#SUPABASE_URL_TRIMMED} SUPABASE_PUBLISHABLE_KEY:${#SUPABASE_PUBLISHABLE_KEY_TRIMMED} GOOGLE_SERVER_CLIENT_ID:${#GOOGLE_SERVER_CLIENT_ID_TRIMMED} GROQ:${#GROQ_API_KEY_TRIMMED} HF:${#HF_TOKEN_TRIMMED}"
+
+          if [ -z "$SUPABASE_URL_TRIMMED" ]; then
+            echo "::error::Missing SUPABASE_URL secret (after trim)"
+            exit 1
+          fi
+          if [ -z "$SUPABASE_PUBLISHABLE_KEY_TRIMMED" ]; then
+            echo "::warning::SUPABASE_PUBLISHABLE_KEY empty after trim"
+          fi
+
+          if [ -z "$GOOGLE_SERVER_CLIENT_ID_TRIMMED" ]; then
+            echo "::warning::GOOGLE_SERVER_CLIENT_ID secret empty after trim - Google sign-in will report 'not configured'"
+            echo "GOOGLE_AUTH_STATUS=missing" >> "$GITHUB_ENV"
+          elif [[ "$GOOGLE_SERVER_CLIENT_ID_TRIMMED" != *.apps.googleusercontent.com ]]; then
+            echo "::error::GOOGLE_SERVER_CLIENT_ID malformed after trim (must end with .apps.googleusercontent.com)"
+            echo "GOOGLE_AUTH_STATUS=invalid" >> "$GITHUB_ENV"
+          else
+            echo "GOOGLE_AUTH_STATUS=ok" >> "$GITHUB_ENV"
+          fi
+
+      # C4: restore release keystore from CI secrets (placeholder when absent
+      # for local debug-style builds is handled by build.gradle fallback).
+      - name: Restore release keystore (C4)
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            cat > android/key.properties <<EOF
+          storeFile=$RUNNER_TEMP/release.keystore
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+            echo "RELEASE_SIGNING=keystore" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret - release will fall back to debug keys (local only). Configure the keystore for store builds. See docs/backend-rls.md."
+            echo "RELEASE_SIGNING=debug-fallback" >> "$GITHUB_ENV"
+          fi
+
+      - name: Assert release signing (C4)
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${RELEASE_SIGNING:-debug-fallback}" != "keystore" ]; then
+            echo "::warning::main build without release keystore (debug fallback). Tag/release builds require the keystore."
+          fi
+          if [[ "${{ github.ref }}" == refs/tags/v* ]] && [ "${RELEASE_SIGNING:-debug-fallback}" != "keystore" ]; then
+            echo "::error::Tag builds must use a real release keystore (C4). Add ANDROID_KEYSTORE_* secrets."
+            exit 1
+          fi
+
+      - run: flutter pub get
+      - name: Validate Google auth config
+        run: |
+          # H9: fail on main if GOOGLE_SERVER_CLIENT_ID missing/invalid (no nogoogle artifact on main)
+          # Allow on PR/dispatch with warning. Keep v* tag behavior: also fail if invalid/missing (tags deploy)
+          REF="${{ github.ref }}"
+          EVENT="${{ github.event_name }}"
+          STATUS="${GOOGLE_AUTH_STATUS:-missing}"
+          echo "Validate Google — ref=$REF event=$EVENT status=$STATUS"
+          if [ "$STATUS" = "invalid" ]; then
+            echo "::error::Refusing to ship with malformed GOOGLE_SERVER_CLIENT_ID. Fix the secret (Web client, see docs/google-signin-setup.md)."
+            exit 1
+          fi
+          if [ "$STATUS" = "missing" ]; then
+            if [ "$REF" = "refs/heads/main" ]; then
+              echo "::error::Refusing to ship main with missing GOOGLE_SERVER_CLIENT_ID — no nogoogle artifact on main (H9). Set the secret."
+              exit 1
+            fi
+            if [[ "$REF" == refs/tags/v* ]]; then
+              echo "::error::Refusing to ship tag $REF with missing GOOGLE_SERVER_CLIENT_ID."
+              exit 1
+            fi
+            echo "::warning::Building without Google sign-in (GOOGLE_SERVER_CLIENT_ID empty) — allowed on PR/dispatch only, APK will be -nogoogle."
+          fi
+      - run: flutter analyze
+      - name: Run tests (M15)
+        run: |
+          # Fail if zero tests collected — ensures smoke_test.dart exists
+          TEST_OUT="$(flutter test --reporter=expanded 2>&1)"
+          echo "$TEST_OUT"
+          # Check for "No tests" or 0 passed
+          if echo "$TEST_OUT" | grep -q "No tests"; then
+            echo "::error::No tests found — add test/smoke_test.dart (M15)"
+            exit 1
+          fi
+          # Ensure at least one test passed
+          if ! echo "$TEST_OUT" | grep -q "All tests passed"; then
+            echo "::error::flutter test did not report All tests passed"
+            exit 1
+          fi
+
+      - name: Build APK (dart-define secrets, C1)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
@@ -33,45 +179,18 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-          GOOGLE_SERVER_CLIENT_ID: ${{ secrets.GOOGLE_SERVER_CLIENT_ID }}
         run: |
-          if [ -z "$SUPABASE_URL" ]; then
-            echo "::error::Missing SUPABASE_URL secret"
-            exit 1
-          fi
-          # Trim whitespace (secrets pasted with trailing newlines are a classic instant-cancel cause).
-          GOOGLE_SERVER_CLIENT_ID="$(echo "$GOOGLE_SERVER_CLIENT_ID" | tr -d '[:space:]')"
-          export GOOGLE_SERVER_CLIENT_ID
-          if [ -z "$GOOGLE_SERVER_CLIENT_ID" ]; then
-            echo "::warning::GOOGLE_SERVER_CLIENT_ID secret empty - Google sign-in will report 'not configured'"
-            echo "GOOGLE_AUTH_STATUS=missing" >> "$GITHUB_ENV"
-          elif [[ "$GOOGLE_SERVER_CLIENT_ID" != *.apps.googleusercontent.com ]]; then
-            echo "::error::GOOGLE_SERVER_CLIENT_ID malformed (must be the Web OAuth client ending in .apps.googleusercontent.com, not an Android client ID). See docs/google-signin-setup.md"
-            echo "GOOGLE_AUTH_STATUS=invalid" >> "$GITHUB_ENV"
-          else
-            echo "GOOGLE_AUTH_STATUS=ok" >> "$GITHUB_ENV"
-          fi
-          cat > .env <<EOF
-          GROQ_API_KEY=$GROQ_API_KEY
-          MINIMAX_API_KEY=$MINIMAX_API_KEY
-          KAGGLE_USERNAME=$KAGGLE_USERNAME
-          KAGGLE_KEY=$KAGGLE_KEY
-          GEMMA_MODEL_URL=$GEMMA_MODEL_URL
-          HF_TOKEN=$HF_TOKEN
-          SUPABASE_URL=$SUPABASE_URL
-          SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY
-          GOOGLE_SERVER_CLIENT_ID=$GOOGLE_SERVER_CLIENT_ID
-          EOF
-
-      - run: flutter pub get
-      - name: Validate Google auth config
-        run: |
-          if [ "${GOOGLE_AUTH_STATUS:-missing}" = "invalid" ]; then
-            echo "::error::Refusing to ship with malformed GOOGLE_SERVER_CLIENT_ID. Fix the secret (Web client, see docs/google-signin-setup.md)."
-            exit 1
-          fi
-      - run: flutter analyze
-      - run: flutter build apk --release
+          # M21: trim all dart-defines (use trimmed env from earlier step)
+          flutter build apk --release \
+            --dart-define=GROQ_API_KEY="${GROQ_API_KEY_TRIMMED:-$GROQ_API_KEY}" \
+            --dart-define=MINIMAX_API_KEY="$MINIMAX_API_KEY" \
+            --dart-define=KAGGLE_USERNAME="$KAGGLE_USERNAME" \
+            --dart-define=KAGGLE_KEY="$KAGGLE_KEY" \
+            --dart-define=GEMMA_MODEL_URL="$GEMMA_MODEL_URL" \
+            --dart-define=HF_TOKEN="${HF_TOKEN_TRIMMED:-$HF_TOKEN}" \
+            --dart-define=SUPABASE_URL="${SUPABASE_URL_TRIMMED:-$SUPABASE_URL}" \
+            --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY_TRIMMED:-$SUPABASE_PUBLISHABLE_KEY}" \
+            --dart-define=GOOGLE_SERVER_CLIENT_ID="${GOOGLE_SERVER_CLIENT_ID_TRIMMED:-}"
 
       - name: Rename APK
         run: |
@@ -84,8 +203,13 @@ jobs:
             NAME="AgentA-${SHA}.apk"
           fi
           if [ "${GOOGLE_AUTH_STATUS:-ok}" = "missing" ]; then
+            # H9: no nogoogle artifact on main/tags — we already failed above, this only fires on PR/dispatch
+            if [[ "$GITHUB_REF" == refs/heads/main ]] || [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+              echo "::error::Unexpected nogoogle on main/tag after guard — failing"
+              exit 1
+            fi
             NAME="${NAME%.apk}-nogoogle.apk"
-            echo "::warning::APK tagged ${NAME} - built without Google sign-in (GOOGLE_SERVER_CLIENT_ID empty)"
+            echo "::warning::APK tagged ${NAME} - built without Google sign-in (GOOGLE_SERVER_CLIENT_ID empty) — PR/dispatch only"
           fi
           cp build/app/outputs/flutter-apk/app-release.apk "dist/${NAME}"
           echo "APK_NAME=${NAME}" >> "$GITHUB_ENV"

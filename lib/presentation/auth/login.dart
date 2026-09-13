@@ -6,6 +6,8 @@ import '../../cubit/theme/theme_cubit.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/auth/biometric_auth_service.dart';
+import '../../services/auth/offline_login_guard.dart';
+import '../../services/auth/password_hasher.dart';
 import '../../services/auth/session_manager.dart';
 import '../../repositories/user_repository.dart';
 import '../../data/local/local_user_dao.dart';
@@ -196,16 +198,17 @@ class _LoginPageState extends State<LoginPage> {
           }
         }
         final dao = LocalUserDao();
+        final loginSalt = PasswordHasher.generateSalt();
         await dao.savePendingSignup(
           localId: cred.uid,
           email: email,
-          password: SessionManager.hashPassword(password),
+          password: PasswordHasher.hashWithSalt(password, loginSalt),
           displayName: cred.displayName ?? 'User',
           recoveryCode: '',
           isSynced: true,
           provider: 'password',
+          passwordSalt: loginSalt,
         );
-        await SessionManager.stashPassword(cred.uid, password);
         await SessionManager.saveSession(
           uid: cred.uid,
           email: email,
@@ -216,14 +219,15 @@ class _LoginPageState extends State<LoginPage> {
       if (kDebugMode) {
         debugPrint('[Login] _login online attempt failed: $e | $stack');
       }
-      final errorString = e.toString().toLowerCase();
-      if (!AuthService.isBackendReady ||
-          errorString.contains('network') ||
-          errorString.contains('socket')) {
-        // Backend unreachable - try offline login
+      final isRetryable = !AuthService.isBackendReady || AuthService.isRetryable(e);
+      if (isRetryable) {
+        // Backend unreachable or transient network/server error - try offline login
+        _errorMessage = null;
         isOnline = false;
+        if (kDebugMode) debugPrint('[Login] retryable error, falling back offline');
       } else {
         // Auth error (wrong password, user not found, etc.) - show immediately
+        final errorString = e.toString().toLowerCase();
         if (mounted) {
           setState(() {
             _isLoading = false;
@@ -264,19 +268,38 @@ class _LoginPageState extends State<LoginPage> {
       if (localUser != null) {
         final provider =
             (localUser['provider'] as String?) ?? 'password';
+        // C3: google-provider rows must NEVER unlock offline with a typed
+        // password — there is no password proof for them. Force the online
+        // Google flow (or the biometric unlock bound to this uid).
         if (provider == 'google') {
-          await SessionManager.saveSession(
-            uid: localUser['local_id'] as String,
-            email: email,
-            provider: 'google',
-          );
-          setState(() => _isLoading = false);
-          _goToDashboard(isOnline: false);
+          if (kDebugMode) {
+            debugPrint('[Login] offline denied for google-provider row');
+          }
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _errorMessage =
+                'This account uses Google sign-in. Connect to the internet '
+                'and use "Continue with Google" (or fingerprint unlock).';
+          });
+          return;
+        }
+        // C3: rate-limit offline password attempts; wipe the local
+        // credential on sustained failures (possible brute force).
+        if (OfflineLoginGuard.isLockedOut(email)) {
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _errorMessage = 'Too many attempts. Try again later.';
+          });
           return;
         }
         final storedHash = localUser['password'] as String;
+        final storedSalt = (localUser['password_salt'] as String?) ?? '';
         if (storedHash.isNotEmpty &&
-            storedHash == SessionManager.hashPassword(password)) {
+            storedSalt.isNotEmpty &&
+            PasswordHasher.verify(password, storedSalt, storedHash)) {
+          OfflineLoginGuard.clearFailures(email);
           await SessionManager.saveSession(
             uid: localUser['local_id'] as String,
             email: email,
@@ -285,6 +308,19 @@ class _LoginPageState extends State<LoginPage> {
           setState(() => _isLoading = false);
           _goToDashboard(isOnline: false);
           return;
+        }
+        final shouldWipe = OfflineLoginGuard.recordFailure(email);
+        if (shouldWipe) {
+          try {
+            await dao.delete(localUser['local_id'] as String);
+            await SessionManager.dropStashedPassword(
+                localUser['local_id'] as String);
+          } catch (e, stack) {
+            if (kDebugMode) {
+              debugPrint('[Login] offline wipe failed: $e | $stack');
+            }
+          }
+          OfflineLoginGuard.clearFailures(email);
         }
       }
 } catch (e, stack) {
@@ -673,9 +709,10 @@ class _LoginForm extends StatelessWidget {
   Widget build(BuildContext context) {
     return Form(
       key: formKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      child: AutofillGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           const SizedBox(height: 60),
           if (!AppConfig.googleConfigured)
             _GoogleConfigBanner(
@@ -713,6 +750,7 @@ class _LoginForm extends StatelessWidget {
           SystemKeyboardTextFormField(
             controller: emailController,
             keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.email],
             style: TextStyle(color: colors.text),
             validator: AuthService.validateEmail,
             decoration: InputDecoration(
@@ -750,6 +788,7 @@ class _LoginForm extends StatelessWidget {
             obscureText: !showPassword,
             autocorrect: false,
             enableSuggestions: false,
+            autofillHints: const [AutofillHints.password],
             style: TextStyle(color: colors.text),
             validator: AuthService.validatePassword,
             decoration: InputDecoration(
@@ -922,10 +961,9 @@ class _LoginForm extends StatelessWidget {
               ),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );  
-
-    
   }
 }

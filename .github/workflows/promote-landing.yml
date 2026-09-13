@@ -86,6 +86,17 @@ jobs:
           echo "SRC_APK=${SRC}" >> "$GITHUB_ENV"
           ls -lh "$SRC"
 
+      - name: Guard nogoogle not promoted to stable (H9)
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          SRC="${{ env.SRC_APK }}"
+          if echo "$SRC" | grep -q "\-nogoogle\.apk$"; then
+            echo "::error::Refusing to promote -nogoogle artifact to stable ${{ env.STABLE_ASSET }} (H9). Main builds must have GOOGLE_SERVER_CLIENT_ID. This promotion is blocked."
+            echo "Promote landing refuses -nogoogle for stable asset — fix GOOGLE_SERVER_CLIENT_ID on main and rebuild."
+            exit 1
+          fi
+          echo "Promote guard passed — SRC is not nogoogle: $SRC"
+
       - name: Prepare stable + dated assets
         if: steps.guard.outputs.skip != 'true'
         run: |

@@ -1,4 +1,4 @@
-// ignore_for_file: empty_catches
+import 'package:flutter/foundation.dart';
 import '../data/local/local_chat_dao.dart';
 import '../data/models/chat_session_model.dart';
 import '../data/remote/supabase_chat_service.dart';
@@ -35,8 +35,11 @@ class ChatRepository {
       }
       final list = merged.values.toList()
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      if (kDebugMode) debugPrint('[ChatRepository] getChatsForUser merged ${list.length}');
       return list;
-    } catch (e) {}
+    } catch (e, stack) {
+      if (kDebugMode) debugPrint('[ChatRepository] getChatsForUser remote failed: $e | $stack');
+    }
     return local;
   }
 
@@ -51,7 +54,10 @@ class ChatRepository {
       try {
         await SupabaseChatService.saveChat(uid, chat);
         await _localChatDao.update(chat.copyWith(isSynced: true));
-      } catch (e) {}
+        if (kDebugMode) debugPrint('[ChatRepository] createChat ${chat.id} synced');
+      } catch (e, stack) {
+        if (kDebugMode) debugPrint('[ChatRepository] createChat ${chat.id} failed keeps is_synced=0: $e | $stack');
+      }
     }
   }
 
@@ -62,7 +68,10 @@ class ChatRepository {
       try {
         await SupabaseChatService.saveChat(uid, chat);
         await _localChatDao.update(chat.copyWith(isSynced: true));
-      } catch (e) {}
+        if (kDebugMode) debugPrint('[ChatRepository] updateChat ${chat.id} synced');
+      } catch (e, stack) {
+        if (kDebugMode) debugPrint('[ChatRepository] updateChat ${chat.id} failed: $e | $stack');
+      }
     }
   }
 
@@ -73,7 +82,10 @@ class ChatRepository {
       try {
         await SupabaseChatService.deleteChat(uid, chatId);
         await _localChatDao.hardDelete(chatId);
-      } catch (e) {}
+        if (kDebugMode) debugPrint('[ChatRepository] deleteChat $chatId synced');
+      } catch (e, stack) {
+        if (kDebugMode) debugPrint('[ChatRepository] deleteChat $chatId failed: $e | $stack');
+      }
     }
   }
 

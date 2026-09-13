@@ -77,3 +77,23 @@ Native Google sign-in shows an instant "cancelled" sheet when the SHA-1 /
 OAuth / Supabase config mismatches. Full runbook (package
 `com.agenta.AgentA`, keytool commands, Cloud Console + Supabase steps, adb
 logcat diagnosis, signing debt note): [docs/google-signin-setup.md](docs/google-signin-setup.md).
+
+---
+
+## 5. Backend, secrets & release checks
+
+- Secrets: `--dart-define` at build time (CI), `.env` local-dev fallback
+  only — never bundled, never committed. Rotation: update the Actions
+  secret, rebuild. Details: [docs/backend-rls.md](docs/backend-rls.md).
+- RLS: `supabase/migrations/0001_rls.sql` (`auth.uid()` policies).
+- Release signing: `android/key.properties` from CI secrets (see
+  `android/key.properties.example`).
+
+## 6. Verifying the public APK URL (L1)
+
+Same probe the promote workflow uses (`curl -w` status-code form):
+
+```bash
+CODE="$(curl -sSL -o /dev/null -w '%{http_code}' -f "https://github.com/Shuash11/AgentA-landing/releases/latest/download/AgentA.apk")"
+test "$CODE" = "200"
+```
