@@ -3,10 +3,7 @@ import 'package:aiproject/core/config/app_config.dart';
 import 'package:aiproject/services/auth/auth_service.dart';
 import 'package:aiproject/services/auth/password_hasher.dart';
 import 'package:aiproject/services/auth/recovery_code_hasher.dart';
-import 'package:aiproject/core/utils/auth_retry.dart';
-import 'dart:io';
-import 'dart:async';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:aiproject/services/auth/offline_login_guard.dart';
 
 void main() {
   group('AppConfig trim/validate (M21)', () {
@@ -95,24 +92,34 @@ void main() {
     });
   });
 
-  group('AuthRetryPolicy substring-free (H10)', () {
-    test('SocketException is retryable', () {
-      expect(AuthRetryPolicy.isRetryable(const SocketException('failed')), true);
+  group('OfflineLoginGuard (manual sign-in safety, C3)', () {
+    setUp(OfflineLoginGuard.resetForTest);
+
+    test('locks out after maxAttempts failures (case-insensitive email)', () {
+      for (var i = 0; i < OfflineLoginGuard.maxAttempts; i++) {
+        expect(OfflineLoginGuard.isLockedOut('User@Example.com'), false);
+        expect(OfflineLoginGuard.recordFailure('user@example.com'), false);
+      }
+      // Same address, different casing → still locked.
+      expect(OfflineLoginGuard.isLockedOut('USER@EXAMPLE.COM'), true);
     });
-    test('TimeoutException is retryable', () {
-      expect(AuthRetryPolicy.isRetryable(TimeoutException('t')), true);
+
+    test('clearFailures resets counter and lockout', () {
+      for (var i = 0; i < OfflineLoginGuard.maxAttempts; i++) {
+        OfflineLoginGuard.recordFailure('a@b.com');
+      }
+      expect(OfflineLoginGuard.isLockedOut('a@b.com'), true);
+      OfflineLoginGuard.clearFailures('a@b.com');
+      expect(OfflineLoginGuard.isLockedOut('a@b.com'), false);
+      expect(OfflineLoginGuard.failureCountForTest('a@b.com'), 0);
     });
-    test('AuthException 503 is retryable', () {
-      const e = AuthException('server error', statusCode: '503');
-      expect(AuthRetryPolicy.isRetryable(e), true);
-    });
-    test('AuthException 400 is not retryable', () {
-      const e = AuthException('bad request', statusCode: '400');
-      expect(AuthRetryPolicy.isRetryable(e), false);
-    });
-    test('Generic exception not retryable', () {
-      expect(AuthRetryPolicy.isRetryable(Exception('network')), false);
-      expect(AuthRetryPolicy.isRetryable(Exception('socket')), false);
+
+    test('signals wipe after maxFailuresBeforeWipe', () {
+      var wipe = false;
+      for (var i = 0; i < OfflineLoginGuard.maxFailuresBeforeWipe; i++) {
+        wipe = OfflineLoginGuard.recordFailure('wipe@example.com');
+      }
+      expect(wipe, true);
     });
   });
 }
