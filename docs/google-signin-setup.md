@@ -122,7 +122,7 @@ Then tap Google sign-in once and read the burst:
 |---|---|
 | `User canceled` / `canceled by user` with no exception code | True user-cancel. No config fix needed. |
 | `ApiException: 10` (`DEVELOPER_ERROR`) | SHA-1 + package not registered, or wrong GCP project. Recheck Sections 2-3. |
-| `ApiException: [16]` / `CANCELED` right after `reauth` or `CredentialManager` request | Config-cancel: nonce / serverClientId / Supabase provider mismatch. Check Web vs Android client confusion and Skip-nonce setting. |
+| `ApiException: [16]` / `CANCELED` right after `reauth` or `CredentialManager` request | Config-cancel. First check the **APK signing key**: a debug-fallback CI build has a different random SHA-1 every run, so no OAuth Android client can match it (see Section 7). Otherwise nonce / serverClientId / Supabase provider mismatch — check Web vs Android client confusion and Skip-nonce setting. |
 | `redirect_uri_mismatch` or `invalid_client` | Supabase has the wrong Web ID/secret. Recheck Section 4. |
 | Nothing at all in logcat | Button never fired (missing `GOOGLE_SERVER_CLIENT_ID` at build time — app reports "not configured"). Check CI secret and `.env`. |
 
@@ -135,29 +135,63 @@ A correctly configured app still fails on a bad device image. Use:
 - Updated **Chrome** (Custom Tabs handle the OAuth fallback) and updated Play Services.
 - Android 8+ (`minSdk 26`) with network access to `accounts.google.com`.
 
-## 7. Signing strategy
+## 7. Signing strategy (CI)
 
-`android/app/build.gradle` currently signs release builds with
-`signingConfigs.debug` (lines 30-34) so `flutter run --release` works
-without a keystore. Consequences:
+`android/app/build.gradle` signs release builds with
+`signingConfigs.release` (from `android/key.properties`) and falls back to
+`signingConfigs.debug` only when `key.properties` is absent.
 
-- Every machine/CI runner has a **different** debug key → fingerprint churn
-  and recurring "cancelled" bugs.
-- Play will reject debug-signed uploads; Play App Signing cannot fix a
-  debug-signed AAB after the fact.
+CI (`.github/workflows/build-apk.yml`) restores the release keystore from
+these repository secrets:
 
-Path forward (owned by Android-signing agents — do not change signing here):
+| Secret | Purpose |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | base64 of the release `.jks`/`.keystore` |
+| `ANDROID_KEYSTORE_PASSWORD` | store password |
+| `ANDROID_KEY_ALIAS` | key alias inside the keystore |
+| `ANDROID_KEY_PASSWORD` | key password (PKCS12: same as store password) |
 
-1. Generate one release keystore, store it as CI secrets.
-2. Add a `release` signingConfig wired to those secrets.
-3. Register its SHA-1 (plus Play signing/upload SHAs) per Section 2.
-4. Stop shipping debug-signed release APKs.
+### Why the keystore is mandatory, not optional
+
+Without it, CI signs with the runner's **debug** key, and GitHub generates a
+**new random debug keystore on every run**. That means:
+
+- Google Sign-In always fails with `[16] Account reauth failed` — no OAuth
+  Android client SHA-1 can ever match a per-build fingerprint.
+- APK updates are rejected (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`), so users
+  must uninstall/reinstall for every release.
+
+The workflow therefore **fails the build** when Google sign-in is configured
+(`GOOGLE_AUTH_STATUS=ok`) but no release keystore is present.
+
+### Getting the fingerprint to register
+
+Every build prints the APK's signing certificate into the run summary
+(`Report APK signing fingerprint (C4)` step) and as a job notice:
+
+```
+Signer #1 certificate SHA-1 digest: aa:bb:...
+Signer #1 certificate SHA-256 digest: ...
+```
+
+Register that SHA-1 (Section 3) as an **Android** OAuth client for
+`com.agenta.AgentA`. Because the keystore is stable, this is a one-time step.
+
+Locally:
+
+```bash
+keytool -list -v -keystore /path/to/release.jks -alias <alias> | grep SHA1
+```
+
+> Keep the keystore file and its passwords backed up. If they are lost you
+> cannot publish updates for already-installed apps.
 
 ---
 
 ## Quick checklist (copy into PRs)
 
 - [ ] `com.agenta.AgentA` SHAs registered: local / CI / release / Play signing / Play upload
+- [ ] CI signed with the stable release keystore (`ANDROID_KEYSTORE_*` secrets) — its SHA-1 comes from the build summary, not a guess
 - [ ] Web client ID used for `GOOGLE_SERVER_CLIENT_ID` (ends `.apps.googleusercontent.com`)
 - [ ] Supabase → Google provider enabled, Web ID + secret set, Skip nonce ON
 - [ ] Tested on Play Services image with updated Chrome

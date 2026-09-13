@@ -115,13 +115,24 @@ jobs:
             echo "RELEASE_SIGNING=keystore" >> "$GITHUB_ENV"
           else
             echo "::warning::No ANDROID_KEYSTORE_BASE64 secret - release will fall back to debug keys (local only). Configure the keystore for store builds. See docs/backend-rls.md."
+            echo "::notice::Google Sign-In requires a STABLE signing key: every debug-fallback run generates a new key, so no OAuth Android client SHA-1 can ever match."
             echo "RELEASE_SIGNING=debug-fallback" >> "$GITHUB_ENV"
           fi
 
       - name: Assert release signing (C4)
         run: |
-          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${RELEASE_SIGNING:-debug-fallback}" != "keystore" ]; then
-            echo "::warning::main build without release keystore (debug fallback). Tag/release builds require the keystore."
+          if [ "${RELEASE_SIGNING:-debug-fallback}" != "keystore" ]; then
+            # A debug-fallback build gets a NEW random debug key on every run.
+            # That breaks Google Sign-In (no OAuth Android client can match a
+            # per-build SHA-1 -> "[16] Account reauth failed") and makes APK
+            # updates impossible (signature mismatch). Never ship that.
+            if [ "${GOOGLE_AUTH_STATUS:-missing}" = "ok" ]; then
+              echo "::error::Google sign-in is configured, but no release keystore is set. Debug-fallback builds are signed with a random key per run: Google Sign-In fails with '[16] Account reauth failed' and APK updates are rejected. Add ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD secrets (see docs/google-signin-setup.md)."
+              exit 1
+            fi
+            if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+              echo "::warning::main build without release keystore (debug fallback). Tag/release builds require the keystore."
+            fi
           fi
           if [[ "${{ github.ref }}" == refs/tags/v* ]] && [ "${RELEASE_SIGNING:-debug-fallback}" != "keystore" ]; then
             echo "::error::Tag builds must use a real release keystore (C4). Add ANDROID_KEYSTORE_* secrets."
@@ -213,6 +224,33 @@ jobs:
           fi
           cp build/app/outputs/flutter-apk/app-release.apk "dist/${NAME}"
           echo "APK_NAME=${NAME}" >> "$GITHUB_ENV"
+
+      - name: Report APK signing fingerprint (C4)
+        run: |
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          BT="$(ls -d "$SDK"/build-tools/* 2>/dev/null | sort -V | tail -1)"
+          {
+            echo "## APK signing certificate"
+            echo ""
+            echo '```'
+            if [ -n "$BT" ] && [ -x "$BT/apksigner" ]; then
+              "$BT/apksigner" verify --print-certs "$APK" | grep -Ei 'Signer #|certificate SHA-1 digest|certificate SHA-256 digest'
+            else
+              keytool -printcert -jarfile "$APK" | grep -E 'SHA1:|SHA256:'
+            fi
+            echo '```'
+            echo "Register this SHA-1 as an **Android** OAuth client for package \`com.agenta.AgentA\`"
+            echo "(Google Cloud Console > Credentials > Create OAuth client ID > Android). Otherwise"
+            echo "Google Sign-In fails with \`[16] Account reauth failed\` because the app's signing"
+            echo "key is not authorized. Signing uses the ANDROID_KEYSTORE_* secrets, so this"
+            echo "fingerprint is now stable across builds."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$BT" ] && [ -x "$BT/apksigner" ]; then
+            "$BT/apksigner" verify --print-certs "$APK" \
+              | grep -Ei 'certificate SHA-1 digest|certificate SHA-256 digest' \
+              | while read -r line; do echo "::notice::$line"; done
+          fi
 
       - uses: actions/upload-artifact@v4
         with:

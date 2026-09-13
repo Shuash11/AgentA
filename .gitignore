@@ -67,3 +67,7 @@ check_done.txt
 pubget_out.txt
 analyze_out*.txt
 analyze_err.txt
+val_out.txt
+val_done.txt
+watch_out.txt
+watch_done.txt

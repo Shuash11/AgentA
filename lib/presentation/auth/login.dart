@@ -429,6 +429,12 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
       switch (e.code) {
+        case 'reauth_failed':
+          return _GoogleSignInPresentation(
+            message:
+                'Google rejected this build\'s sign-in — signing key not authorized. See details.',
+            failure: e,
+          );
         case 'not_configured':
         case 'init_failed':
         case 'no_id_token':

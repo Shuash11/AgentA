@@ -217,6 +217,22 @@ class AuthService {
     }
   }
 
+  /// Guards the one-shot recovery retry in [_authenticateWithGoogle].
+  static bool _didRetryGoogleAuth = false;
+
+  /// Google Play Services aborts the Credential Manager flow with a native
+  /// "[16] Account reauth failed." cancellation when the cached Google
+  /// authorization no longer matches this build's signing certificate (e.g.
+  /// a differently-signed APK) or when the certificate is not registered for
+  /// the app in Google Cloud Console.
+  static bool _isReauthFailure(String detail) {
+    final d = detail.toLowerCase();
+    return d.contains('reauth failed') ||
+        d.contains('reauth') ||
+        d.contains('[16]') ||
+        d.contains('account reauth');
+  }
+
   static Future<GoogleSignInAccount> _authenticateWithGoogle() async {
     _log('[AuthService] authenticate() start');
     try {
@@ -227,12 +243,41 @@ class AuthService {
       final codeName = e.code.name;
       final detail = e.description ?? codeName;
       _log('[AuthService] authenticate() GoogleSignInException: code=$codeName detail=$detail');
+
+      final isReauth = e.code == GoogleSignInExceptionCode.canceled &&
+          _isReauthFailure(detail);
+
+      // Recovery: clear the cached Google credential state and retry once.
+      // A stale authorization from an earlier (differently-signed) install
+      // otherwise keeps failing this way even after configuration is fixed.
+      if (isReauth && !_didRetryGoogleAuth) {
+        _didRetryGoogleAuth = true;
+        _log('[AuthService] reauth failure — clearing cached Google state and retrying once');
+        try {
+          await GoogleSignIn.instance.signOut();
+        } catch (signOutError) {
+          _log('[AuthService] signOut before retry failed (ignored): $signOutError');
+        }
+        try {
+          return await _authenticateWithGoogle();
+        } finally {
+          _didRetryGoogleAuth = false;
+        }
+      }
+
       if (e.code == GoogleSignInExceptionCode.canceled) {
         throw GoogleSignInFailure(
-          code: codeName,
+          code: isReauth ? 'reauth_failed' : codeName,
           detail: detail,
-          hint:
-              'Google sign-in canceled ($detail). If you did not cancel, this usually means SHA-1 / OAuth client or Supabase Google provider misconfiguration. Verify SHA-1 in Firebase/Google Cloud Console and that Supabase Dashboard > Auth > Providers > Google is enabled with correct Web Client ID/Secret.',
+          hint: isReauth
+              ? 'Google rejected the saved sign-in (native: $detail). This build\'s signing '
+                  'certificate is not authorized for Google Sign-In, or the cached authorization '
+                  'is stale. Fix: register the APK signing SHA-1 in Google Cloud Console as an '
+                  'ANDROID OAuth client for package com.agenta.AgentA (each CI build prints the '
+                  'exact fingerprint in its job summary; see docs/google-signin-setup.md), then '
+                  'retry. Also confirm GOOGLE_SERVER_CLIENT_ID is the Web client ID from the same '
+                  'project that Supabase Auth > Providers > Google uses.'
+              : 'Google sign-in canceled ($detail). If you did not cancel, this usually means SHA-1 / OAuth client or Supabase Google provider misconfiguration. Verify SHA-1 in Firebase/Google Cloud Console and that Supabase Dashboard > Auth > Providers > Google is enabled with correct Web Client ID/Secret.',
         );
       }
       throw GoogleSignInFailure(
