@@ -71,7 +71,9 @@ class _RegisterPageState extends State<RegisterPage> {  final _formKey = GlobalK
       '${_firstNameController.text} ${_lastNameController.text}',
     );
     final recoveryCode = _generateRecoveryCode();
-    final email = _emailController.text.trim();
+    // Normalize once: Supabase lowercases addresses, and the local row must
+    // match on offline sign-in regardless of how the user typed it.
+    final email = AuthService.normalizeEmail(_emailController.text);
     final password = _passwordController.text;
 
     final localUserDao = LocalUserDao();

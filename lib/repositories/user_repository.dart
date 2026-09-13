@@ -23,6 +23,19 @@ class UserRepository {
     });
   }
 
+  /// Claim path for accounts first created offline: the local row only ever
+  /// held the recovery-code *hash* (H8), so store that hash verbatim instead
+  /// of hashing again — otherwise the code the user saved would stop matching.
+  static Future<void> createUserProfileWithRecoveryHash(
+      String uid, String email, String displayName, String recoveryCodeHash) async {
+    await _db.from('profiles').upsert({
+      'id': uid,
+      'email': email,
+      'display_name': displayName,
+      'recovery_code': recoveryCodeHash,
+    });
+  }
+
   static Future<UserProfileModel?> getUserProfile(String uid) async {
     final row =
         await _db.from('profiles').select().eq('id', uid).maybeSingle();

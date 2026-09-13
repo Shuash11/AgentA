@@ -61,8 +61,11 @@ class LocalUserDao {
 
   Future<Map<String, dynamic>?> getPendingSignupByEmail(String email) async {
     final db = await _dbHelper.database;
+    // Emails are compared case-insensitively: Supabase lowercases addresses,
+    // but a device may hold rows written with the user's original casing.
     final rows = await db.query('pending_signups',
-        where: 'email = ? AND is_synced = 0', whereArgs: [email]);
+        where: 'email = ? COLLATE NOCASE AND is_synced = 0',
+        whereArgs: [email]);
     if (rows.isEmpty) return null;
     return rows.first;
   }
@@ -70,7 +73,7 @@ class LocalUserDao {
   Future<Map<String, dynamic>?> getUserByEmail(String email) async {
     final db = await _dbHelper.database;
     final rows = await db.query('pending_signups',
-        where: 'email = ?', whereArgs: [email]);
+        where: 'email = ? COLLATE NOCASE', whereArgs: [email]);
     if (rows.isEmpty) return null;
     return rows.first;
   }
@@ -80,7 +83,7 @@ class LocalUserDao {
     await db.update(
       'pending_signups',
       {'is_synced': 1, 'local_id': supabaseUid},
-      where: 'email = ?',
+      where: 'email = ? COLLATE NOCASE',
       whereArgs: [email],
     );
   }

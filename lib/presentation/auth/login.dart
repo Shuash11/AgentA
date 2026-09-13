@@ -11,6 +11,8 @@ import '../../services/auth/password_hasher.dart';
 import '../../services/auth/session_manager.dart';
 import '../../repositories/user_repository.dart';
 import '../../data/local/local_user_dao.dart';
+import '../../data/local/local_chat_dao.dart';
+import '../../data/local/local_message_dao.dart';
 import '../shared/app_shell.dart';
 import '../shared/system_keyboard_text_field.dart';
 import 'register.dart';
@@ -169,7 +171,9 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    final email = _emailController.text.trim();
+    // Normalize once so local lookups match regardless of typed casing
+    // (Supabase lowercases addresses server-side anyway).
+    final email = AuthService.normalizeEmail(_emailController.text);
     final password = _passwordController.text;
 
     setState(() {
@@ -226,29 +230,42 @@ class _LoginPageState extends State<LoginPage> {
         isOnline = false;
         if (kDebugMode) debugPrint('[Login] retryable error, falling back offline');
       } else {
-        // Auth error (wrong password, user not found, etc.) - show immediately
-        final errorString = e.toString().toLowerCase();
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            String errorMsg = 'Login failed';
-            if (errorString.contains('user-not-found') ||
-                errorString.contains('invalid-email') ||
-                errorString.contains('invalid login credentials')) {
-              errorMsg = 'Invalid email or password';
-            } else if (errorString.contains('wrong-password') ||
-                errorString.contains('invalid-credential')) {
-              errorMsg = 'Invalid password';
-            } else if (errorString.contains('too-many-requests') ||
-                errorString.contains('rate limit')) {
-              errorMsg = 'Too many attempts. Try again later.';
-            } else if (errorString.contains('email not confirmed')) {
-              errorMsg = 'Please confirm your email first';
-            }
-            _errorMessage = errorMsg;
-          });
+        // Auth error (wrong password, user not found, etc.).
+        // Accounts first created offline have no Supabase user yet, so their
+        // first online sign-in fails with invalid credentials. If the typed
+        // password proves ownership of the local row, create the account
+        // online now instead of dead-ending the user.
+        final claimed = await _tryClaimOfflineAccount(email, password);
+        if (claimed != null) {
+          isOnline = true;
+          onlineUid = claimed.uid;
+          if (kDebugMode) {
+            debugPrint('[Login] offline account claimed online | uid=${claimed.uid}');
+          }
+        } else {
+          final errorString = e.toString().toLowerCase();
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+              String errorMsg = 'Login failed';
+              if (errorString.contains('user-not-found') ||
+                  errorString.contains('invalid-email') ||
+                  errorString.contains('invalid login credentials')) {
+                errorMsg = 'Invalid email or password';
+              } else if (errorString.contains('wrong-password') ||
+                  errorString.contains('invalid-credential')) {
+                errorMsg = 'Invalid password';
+              } else if (errorString.contains('too-many-requests') ||
+                  errorString.contains('rate limit')) {
+                errorMsg = 'Too many attempts. Try again later.';
+              } else if (errorString.contains('email not confirmed')) {
+                errorMsg = 'Please confirm your email first';
+              }
+              _errorMessage = errorMsg;
+            });
+          }
+          return;
         }
-        return;
       }
     }
 
@@ -334,6 +351,84 @@ class _LoginPageState extends State<LoginPage> {
       _isLoading = false;
       _errorMessage = 'Invalid email or password';
     });
+  }
+
+  /// Claims an account that was first created offline (no Supabase user yet).
+  ///
+  /// Called after an online sign-in failed. Ownership is proven against the
+  /// local salted hash — the same proof the offline sign-in path uses — and
+  /// only then is the account registered online. Returns the credential, or
+  /// null when this is not an offline-created account or proof fails.
+  Future<AppAuthCredential?> _tryClaimOfflineAccount(
+      String email, String password) async {
+    try {
+      final dao = LocalUserDao();
+      final localUser = await dao.getUserByEmail(email);
+      if (localUser == null) return null;
+      if (((localUser['provider'] as String?) ?? 'password') != 'password') {
+        return null;
+      }
+      if (((localUser['is_synced'] as int?) ?? 0) == 1) return null;
+
+      final storedHash = (localUser['password'] as String?) ?? '';
+      final storedSalt = (localUser['password_salt'] as String?) ?? '';
+      if (storedHash.isEmpty ||
+          storedSalt.isEmpty ||
+          !PasswordHasher.verify(password, storedSalt, storedHash)) {
+        if (kDebugMode) {
+          debugPrint('[Login] claim skipped — local proof failed');
+        }
+        return null;
+      }
+
+      final localId = localUser['local_id'] as String;
+      final displayName = ((localUser['display_name'] as String?) ?? '').trim();
+      final name = displayName.isEmpty ? 'User' : displayName;
+      final recoveryHash = (localUser['recovery_code'] as String?) ?? '';
+
+      final cred = await AuthService.register(email, password, name);
+      if (cred.uid.isEmpty) return null;
+
+      try {
+        await UserRepository.createUserProfileWithRecoveryHash(
+            cred.uid, email, name, recoveryHash);
+      } catch (e) {
+        // Profile is best-effort; the account itself is created.
+        if (kDebugMode) debugPrint('[Login] claim profile upsert failed: $e');
+      }
+
+      await dao.markAsSynced(localId, cred.uid);
+
+      // Local chats/messages are keyed by user id — carry them to the real
+      // uid so nothing becomes invisible after the claim.
+      try {
+        await LocalChatDao.instance.migrateUserId(localId, cred.uid);
+        await LocalMessageDao.instance.migrateUserId(localId, cred.uid);
+      } catch (e) {
+        if (kDebugMode) debugPrint('[Login] claim local migrate failed: $e');
+      }
+
+      final salt = PasswordHasher.generateSalt();
+      await dao.savePendingSignup(
+        localId: cred.uid,
+        email: email,
+        password: PasswordHasher.hashWithSalt(password, salt),
+        displayName: name,
+        recoveryCode: recoveryHash,
+        isSynced: true,
+        provider: 'password',
+        passwordSalt: salt,
+      );
+      await SessionManager.saveSession(
+        uid: cred.uid,
+        email: email,
+        provider: 'password',
+      );
+      return cred;
+    } catch (e, stack) {
+      if (kDebugMode) debugPrint('[Login] claim failed: $e | $stack');
+      return null;
+    }
   }
 
   Future<void> _signInWithGoogle() async {
