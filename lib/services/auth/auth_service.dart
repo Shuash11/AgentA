@@ -217,8 +217,12 @@ class AuthService {
     }
   }
 
-  /// Guards the one-shot recovery retry in [_authenticateWithGoogle].
-  static bool _didRetryGoogleAuth = false;
+  /// Guards recovery behavior in [_authenticateWithGoogle].
+  ///
+  /// The [16] "Account reauth failed." native cancellation is surfaced
+  /// immediately (no auto-retry double account picker); the stale cached
+  /// credential is cleared via signOut() so the next manual attempt starts
+  /// clean.
 
   /// Google Play Services aborts the Credential Manager flow with a native
   /// "[16] Account reauth failed." cancellation when the cached Google
@@ -247,21 +251,18 @@ class AuthService {
       final isReauth = e.code == GoogleSignInExceptionCode.canceled &&
           _isReauthFailure(detail);
 
-      // Recovery: clear the cached Google credential state and retry once.
-      // A stale authorization from an earlier (differently-signed) install
-      // otherwise keeps failing this way even after configuration is fixed.
-      if (isReauth && !_didRetryGoogleAuth) {
-        _didRetryGoogleAuth = true;
-        _log('[AuthService] reauth failure — clearing cached Google state and retrying once');
+      // Recovery: clear the cached Google credential state so the NEXT manual
+      // attempt starts clean. We deliberately do NOT auto-retry here: the
+      // [16] reauth failure happens AFTER the user picks an account, so an
+      // automatic retry would re-open the account picker (double prompt).
+      // Manual retry after this signOut() is the documented workaround for
+      // stale cached authorizations.
+      if (isReauth) {
+        _log('[AuthService] reauth failure — clearing cached Google state for next manual attempt');
         try {
           await GoogleSignIn.instance.signOut();
         } catch (signOutError) {
-          _log('[AuthService] signOut before retry failed (ignored): $signOutError');
-        }
-        try {
-          return await _authenticateWithGoogle();
-        } finally {
-          _didRetryGoogleAuth = false;
+          _log('[AuthService] signOut after reauth failure failed (ignored): $signOutError');
         }
       }
 
