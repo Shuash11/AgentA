@@ -32,6 +32,12 @@ name: Promote to Landing (latest)
 permissions:
   actions: read
 
+# Serialize promotions to the rolling `latest` target so rapid pushes queue
+# instead of interleaving (cancel-in-progress: false = queue, not cancel).
+concurrency:
+  group: promote-landing
+  cancel-in-progress: false
+
 env:
   LANDING_REPO: Shuash11/AgentA-landing
   ROLLING_TAG: latest
@@ -122,6 +128,7 @@ jobs:
 
       - name: Verify public download URL
         run: |
+          set -euo pipefail
           curl -L -I -f "https://github.com/${{ env.LANDING_REPO }}/releases/latest/download/${{ env.STABLE_ASSET }}" | head -n 20
 
       - name: Checkout landing repo
