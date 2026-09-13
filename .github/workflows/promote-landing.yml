@@ -136,7 +136,8 @@ jobs:
         if: steps.guard.outputs.skip != 'true'
         run: |
           set -euo pipefail
-          curl -L -I -f "https://github.com/${{ env.LANDING_REPO }}/releases/latest/download/${{ env.STABLE_ASSET }}" | head -n 20
+          CODE="$(curl -sSL -o /dev/null -w '%{http_code}' -f "https://github.com/${{ env.LANDING_REPO }}/releases/latest/download/${{ env.STABLE_ASSET }}")"
+          test "$CODE" = "200"
 
       - name: Checkout landing repo
         if: steps.guard.outputs.skip != 'true'
