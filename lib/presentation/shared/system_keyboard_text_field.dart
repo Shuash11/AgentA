@@ -58,6 +58,7 @@ class SystemKeyboardTextFormField extends StatelessWidget {
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final TextCapitalization textCapitalization;
+  final int? maxLength;
   final bool obscureText;
   final bool autocorrect;
   final bool enableSuggestions;
@@ -75,6 +76,7 @@ class SystemKeyboardTextFormField extends StatelessWidget {
     this.keyboardType,
     this.textInputAction,
     this.textCapitalization = TextCapitalization.none,
+    this.maxLength,
     this.obscureText = false,
     this.autocorrect = true,
     this.enableSuggestions = true,
@@ -95,6 +97,7 @@ class SystemKeyboardTextFormField extends StatelessWidget {
       keyboardAppearance: MediaQuery.platformBrightnessOf(context),
       textInputAction: textInputAction,
       textCapitalization: textCapitalization,
+      maxLength: maxLength,
       obscureText: obscureText,
       autocorrect: autocorrect,
       enableSuggestions: enableSuggestions,

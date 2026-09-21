@@ -449,17 +449,44 @@ class AuthService {
     );
   }
 
-  static Future<void> sendPasswordResetEmail(String email) async {
-    _guardBackendReady('sendPasswordResetEmail');
-    // M14: deep-link redirect so the reset flow returns to the app.
-    // Requires the com.agenta.agenta://reset intent-filter in
-    // AndroidManifest.xml + Supabase Dashboard > Auth > URL Configuration
-    // (Additional Redirect URLs must allow com.agenta.agenta://reset).
-    await _auth.resetPasswordForEmail(
-      email.trim(),
-      // gotrue >=2.x names this `redirectTo` (older `emailRedirectTo`).
-      redirectTo: 'com.agenta.agenta://reset',
+  // ── Password reset via Gmail email OTP ─────────────────────────────
+  //
+  // TODO(Supabase Dashboard config): OTP delivery, expiry, and rate limits
+  // live in the Supabase Dashboard and cannot be changed from code — the
+  // built-in/default email provider must send the OTP (Auth > Providers >
+  // Email), and redirect/OTP settings are configured under
+  // Dashboard > Authentication > URL Configuration.
+  //
+  // Sends a 6-digit OTP to the user's Gmail inbox (does not create a user).
+  // The user completes the reset in-app via [resetPasswordWithOtp].
+  static Future<void> sendOtpForReset(String email) async {
+    _guardBackendReady('sendOtpForReset');
+    await _auth.signInWithOtp(
+      email: email.trim(),
+      shouldCreateUser: false,
     );
+  }
+
+  /// Verifies the emailed OTP, signs the user in, and sets the new password.
+  ///
+  /// gotrue 2.27.2's [GoTrueClient.verifyOTP] has no `password` parameter, so
+  /// the OTP first establishes the session (email type returns a session for
+  /// the matching user) and the new password is then set via [updatePassword].
+  static Future<void> resetPasswordWithOtp({
+    required String email,
+    required String otp,
+    required String newPassword,
+  }) async {
+    _guardBackendReady('resetPasswordWithOtp');
+    final res = await _auth.verifyOTP(
+      type: OtpType.email,
+      email: email.trim(),
+      token: otp.trim(),
+    );
+    if (res.user == null) {
+      throw const AuthException('OTP verification failed: user is null');
+    }
+    await updatePassword(newPassword);
   }
 
   static Future<AppAuthCredential> reauthenticate(

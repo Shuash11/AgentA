@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/config/app_config.dart';
+import '../../core/utils/connectivity_service.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth/auth_service.dart';
@@ -17,6 +18,19 @@ import '../shared/app_shell.dart';
 import '../shared/system_keyboard_text_field.dart';
 import 'register.dart';
 import 'forgot_password.dart';
+
+/// Result of attempting to claim an offline-created account (Bug 4).
+class _OfflineClaimResult {
+  /// Credential from the successful online re-register
+  /// (null when the claim completed as a plain offline sign-in).
+  final AppAuthCredential? credential;
+
+  /// True when the claim finished as a plain offline sign-in — the session
+  /// was already saved inside the claim and the caller must route offline.
+  final bool offlineSignedIn;
+
+  const _OfflineClaimResult({this.credential, this.offlineSignedIn = false});
+}
 
 /// User-facing result of mapping a Google sign-in error.
 class _GoogleSignInPresentation {
@@ -237,10 +251,18 @@ class _LoginPageState extends State<LoginPage> {
         // online now instead of dead-ending the user.
         final claimed = await _tryClaimOfflineAccount(email, password);
         if (claimed != null) {
+          if (claimed.offlineSignedIn) {
+            // Bug 4: plain offline sign-in completed inside the claim —
+            // route offline instead of returning null → "Login failed".
+            if (!mounted) return;
+            setState(() => _isLoading = false);
+            _goToDashboard(isOnline: false);
+            return;
+          }
           isOnline = true;
-          onlineUid = claimed.uid;
+          onlineUid = claimed.credential?.uid;
           if (kDebugMode) {
-            debugPrint('[Login] offline account claimed online | uid=${claimed.uid}');
+            debugPrint('[Login] offline account claimed online | uid=${claimed.credential?.uid}');
           }
         } else {
           final errorString = e.toString().toLowerCase();
@@ -357,9 +379,9 @@ class _LoginPageState extends State<LoginPage> {
   ///
   /// Called after an online sign-in failed. Ownership is proven against the
   /// local salted hash — the same proof the offline sign-in path uses — and
-  /// only then is the account registered online. Returns the credential, or
-  /// null when this is not an offline-created account or proof fails.
-  Future<AppAuthCredential?> _tryClaimOfflineAccount(
+  /// only then is the account registered online. Returns the result, or null
+  /// when this is not an offline-created account or proof fails.
+  Future<_OfflineClaimResult?> _tryClaimOfflineAccount(
       String email, String password) async {
     try {
       final dao = LocalUserDao();
@@ -385,6 +407,22 @@ class _LoginPageState extends State<LoginPage> {
       final displayName = ((localUser['display_name'] as String?) ?? '').trim();
       final name = displayName.isEmpty ? 'User' : displayName;
       final recoveryHash = (localUser['recovery_code'] as String?) ?? '';
+
+      // Bug 4: check connectivity before the online re-register. When the
+      // device is offline, skip the online attempt entirely and complete a
+      // plain offline sign-in against the locally stored account.
+      final deviceOnline = await ConnectivityService.instance.isOnline();
+      if (!deviceOnline) {
+        if (kDebugMode) {
+          debugPrint('[Login] offline — plain offline sign-in (no online re-register)');
+        }
+        await SessionManager.saveSession(
+          uid: localId,
+          email: email,
+          provider: 'password',
+        );
+        return const _OfflineClaimResult(offlineSignedIn: true);
+      }
 
       final cred = await AuthService.register(email, password, name);
       if (cred.uid.isEmpty) return null;
@@ -424,7 +462,7 @@ class _LoginPageState extends State<LoginPage> {
         email: email,
         provider: 'password',
       );
-      return cred;
+      return _OfflineClaimResult(credential: cred);
     } catch (e, stack) {
       if (kDebugMode) debugPrint('[Login] claim failed: $e | $stack');
       return null;

@@ -14,18 +14,46 @@ class LocalUserDao {
     String provider = 'password',
     String passwordSalt = '',
   }) async {
+    // Finding 7: when the incoming recovery code is empty (e.g. online login
+    // re-saves the local row without a new code), preserve the existing
+    // recovery-code hash so a successful login never overwrites it.
+    var effectiveRecoveryCode = recoveryCode;
+    if (effectiveRecoveryCode.isEmpty) {
+      final existing = await _existingRecoveryCodeHash(localId, email);
+      if (existing != null) effectiveRecoveryCode = existing;
+    }
+
     final db = await _dbHelper.database;
     await db.insert('pending_signups', {
       'local_id': localId,
       'email': email,
       'password': password,
       'display_name': displayName,
-      'recovery_code': recoveryCode,
+      'recovery_code': effectiveRecoveryCode,
       'created_at': DateTime.now().millisecondsSinceEpoch,
       'is_synced': isSynced ? 1 : 0,
       'provider': provider,
       'password_salt': passwordSalt,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Existing recovery-code hash for this account, preferring the row with
+  /// the same [localId]; null when no row holds a non-empty hash.
+  Future<String?> _existingRecoveryCodeHash(String localId, String email) async {
+    final db = await _dbHelper.database;
+    final rows = await db.query(
+      'pending_signups',
+      where: '(local_id = ? OR email = ? COLLATE NOCASE)',
+      whereArgs: [localId, email],
+    );
+    String? fallback;
+    for (final row in rows) {
+      final code = row['recovery_code'] as String?;
+      if (code == null || code.isEmpty) continue;
+      if (row['local_id'] == localId) return code;
+      fallback ??= code;
+    }
+    return fallback;
   }
 
   Future<List<Map<String, dynamic>>> getPendingSignups() async {

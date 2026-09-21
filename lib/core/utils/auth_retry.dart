@@ -30,6 +30,16 @@ class AuthRetryPolicy {
       if (kDebugMode) debugPrint('[AuthRetry] HttpException => retryable: $error');
       return true;
     }
+    if (error is AuthRetryableFetchException) {
+      // Bug 3: gotrue >=2.27 wraps ALL network failures as
+      // AuthRetryableFetchException with statusCode: null. It must always be
+      // treated as retryable, or the offline fallback in register/login is
+      // never reached.
+      if (kDebugMode) {
+        debugPrint('[AuthRetry] AuthRetryableFetchException => retryable');
+      }
+      return true;
+    }
     if (error is AuthException) {
       final code = error.statusCode;
       final isRetryableCode = _isRetryableStatusCode(code);

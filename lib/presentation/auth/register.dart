@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../cubit/theme/theme_cubit.dart';
+import '../../core/utils/connectivity_service.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/auth/password_hasher.dart';
 import '../../services/auth/recovery_code_hasher.dart';
@@ -27,7 +28,8 @@ class RegisterPage extends StatefulWidget {
   State<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _RegisterPageState extends State<RegisterPage> {  final _formKey = GlobalKey<FormState>();
+class _RegisterPageState extends State<RegisterPage> {
+  final _formKey = GlobalKey<FormState>();
   late ThemeColors _colors;
 
   final _firstNameController = TextEditingController();
@@ -78,53 +80,67 @@ class _RegisterPageState extends State<RegisterPage> {  final _formKey = GlobalK
 
     final localUserDao = LocalUserDao();
 
+    // Bug 3: check connectivity before the online attempt — when the device
+    // is offline, go straight to savePendingSignup instead of letting the
+    // request fail with AuthRetryableFetchException.
+    final deviceOnline = await ConnectivityService.instance.isOnline();
+
     bool isOnline = false;
     String? onlineUid;
     bool emailConfirmationPending = false;
 
-    try {
-      final cred = await AuthService.register(email, password, displayName);
-      onlineUid = cred.uid;
-      try {
-        await UserRepository.createUserProfile(
-            cred.uid, email, displayName, recoveryCode);
-        isOnline = true;
-      } catch (_) {
-        emailConfirmationPending = true;
-      }
-    } on AuthException catch (e) {
-      final isRetryable = AuthService.isRetryable(e);
-      if (!isRetryable) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = _friendlyAuthError(e.message);
-        });
-        return;
-      }
-
+    if (!deviceOnline) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Network error. Registering offline...'),
+            content: Text("You're offline. Creating account offline..."),
             duration: Duration(seconds: 2),
           ),
         );
       }
-    } catch (e, stack) {
-      // Fallback — treat as offline only if retryable (network), else still offline but log.
-      final retryable = AuthService.isRetryable(e);
-      if (stack.toString().isNotEmpty && retryable) {
-        // debug only
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(retryable
-                ? 'Network error. Registering offline...'
-                : 'Online registration failed. Registering offline...'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+    } else {
+      try {
+        final cred = await AuthService.register(email, password, displayName);
+        onlineUid = cred.uid;
+        try {
+          await UserRepository.createUserProfile(
+              cred.uid, email, displayName, recoveryCode);
+          isOnline = true;
+        } catch (_) {
+          // Finding 6: signUp succeeded — only the profile write failed.
+          // Keep the dialog states mutually consistent: the account is
+          // online (no offline warning), only the email note is shown.
+          emailConfirmationPending = true;
+          isOnline = true;
+        }
+      } on AuthException catch (e) {
+        final isRetryable = AuthService.isRetryable(e);
+        if (!isRetryable) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = _friendlyAuthError(e.message);
+          });
+          return;
+        }
+
+        // Retryable (network/server) — fall through to savePendingSignup.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Network error. Registering offline...'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Online registration failed. Registering offline...'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
       }
     }
 

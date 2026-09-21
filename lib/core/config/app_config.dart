@@ -50,6 +50,12 @@ class AppConfig {
   static const String groqModel = 'allam-2-7b';
   static const String minimaxModel = 'minimax/minimax-m2.7:free';
 
+  /// Shared English-enforcing rule reused across every AI persona prompt
+  /// (Groq / MiniMax / Gemma) so all chat paths always respond in English.
+  static const String aiEnglishRule =
+      'IMPORTANT: Always respond ONLY in English, regardless of the language '
+      'the user writes in. Never reply in any other language.';
+
   static String get gemmaModelUrl => _withFallback(_dGemmaUrl, 'GEMMA_MODEL_URL').trim();
   static const String gemmaModelFilename = 'gemma-offline.task';
 

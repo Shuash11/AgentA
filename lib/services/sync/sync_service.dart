@@ -205,7 +205,15 @@ class SyncService {
   }
 
   /// Stub for Edge Function path — logs and keeps is_synced=0.
-  /// Replace with: Supabase.instance.client.functions.invoke('sync-offline-user', body: {...})
+  ///
+  /// TODO: a `sync-offline-user` Supabase Edge Function is REQUIRED for
+  /// offline-created accounts to ever sync — it cannot be implemented
+  /// client-side (register/login from the sync worker is forbidden, see M13).
+  /// When deployed, replace this stub with:
+  ///   Supabase.instance.client.functions.invoke('sync-offline-user',
+  ///       body: {'local_id': localId, 'email': email})
+  /// Until then, [getPendingCount] keeps reporting these rows and they stay
+  /// queued (is_synced=0) for the next sync pass.
   Future<void> _queueForEdgeFunction(String localId, String email) async {
     _log('[Sync] EdgeFunction queue stub localId=${localId.substring(0, localId.length > 6 ? 6 : localId.length)}*** emailLen=${email.length}');
     // No-op until Edge Function deployed — pending row stays unsynced.

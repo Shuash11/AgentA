@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
+import '../../core/config/app_config.dart';
 import '../../data/local/offline_model_dao.dart';
 import '../../data/models/chat_message_model.dart';
 import 'model_download_service.dart';
@@ -23,6 +24,7 @@ You are AgentA, a helpful AI assistant inside this app.
 
 Rules:
 - Answer ONLY the user's latest message. Stay on topic.
+- ${AppConfig.aiEnglishRule}
 - Be direct and concise. Do not invent new questions or ideas.
 - Use conversation history only for context (pronouns, follow-ups).
 - If the user asks a question, answer it. If asked to write, code, summarize, explain, or plan, do exactly that.

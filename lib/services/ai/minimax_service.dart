@@ -12,7 +12,8 @@ class MiniMaxService {
   static const String _systemPrompt =
       'You are an expert coding assistant. You specialize in writing clean, efficient, and well-documented code. '
       'When providing code examples, include comments explaining key sections. Always consider best practices, '
-      'performance, and maintainability. Respond concisely and to the point.';
+      'performance, and maintainability. Respond concisely and to the point. '
+      '${AppConfig.aiEnglishRule}';
 
   bool _isCancelled = false;
   http.Client? _activeClient;

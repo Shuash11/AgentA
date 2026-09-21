@@ -9,6 +9,13 @@ import '../../core/config/app_config.dart';
 class GroqService {
   String get _model => AppConfig.groqModel;
   static const Duration _timeout = Duration(seconds: 30);
+  // Shared persona + English rule (Bug 1): allam-2-7b is Arabic-first
+  // bilingual, so a system message is the only thing enforcing English.
+  static const String _systemPrompt =
+      'You are AgentA, a helpful AI assistant inside this app. '
+      "Answer the user's latest message directly and concisely. "
+      'Use valid Markdown when it improves readability. '
+      '${AppConfig.aiEnglishRule}';
   static const int _maxRetries = 3;
   // L19: SDK user-agent — never spoof a browser.
   static const String _userAgent = 'AgentA/1.0.0 (Flutter; Groq)';
@@ -93,6 +100,7 @@ class GroqService {
 
     final recentHistory = _recentHistory(history, newMessage);
     final messages = [
+      {'role': 'system', 'content': _systemPrompt},
       ...recentHistory
           .where((msg) => msg.text.isNotEmpty)
           .map((msg) => {
@@ -185,6 +193,7 @@ class GroqService {
 
     final recentHistory = _recentHistory(history, newMessage);
     final messages = [
+      {'role': 'system', 'content': _systemPrompt},
       ...recentHistory
           .where((msg) => msg.text.isNotEmpty)
           .map((msg) => {
