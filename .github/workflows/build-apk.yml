@@ -50,6 +50,31 @@ jobs:
             exit 1
           }
 
+      # Update-check CI guard: every v* tag must match the version in
+      # pubspec.yaml. The app's update engine (lib/services/update/) compares
+      # GitHub release tags against the running version, so a mismatched tag
+      # would ship a release the app can never detect. Build number (+N) is
+      # not compared (convention: every user-facing release bumps semver).
+      - name: Assert v* tag matches pubspec version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          SEMVER="${TAG#v}"
+          if ! [[ "$SEMVER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '${TAG}' is not strict semver (expected vMAJOR.MINOR.PATCH, e.g. v1.2.0). The update-check engine rejects non-semver tags."
+            exit 1
+          fi
+          PUBSPEC_VERSION="$(grep -m1 -E '^version:' pubspec.yaml | sed -E 's/^version:[[:space:]]*//' | tr -d '"' | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')"
+          if [ -z "$PUBSPEC_VERSION" ]; then
+            echo "::error::Could not read a strict-semver 'version:' from pubspec.yaml."
+            exit 1
+          fi
+          if [ "$SEMVER" != "$PUBSPEC_VERSION" ]; then
+            echo "::error::Tag '${TAG}' (${SEMVER}) does not match pubspec.yaml version (${PUBSPEC_VERSION}). Bump pubspec version to ${SEMVER} or fix the tag. Build number (+N) is not compared."
+            exit 1
+          fi
+          echo "Tag guard OK: ${TAG} == pubspec version ${PUBSPEC_VERSION}"
+
       - name: Validate secrets (no .env file written)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

@@ -17,6 +17,7 @@ import '../repositories/chat_repository.dart';
 import '../repositories/message_repository.dart';
 import 'theme/theme_cubit.dart';
 import 'connectivity/connectivity_cubit.dart';
+import 'update/update_cubit.dart';
 
 class AppProviders extends StatelessWidget {
   final Widget child;
@@ -87,6 +88,9 @@ List<SingleChildWidget> get _serviceProviders => [
         ),
         BlocProvider<ConnectivityCubit>(
           create: (_) => ConnectivityCubit(connectivity),
+        ),
+        BlocProvider<UpdateCubit>(
+          create: (_) => UpdateCubit(),
         ),
       ];
 }

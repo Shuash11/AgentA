@@ -18,6 +18,7 @@ import 'services/ai/pollinations_service.dart';
 import 'services/ai/ai_service.dart';
 import 'services/ai/model_download_service.dart';
 import 'services/sync/sync_service.dart';
+import 'services/update/version_check_service.dart';
 import 'core/utils/connectivity_service.dart';
 import 'core/config/app_config.dart';
 import 'data/local/database_helper.dart';
@@ -25,6 +26,7 @@ import 'repositories/chat_repository.dart';
 import 'repositories/message_repository.dart';
 import 'presentation/auth/login.dart';
 import 'presentation/shared/app_shell.dart';
+import 'presentation/shared/update_dialog_host.dart';
 import 'presentation/ai/download_prompt_screen.dart';
 
 enum AppInitStatus {
@@ -223,6 +225,15 @@ class _AppLoaderState extends State<AppLoader> {
     );
     final chatRepository = ChatRepository();
     final messageRepository = MessageRepository();
+
+    // Update-check engine: init POST-FIRST-FRAME (plus_plugins #309 —
+    // PackageInfo.fromPlatform must never run before the first frame /
+    // runApp). The UpdateDialogHost (MaterialApp builder) is mounted by
+    // then, so the first check can already reach the UI over any screen.
+    // Fire-and-forget — never blocks boot.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      VersionCheckService.instance.init();
+    });
 
     runApp(
       AppProviders(
@@ -433,6 +444,13 @@ class MyApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.dark,
+      // Update dialog host: app-level overlay via the builder — the dialog
+      // appears over ANY screen (login, model-download gate, shell). The
+      // navigatorKey lets the host (mounted above the navigator) push the
+      // dialog route directly.
+      navigatorKey: UpdateDialogHost.navigatorKey,
+      builder: (context, child) =>
+          UpdateDialogHost(child: child ?? const SizedBox.shrink()),
       home: const OfflineModelGate(
         child: AuthGate(),
       ),

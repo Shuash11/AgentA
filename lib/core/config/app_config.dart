@@ -47,6 +47,11 @@ class AppConfig {
   static String get hfImageEndpoint =>
       'https://router.huggingface.co/hf-inference/models/$hfImageModel';
 
+  /// GitHub Releases "latest" endpoint for the update-check engine
+  /// (lib/services/update/). Public URL (repo is public), not a secret.
+  static const String githubLatestReleaseUrl =
+      'https://api.github.com/repos/Shuash11/AgentA/releases/latest';
+
   static const String groqModel = 'allam-2-7b';
   static const String minimaxModel = 'minimax/minimax-m2.7:free';
 
