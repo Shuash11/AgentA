@@ -1,5 +1,13 @@
 name: Build APK
 
+# The repo default workflow permissions is "read" (default_workflow_permissions=read),
+# which makes the GITHUB_TOKEN unable to create releases — softprops/action-gh-release
+# fails with 403 "Resource not accessible by integration". This workflow-level grant
+# overrides the repo default for THIS workflow only (the repo default is NOT flipped):
+# contents: write covers both the release step creating releases and tag pushes.
+permissions:
+  contents: write
+
 on:
   push:
     branches: [main]
@@ -19,11 +27,17 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # cache: false — the flutter SDK cache is 1.57 GiB and counts against the
+      # same 500 MB Actions storage quota as artifacts, so re-saving it on every
+      # build kept the quota exhausted ("Artifact storage quota has been hit"),
+      # silently killing the artifact upload (continue-on-error) and starving
+      # promote-landing. Re-downloading the SDK costs ~2 min; the artifact
+      # upload working reliably is worth it.
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: "3.44.1"
-          cache: true
+          cache: false
 
       # C1: .env is never bundled (pubspec has no `.env` asset) and never
       # committed. Secrets reach the app via --dart-define at build time.
