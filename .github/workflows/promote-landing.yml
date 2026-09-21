@@ -76,22 +76,63 @@ jobs:
         run: |
           RUN_ID="${{ github.event.workflow_run.id }}"
           HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
+          HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
           SHA7="$(echo "$HEAD_SHA" | cut -c1-7)"
           echo "SHA7=${SHA7}" >> "$GITHUB_ENV"
           echo "BUILD_DATE=$(date -u +%m-%d)" >> "$GITHUB_ENV"
-          echo "Triggering run: $RUN_ID @ $HEAD_SHA"
+          echo "Triggering run: $RUN_ID @ $HEAD_SHA (head_branch: $HEAD_BRANCH)"
           rm -rf ./artifacts && mkdir -p ./artifacts
           # Artifact name is dynamic (AgentA-<SHA7>.apk, maybe -nogoogle suffix).
+          # Primary source: the run artifact. Quota-sensitive (GitHub storage
+          # recalculation lag can make uploads succeed-but-publish-nothing), so
+          # failure here must not abort the step.
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "AgentA-*.apk" --dir ./artifacts \
-            || gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --dir ./artifacts
+            || gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --dir ./artifacts \
+            || echo "Artifact download failed for run $RUN_ID — trying release fallback"
           echo "--- artifacts ---"
-          find ./artifacts -type f | sort
+          find ./artifacts | sort
           SRC="$(find ./artifacts -type f -name 'AgentA-*.apk' | head -n 1)"
+          SRC_SOURCE=""
+          if [ -n "$SRC" ]; then
+            SRC_SOURCE="artifact"
+            echo "Primary source: downloaded artifact from run $RUN_ID"
+          else
+            # Fallback source: the GitHub release (published directly from the
+            # build workspace, quota-independent). Releases only exist for v*
+            # tag runs, so main runs fall back to the newest v* release.
+            if [[ "$HEAD_BRANCH" == v* ]]; then
+              # Tag run: the release for this exact tag exists (build-apk.yml
+              # publishes it before artifact upload).
+              if gh release download "$HEAD_BRANCH" --repo "$GITHUB_REPOSITORY" --pattern "AgentA-*.apk" --dir ./artifacts; then
+                SRC="$(find ./artifacts -type f -name 'AgentA-*.apk' | head -n 1)"
+                if [ -n "$SRC" ]; then
+                  SRC_SOURCE="release-${HEAD_BRANCH}"
+                  echo "fallback: downloaded from release ${HEAD_BRANCH}"
+                fi
+              fi
+            else
+              # Main run: no release exists for main commits. Serve the newest
+              # v* release's APK (better a recent release than nothing). This
+              # may be from an OLDER commit than the triggering run — log it
+              # as a warning so staleness stays visible.
+              NEWEST_VTAG="$(gh release list --repo "$GITHUB_REPOSITORY" --json tagName --jq '[.[] | select(.tagName | test("^v"))] | .[0].tagName' 2>/dev/null || true)"
+              if [ -n "$NEWEST_VTAG" ] && gh release download "$NEWEST_VTAG" --repo "$GITHUB_REPOSITORY" --pattern "AgentA-*.apk" --dir ./artifacts; then
+                SRC="$(find ./artifacts -type f -name 'AgentA-*.apk' | head -n 1)"
+                if [ -n "$SRC" ]; then
+                  SRC_SOURCE="release-${NEWEST_VTAG}"
+                  echo "fallback: downloaded from release ${NEWEST_VTAG}"
+                  echo "::warning::Main run $RUN_ID has no artifact and no release; promoting newest v* release ${NEWEST_VTAG} instead. Its APK may be from an OLDER commit than $HEAD_SHA (no release for main commits) — staleness accepted for availability."
+                fi
+              fi
+            fi
+          fi
           if [ -z "$SRC" ]; then
-            echo "::error::No AgentA-*.apk artifact found in run $RUN_ID"
+            echo "::error::No AgentA-*.apk artifact found in run $RUN_ID and no release fallback yielded an APK (checked trigger branch/tag releases)."
             exit 1
           fi
+          echo "source=${SRC_SOURCE}" >> "$GITHUB_OUTPUT"
           echo "SRC_APK=${SRC}" >> "$GITHUB_ENV"
+          echo "APK source: ${SRC_SOURCE}"
           ls -lh "$SRC"
 
       - name: Guard nogoogle not promoted to stable (H9)
