@@ -26,7 +26,11 @@ name: Promote to Landing (latest)
   workflow_run:
     workflows: ["Build APK"]
     types: [completed]
-    branches: [main]
+    # No `branches` filter: workflow_run does not support a `tags` filter, and
+    # restricting to main would exclude v* tag runs. Tag-awareness is enforced
+    # in the job `if` below (head_branch is 'main' for branch runs, the tag
+    # name e.g. 'v1.2.0' for tag runs) — tagged releases, the ones the in-app
+    # update engine detects, now also promote to the landing.
 
 # `actions: read` covers reading workflow runs + downloading their artifacts.
 permissions:
@@ -45,8 +49,10 @@ env:
 
 jobs:
   promote:
-    # Only promote green main-branch builds (ignores v* tag runs and failures).
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    # Promote green main-branch builds AND successful v* tag runs (head_branch
+    # carries the tag name like 'v1.2.0' on workflow_run tag events). Failures
+    # and PR/dispatch runs are ignored.
+    if: ${{ github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'main' || startsWith(github.event.workflow_run.head_branch, 'v')) }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -163,12 +169,30 @@ jobs:
             echo "Nothing to prune (<= 2 dated copies)."
           fi
 
-      - name: Verify public download URL
+      - name: Verify public download URL + freshness
         if: steps.guard.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           CODE="$(curl -sSL -o /dev/null -w '%{http_code}' -f "https://github.com/${{ env.LANDING_REPO }}/releases/latest/download/${{ env.STABLE_ASSET }}")"
           test "$CODE" = "200"
+          # Staleness check: the rolling release's stable asset must be the
+          # just-uploaded file. HTTP 200 alone cannot detect a stale asset
+          # (the Sep-13 build served 200 for 8 days). Compare byte sizes.
+          LOCAL_SIZE="$(stat -c '%s' "./${{ env.STABLE_ASSET }}")"
+          REMOTE_JSON="$(gh api "repos/${{ env.LANDING_REPO }}/releases/tags/${{ env.ROLLING_TAG }}" --jq '.assets[] | select(.name == "'"${{ env.STABLE_ASSET }}"'") | "\(.size)\t\(.updatedAt)"')"
+          if [ -z "$REMOTE_JSON" ]; then
+            echo "::error::Freshness check failed: stable asset ${{ env.STABLE_ASSET }} not found on ${{ env.ROLLING_TAG }} (HTTP was $CODE)."
+            exit 1
+          fi
+          REMOTE_SIZE="$(echo "$REMOTE_JSON" | cut -f1)"
+          REMOTE_UPDATED="$(echo "$REMOTE_JSON" | cut -f2)"
+          if [ "$LOCAL_SIZE" != "$REMOTE_SIZE" ]; then
+            echo "::error::Freshness check failed: ${{ env.STABLE_ASSET }} on ${{ env.ROLLING_TAG }} is STALE — local size ${LOCAL_SIZE} bytes vs remote ${REMOTE_SIZE} bytes (updatedAt ${REMOTE_UPDATED})."
+            exit 1
+          fi
+          echo "Freshness OK: ${{ env.STABLE_ASSET }} local=${LOCAL_SIZE} remote=${REMOTE_SIZE} bytes (updatedAt ${REMOTE_UPDATED})"
 
       - name: Checkout landing repo
         if: steps.guard.outputs.skip != 'true'
