@@ -4,22 +4,22 @@ extension AIModelExtension on AIModel {
   String get displayName {
     switch (this) {
       case AIModel.pollinations:
-        return 'Image Gen';
+        return 'Agenta Image Gen';
       case AIModel.groq:
-        return 'Groq';
+        return 'Agenta Chatbot';
       case AIModel.gemma:
-        return 'Gemma';
+        return 'Agenta Offline AI';
     }
   }
 
   String get description {
     switch (this) {
       case AIModel.pollinations:
-        return 'Pollinations AI - Generate images';
+        return 'Generate images from text prompts';
       case AIModel.groq:
-        return 'Groq - ALLaM 2 7B';
+        return 'Chat with the Agenta assistant';
       case AIModel.gemma:
-        return 'Gemma - Local Offline AI';
+        return 'Runs locally on your device — no internet needed';
     }
   }
 

@@ -544,9 +544,9 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
                   style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  _loadingError!,
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                const Text(
+                  'The offline model could not be loaded. Please try again.',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),

@@ -169,7 +169,7 @@ Formatting rules:
     final chat = _chat;
 
     if (!ready || chat == null) {
-      throw Exception('Gemma model not loaded');
+      throw Exception('Offline AI model is not ready');
     }
 
     try {
@@ -193,7 +193,8 @@ Formatting rules:
       }
       return 'Unable to generate response.';
     } catch (e) {
-      throw Exception('Gemma error: $e');
+      if (kDebugMode) debugPrint('[GemmaService] sendMessage failed: $e');
+      throw Exception('Offline AI could not respond. Please try again.');
     }
   }
 
@@ -211,7 +212,7 @@ Formatting rules:
     final chat = _chat;
 
     if (!ready || chat == null) {
-      throw Exception('Gemma model not loaded');
+      throw Exception('Offline AI model is not ready');
     }
 
     if (_isCancelled) {
@@ -266,7 +267,8 @@ Formatting rules:
       if (_isCancelled) {
         return;
       }
-      throw Exception('Gemma error: $e');
+      if (kDebugMode) debugPrint('[GemmaService] sendMessageStream failed: $e');
+      throw Exception('Offline AI could not respond. Please try again.');
     }
   }
 

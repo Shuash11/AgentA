@@ -127,10 +127,13 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
         });
       }
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[DownloadPrompt] install failed: $e');
+      }
       if (mounted) {
         setState(() {
           _downloading = false;
-          _errorMessage = 'Download failed: $e';
+          _errorMessage = 'Download did not complete. Please try again.';
         });
       }
     }

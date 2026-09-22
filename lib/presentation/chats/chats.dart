@@ -564,22 +564,22 @@ class _ChatScreenState extends State<Chats> {
       return 'No internet. If your offline model is installed, try again in a moment.';
     }
     if (lower.contains('offline model is not ready') ||
-        lower.contains('gemma model not loaded') ||
+        lower.contains('offline ai model is not ready') ||
         lower.contains('offline mode is enabled')) {
       return 'Offline AI is not ready yet. Download or load the local model first.';
     }
     if (lower.contains('groq api key not configured')) {
-      return 'Groq API key is missing or invalid in .env.';
+      return 'Chat service is not configured correctly.';
     }
     if (lower.contains('huggingface') || lower.contains('hf_token')) {
       if (lower.contains('credits exhausted') || lower.contains('rate limit')) {
-        return 'HuggingFace free limit reached. Wait a bit or stick with Pollinations.';
+        return 'HD image generation: free limit reached. Try again later or use standard image generation.';
       }
       if (lower.contains('warming up') || lower.contains('timed out')) {
-        return 'HuggingFace model is warming up. Try HD again in a moment.';
+        return 'HD image generation is warming up. Try again in a moment.';
       }
       if (lower.contains('not configured') || lower.contains('invalid')) {
-        return 'HuggingFace token missing or invalid. Set HF_TOKEN in .env.';
+        return 'HD image generation is not configured correctly.';
       }
       return 'HD image generation failed. Please try again.';
     }

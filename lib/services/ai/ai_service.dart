@@ -29,8 +29,8 @@ class AIService {
     if (isOnline) {
       return _onlineAI.preferredModel.displayName;
     }
-    if (!isOfflineModelReady) return 'Offline - model not ready';
-    return 'Gemma (Offline)';
+    if (!isOfflineModelReady) return 'Agenta Offline AI not ready';
+    return 'Agenta Offline AI';
   }
 
   void setPreferredModel(AIModel model) {
@@ -56,7 +56,7 @@ class AIService {
     } else {
       final offlineReady = await _offlineAI.ensureReady();
       if (!offlineReady) {
-        throw Exception('No internet and offline model not ready. Please download the Gemma model first.');
+        throw Exception('No internet and offline model not ready. Please download the offline model first.');
       }
       
       return _offlineAI.sendMessage(history: history, newMessage: newMessage);
@@ -78,7 +78,7 @@ class AIService {
     } else {
       final offlineReady = await _offlineAI.ensureReady();
       if (!offlineReady) {
-        throw Exception('No internet and offline model not ready. Please download the Gemma model first.');
+        throw Exception('No internet and offline model not ready. Please download the offline model first.');
       }
       
       yield* _offlineAI.sendMessageStream(history: history, newMessage: newMessage);

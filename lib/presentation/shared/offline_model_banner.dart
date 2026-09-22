@@ -38,10 +38,10 @@ class OfflineModelBanner extends StatelessWidget {
       return (colors.success.withValues(alpha: 0.15), colors.success, Icons.cloud_done_rounded, 'Online - $modelName', null);
     }
     if (isLimited) {
-      return (colors.amber.withValues(alpha: 0.15), colors.amber, Icons.cloud_queue_rounded, 'Limited - using Gemma (Offline)', _offlineDisclaimer);
+      return (colors.amber.withValues(alpha: 0.15), colors.amber, Icons.cloud_queue_rounded, 'Limited - Agenta Offline AI', _offlineDisclaimer);
     }
     if (isGemmaReady) {
-      return (colors.amber.withValues(alpha: 0.12), colors.amber, Icons.memory_rounded, 'Offline - using Gemma', _offlineDisclaimer);
+      return (colors.amber.withValues(alpha: 0.12), colors.amber, Icons.memory_rounded, 'Offline - Agenta Offline AI', _offlineDisclaimer);
     }
     return (colors.error.withValues(alpha: 0.15), colors.error, Icons.wifi_off_rounded, 'Offline - model not ready', null);
   }
