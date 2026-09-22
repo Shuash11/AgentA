@@ -16,6 +16,8 @@ class AIService {
 
   bool get isOfflineModelReady => _offlineAI.isReady;
 
+  String? get offlineModelProblem => _offlineAI.offlineModelProblem;
+
   AIModel get activeModel {
     if (isOnline) {
       return _onlineAI.preferredModel;
@@ -56,9 +58,10 @@ class AIService {
     } else {
       final offlineReady = await _offlineAI.ensureReady();
       if (!offlineReady) {
-        throw Exception('No internet and offline model not ready. Please download the offline model first.');
+        throw Exception(
+            'No internet and offline model not ready. ${offlineModelProblem ?? 'Please download the offline model first.'}');
       }
-      
+
       return _offlineAI.sendMessage(history: history, newMessage: newMessage);
     }
   }
@@ -78,9 +81,10 @@ class AIService {
     } else {
       final offlineReady = await _offlineAI.ensureReady();
       if (!offlineReady) {
-        throw Exception('No internet and offline model not ready. Please download the offline model first.');
+        throw Exception(
+            'No internet and offline model not ready. ${offlineModelProblem ?? 'Please download the offline model first.'}');
       }
-      
+
       yield* _offlineAI.sendMessageStream(history: history, newMessage: newMessage);
     }
   }

@@ -12,12 +12,14 @@ class GemmaService extends ChangeNotifier {
   bool _isCancelled = false;
   InferenceModel? _model;
   InferenceChat? _chat;
+  String? _lastError;
 
   static const Duration _streamFlushInterval = Duration(milliseconds: 45);
   static const int _streamFlushChars = 8;
   static const int _maxHistoryMessages = 8;
   static const int _maxTokens = 2048;
-  static const String _greetingText =
+  static const int _maxHistoryChars = 1000;
+  static const String greetingText =
       "Hello! I'm AgentA, What would you like to work on today?";
   static const String _systemInstruction = '''
 You are AgentA, a helpful AI assistant inside this app.
@@ -38,6 +40,11 @@ Formatting rules:
 ''';
 
   bool get isReady => _isLoaded && _model != null;
+
+  /// Friendly reason for the last readiness failure, or null when ready.
+  /// Distinguishes "not installed" from "load failed" without leaking
+  /// raw exception text to the UI (raw errors stay in kDebugMode logs).
+  String? get lastError => _lastError;
 
   void cancelGeneration() {
     _isCancelled = true;
@@ -71,6 +78,7 @@ Formatting rules:
       return;
     }
 
+    bool rehydrationFailed = false;
     try {
       // Fresh process: the plugin's active-model spec is memory-only and is
       // null until install()/setActiveModel runs in THIS process —
@@ -79,6 +87,7 @@ Formatting rules:
       // already in the plugin's storage.
       if (!FlutterGemma.hasActiveModel()) {
         final rehydrated = await ModelDownloadService.ensureModelActive();
+        rehydrationFailed = !rehydrated;
         if (kDebugMode && !rehydrated) {
           debugPrint('[GemmaService] model rehydration failed — load will retry via gate');
         }
@@ -99,14 +108,31 @@ Formatting rules:
 
       await _dao.setModelReady(modelType: 'gemma3-1b-it-int4');
       _isLoaded = true;
+      _lastError = null;
       notifyListeners();
     } catch (e) {
       _isLoaded = false;
+      _lastError = _classifyLoadError(e, rehydrationFailed);
+      if (kDebugMode) debugPrint('[GemmaService] loadInstalled failed: $e');
       notifyListeners();
       _model = null;
       _chat = null;
       rethrow;
     }
+  }
+
+  /// Maps a load failure to a friendly, brand-free reason.
+  String _classifyLoadError(Object error, bool rehydrationFailed) {
+    final raw = error.toString().toLowerCase();
+    if (rehydrationFailed ||
+        raw.contains('not installed') ||
+        raw.contains('no such file') ||
+        raw.contains('not found') ||
+        raw.contains('bad state') ||
+        raw.contains('null')) {
+      return 'Offline model is not installed.';
+    }
+    return 'Offline model failed to load.';
   }
 
   Future<bool> ensureReady() async {
@@ -118,13 +144,10 @@ Formatting rules:
       await loadInstalled();
       return isReady;
     } catch (e) {
+      if (kDebugMode) debugPrint('[GemmaService] ensureReady failed: $e');
+      _lastError ??= 'Offline model failed to load.';
       return false;
     }
-  }
-
-  String _buildUserPrompt(String newMessage) {
-    final text = newMessage.trim();
-    return 'Answer directly and stay on topic.\nUser: $text\nAssistant:';
   }
 
   List<ChatMessageModel> _getRecentHistory(
@@ -135,7 +158,7 @@ Formatting rules:
 
     final usableHistory = List<ChatMessageModel>.from(history);
     usableHistory.removeWhere((msg) =>
-        msg.text.trim().isEmpty || msg.text.trim() == _greetingText);
+        msg.text.trim().isEmpty || msg.text.trim() == greetingText);
     if (usableHistory.isNotEmpty &&
         usableHistory.last.isUser &&
         usableHistory.last.text.trim() == currentMessage.trim()) {
@@ -148,17 +171,37 @@ Formatting rules:
         : usableHistory;
     return recent.map((m) {
       final t = m.text.trim();
-      if (t.length > 1000) {
+      if (t.length > _maxHistoryChars) {
         return ChatMessageModel(
           id: m.id,
           chatId: m.chatId,
-          text: '${t.substring(0, 1000)}…',
+          text: _truncateAtSentence(t, _maxHistoryChars),
           isUser: m.isUser,
           timestamp: m.timestamp,
         );
       }
       return m;
     }).toList();
+  }
+
+  /// Cuts [text] at the last sentence boundary before [limit] so history
+  /// never ends mid-sentence. Falls back to a word boundary, then a hard cut.
+  String _truncateAtSentence(String text, int limit) {
+    final window = text.substring(0, limit);
+    var cut = -1;
+    for (final marker in ['. ', '! ', '? ', '.\n', '!\n', '?\n', '\n']) {
+      final idx = window.lastIndexOf(marker);
+      if (idx > cut) cut = idx;
+    }
+    if (cut > 0) {
+      final end = window[cut] == '\n' ? cut : cut + 1;
+      return '${window.substring(0, end).trim()}…';
+    }
+    final lastSpace = window.lastIndexOf(' ');
+    if (lastSpace > 0) {
+      return '${window.substring(0, lastSpace).trim()}…';
+    }
+    return '$window…';
   }
 
   Future<String> sendMessage({
@@ -184,8 +227,10 @@ Formatting rules:
         );
       }
 
-      final prompt = _buildUserPrompt(newMessage);
-      await chat.addQueryChunk(Message.text(text: prompt, isUser: true));
+      // The .task runtime applies the chat template and prepends the
+      // systemInstruction itself — send the plain user text only.
+      await chat.addQueryChunk(
+          Message.text(text: newMessage.trim(), isUser: true));
       final response = await chat.generateChatResponse();
 
       if (response is TextResponse) {
@@ -231,8 +276,10 @@ Formatting rules:
         );
       }
 
-      final prompt = _buildUserPrompt(newMessage);
-      await chat.addQueryChunk(Message.text(text: prompt, isUser: true));
+      // The .task runtime applies the chat template and prepends the
+      // systemInstruction itself — send the plain user text only.
+      await chat.addQueryChunk(
+          Message.text(text: newMessage.trim(), isUser: true));
 
       final flushTimer = Stopwatch()..start();
       final tokenBuffer = StringBuffer();

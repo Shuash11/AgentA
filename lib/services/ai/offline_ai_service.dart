@@ -8,6 +8,8 @@ class OfflineAIService {
 
   bool get isReady => _gemma.isReady;
 
+  String? get offlineModelProblem => _gemma.lastError;
+
   Future<bool> ensureReady() => _gemma.ensureReady();
 
   Future<String> sendMessage({

@@ -9,6 +9,7 @@ import '../../cubit/connectivity/connectivity_cubit.dart';
 import '../../theme/app_theme.dart';
 import '../../services/ai/ai_service.dart';
 import '../../services/ai/ai_model.dart';
+import '../../services/ai/gemma_service.dart';
 import '../shared/offline_model_banner.dart';
 import '../ai/download_prompt_screen.dart';
 import '../../data/models/chat_message_model.dart';
@@ -171,7 +172,7 @@ class _ChatScreenState extends State<Chats> {
           final greeting = ChatMessageModel(
             id: const Uuid().v4(),
             chatId: widget.chatId,
-            text: "Hello! I'm AgentA, What would you like to work on today?",
+            text: GemmaService.greetingText,
             isUser: false,
             timestamp: DateTime.now(),
           );
@@ -532,7 +533,9 @@ class _ChatScreenState extends State<Chats> {
   Future<void> _handleGenerationError(Object error) async {
     if (!mounted) return;
 
-    final errorText = _friendlyErrorMessage(error.toString());
+    final rawText = error.toString();
+    final errorText = _friendlyErrorMessage(rawText);
+    final needsDownloadAction = _isOfflineNotReady(rawText);
     final partialAiMsgId = _partialAiMsgId;
     final errorMsg = ChatMessageModel(
       id: const Uuid().v4(),
@@ -555,18 +558,41 @@ class _ChatScreenState extends State<Chats> {
     _scrollToBottom(animated: true);
 
     if (!mounted) return;
+    if (needsDownloadAction) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(offlineNotReadyMessage),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Get model',
+            onPressed: () => _openDownloadScreen(context),
+          ),
+        ),
+      );
+    }
+  }
+
+  static const String offlineNotReadyMessage =
+      'Agenta Offline AI is still getting ready. Try again in a moment.';
+
+  bool _isOfflineNotReady(String rawError) {
+    final lower = rawError.toLowerCase();
+    return lower.contains('offline model is not ready') ||
+        lower.contains('offline ai model is not ready') ||
+        lower.contains('offline mode is enabled') ||
+        lower.contains('still getting ready') ||
+        lower.contains('offline model is not installed') ||
+        lower.contains('offline model failed to load');
   }
 
   String _friendlyErrorMessage(String rawError) {
     final lower = rawError.toLowerCase();
 
-    if (lower.contains('no internet')) {
+    if (_isOfflineNotReady(rawError) || lower.contains('no internet')) {
+      if (_isOfflineNotReady(rawError)) {
+        return offlineNotReadyMessage;
+      }
       return 'No internet. If your offline model is installed, try again in a moment.';
-    }
-    if (lower.contains('offline model is not ready') ||
-        lower.contains('offline ai model is not ready') ||
-        lower.contains('offline mode is enabled')) {
-      return 'Offline AI is not ready yet. Download or load the local model first.';
     }
     if (lower.contains('groq api key not configured')) {
       return 'Chat service is not configured correctly.';
@@ -687,7 +713,7 @@ class _ChatScreenState extends State<Chats> {
       ),
       body: Column(
         children: [
-          const OfflineModelBanner(),
+          OfflineModelBanner(onTap: () => _openDownloadScreen(context)),
           Expanded(
             child: ChatTimelineView(
               messagesListenable: _messagesNotifier,

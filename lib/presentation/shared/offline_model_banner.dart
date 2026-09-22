@@ -6,9 +6,12 @@ import '../../services/ai/online_ai_service.dart';
 import '../../cubit/connectivity/connectivity_cubit.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../theme/app_theme.dart';
+import '../ai/download_prompt_screen.dart';
 
 class OfflineModelBanner extends StatelessWidget {
-  const OfflineModelBanner({super.key});
+  final VoidCallback? onTap;
+
+  const OfflineModelBanner({super.key, this.onTap});
 
   static const String _offlineDisclaimer =
       'Offline answers can make mistakes — double-check schoolwork.';
@@ -23,6 +26,10 @@ class OfflineModelBanner extends StatelessWidget {
 
     final (Color bgColor, Color accentColor, IconData icon, String text, String? subtext) = _getStatus(isOnline, isLimited, isGemmaReady, modelName, colors);
 
+    final needsModel = !isOnline && !isLimited && !isGemmaReady;
+    final effectiveOnTap =
+        onTap ?? (needsModel ? () => openDownloadScreen(context) : null);
+
     return _StatusBanner(
       icon: icon,
       text: text,
@@ -30,6 +37,20 @@ class OfflineModelBanner extends StatelessWidget {
       bgColor: bgColor,
       accentColor: accentColor,
       textColor: colors.text,
+      onTap: effectiveOnTap,
+    );
+  }
+
+  /// Shared navigation to the offline-model download screen.
+  static void openDownloadScreen(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DownloadPromptScreen(
+          onSkip: () => Navigator.pop(context),
+          onComplete: () => Navigator.pop(context),
+          isForcedGate: false,
+        ),
+      ),
     );
   }
 
@@ -43,7 +64,7 @@ class OfflineModelBanner extends StatelessWidget {
     if (isGemmaReady) {
       return (colors.amber.withValues(alpha: 0.12), colors.amber, Icons.memory_rounded, 'Offline - Agenta Offline AI', _offlineDisclaimer);
     }
-    return (colors.error.withValues(alpha: 0.15), colors.error, Icons.wifi_off_rounded, 'Offline - model not ready', null);
+    return (colors.error.withValues(alpha: 0.15), colors.error, Icons.wifi_off_rounded, 'Offline - model not ready', 'Tap to get the offline model.');
   }
 }
 
@@ -54,6 +75,7 @@ class _StatusBanner extends StatelessWidget {
   final Color bgColor;
   final Color accentColor;
   final Color textColor;
+  final VoidCallback? onTap;
 
   const _StatusBanner({
     required this.icon,
@@ -62,11 +84,12 @@ class _StatusBanner extends StatelessWidget {
     required this.bgColor,
     required this.accentColor,
     required this.textColor,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final content = Container(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.xs),
       decoration: BoxDecoration(
         color: bgColor,
@@ -99,7 +122,19 @@ class _StatusBanner extends StatelessWidget {
               ],
             ),
           ),
+          if (onTap != null) ...[
+            const SizedBox(width: AppSpacing.sm),
+            Icon(Icons.arrow_forward_rounded, color: accentColor, size: 16),
+          ],
         ],
+      ),
+    );
+    if (onTap == null) return content;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: content,
       ),
     );
   }

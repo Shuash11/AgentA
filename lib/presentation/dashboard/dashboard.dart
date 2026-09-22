@@ -13,6 +13,7 @@ import '../chats/chats.dart';
 import '../../data/models/chat_session_model.dart';
 import '../../data/local/local_chat_dao.dart';
 import '../../repositories/chat_repository.dart';
+import '../ai/download_prompt_screen.dart';
 class Dashboard extends StatefulWidget {
   final bool offlineMode;
   final bool showBottomNav;
@@ -139,6 +140,18 @@ void _newChat() async {
     if (mounted) _loadChats();
   }
 
+  void _openDownloadScreen(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DownloadPromptScreen(
+          onSkip: () => Navigator.pop(context),
+          onComplete: () => Navigator.pop(context),
+          isForcedGate: false,
+        ),
+      ),
+    );
+  }
+
   Future<bool> _showDeleteConfirmation(BuildContext context) async {
     final colors = context.read<ThemeCubit>().state.colors;
     return await showDialog<bool>(
@@ -239,7 +252,7 @@ void _newChat() async {
       ),
       body: Column(
         children: [
-          const OfflineModelBanner(),
+          OfflineModelBanner(onTap: () => _openDownloadScreen(context)),
           Expanded(
             child: _isLoading
                 ? Center(

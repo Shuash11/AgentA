@@ -582,6 +582,13 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
                 _isChecking ? 'Checking model status...' : 'Loading offline model...',
                 style: const TextStyle(color: Colors.white70, fontSize: 14),
               ),
+              if (!_isChecking) ...[
+                const SizedBox(height: 8),
+                const Text(
+                  'First load can take a moment.',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
             ],
           ),
         ),
