@@ -138,6 +138,27 @@ Formatting rules:
     return 'Offline model failed to load.';
   }
 
+  // Test hooks: thin delegates over the private pure helpers above.
+  // Annotated — not public API. Production logic lives in the privates.
+  @visibleForTesting
+  String classifyLoadErrorForTest(Object error, bool rehydrationFailed) =>
+      _classifyLoadError(error, rehydrationFailed);
+
+  @visibleForTesting
+  String truncateAtSentenceForTest(String text, int limit) =>
+      _truncateAtSentence(text, limit);
+
+  @visibleForTesting
+  bool endsAtNaturalBreakForTest(String token) =>
+      _endsAtNaturalBreak(token);
+
+  @visibleForTesting
+  List<ChatMessageModel> recentHistoryForTest(
+    List<ChatMessageModel> history, {
+    required String currentMessage,
+  }) =>
+      _getRecentHistory(history, currentMessage: currentMessage);
+
   Future<bool> ensureReady() async {
     if (isReady) {
       return true;

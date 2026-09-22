@@ -248,6 +248,16 @@ class ModelDownloadService extends ChangeNotifier {
     return 'Download failed. Please try again.';
   }
 
+  // Test hooks: thin delegates over the private pure helpers above.
+  // Annotated — not public API. Production logic lives in the privates.
+  @visibleForTesting
+  String? friendlyDownloadErrorForTest(Object error) =>
+      _friendlyDownloadError(error);
+
+  @visibleForTesting
+  void applyDownloadFailureForTest(Object error, String logTag) =>
+      _applyDownloadFailure(error, logTag: logTag);
+
   /// Re-establishes the plugin's active-model spec for this process.
   /// On flutter_gemma 1.8.4, initialize() already auto-restores the
   /// previously-active model identity from SharedPreferences, so
