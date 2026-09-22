@@ -56,6 +56,7 @@ class SupabaseChatService {
           .select()
           .eq('user_id', userId)
           .order('updated_at')
+          .order('id')
           .range(from, to);
       final batch = (rows as List).map((row) {
         final data = Map<String, dynamic>.from(row as Map);

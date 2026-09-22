@@ -1,20 +1,19 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:aiproject/data/local/database_helper.dart';
 import 'package:aiproject/data/local/local_chat_dao.dart';
+import 'package:aiproject/data/local/local_message_dao.dart';
 import 'package:aiproject/data/models/chat_session_model.dart';
 import 'package:aiproject/data/remote/supabase_chat_service.dart';
 import 'package:aiproject/data/remote/supabase_message_service.dart';
 
-// Phase 1 sync primitives: pure-contract tests.
+// Phase 1 sync primitives: pure-contract tests plus Phase 2 DB integration.
 //
-// NOTE: full DAO DB integration (tombstone/unsynced/unread/batch through
-// sqflite) is intentionally NOT run here — it needs sqflite_common_ffi
-// in-memory setup, which is not in dev_dependencies, and the phase plan
-// forbids adding deps for this phase. The DB orchestration in
-// LocalChatDao.replaceChatsPreservingUnsynced mirrors the reviewed
-// LocalMessageDao.replaceMessagesPreservingUnsynced (chunked 500,
-// transaction, skip is_synced=0 OR is_deleted=1). What IS tested here are
-// the pure units the DB path is built on, plus the model contract the
-// sync path relies on.
+// The pure groups below cover the units the DB path is built on; the final
+// `replaceChatsPreservingUnsynced DB integration` group runs the real DAO
+// against an in-memory sqflite_common_ffi database
+// (sqfliteFfiInit + databaseFactoryFfi, injected via
+// `DatabaseHelper.testDatabase`).
 
 ChatSessionModel chat({
   String id = 'c1',
@@ -173,6 +172,143 @@ void main() {
       expect(SupabaseChatService.getChatsPaged, isA<Function>());
       expect(SupabaseMessageService.getMessages, isA<Function>());
       expect(SupabaseMessageService.getMessagesPaged, isA<Function>());
+      expect(SupabaseMessageService.getAllMessagesPaged, isA<Function>());
+    });
+  });
+
+  group('replaceChatsPreservingUnsynced DB integration (ffi)', () {
+    late Database db;
+    final dao = LocalChatDao.instance;
+
+    setUpAll(() async {
+      sqfliteFfiInit();
+      db = await databaseFactoryFfi.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(
+          version: 1,
+          onCreate: (db, version) async {
+            await db.execute('''
+              CREATE TABLE chat_sessions (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                last_message TEXT,
+                updated_at INTEGER NOT NULL,
+                unread INTEGER DEFAULT 0,
+                is_synced INTEGER DEFAULT 0,
+                is_deleted INTEGER DEFAULT 0
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE messages (
+                id TEXT PRIMARY KEY,
+                chat_id TEXT NOT NULL,
+                text TEXT NOT NULL,
+                is_user INTEGER NOT NULL,
+                timestamp INTEGER NOT NULL,
+                is_synced INTEGER DEFAULT 0,
+                is_deleted INTEGER DEFAULT 0,
+                FOREIGN KEY (chat_id) REFERENCES chat_sessions(id)
+                  ON DELETE CASCADE
+              )
+            ''');
+          },
+        ),
+      );
+      DatabaseHelper.testDatabase = db;
+    });
+
+    tearDownAll(() async {
+      DatabaseHelper.clearTestDatabase();
+      await db.close();
+    });
+
+    setUp(() async {
+      await db.delete('messages');
+      await db.delete('chat_sessions');
+    });
+
+    test('tombstone preserved (offline delete never resurrected)', () async {
+      await dao.insert(chat(id: 'c1', isSynced: false, isDeleted: true));
+      final remote = chat(id: 'c1', isSynced: true, isDeleted: false);
+      await dao.replaceChatsPreservingUnsynced([remote]);
+      final kept = await dao.getById('c1');
+      expect(kept, isNotNull);
+      expect(kept!.isDeleted, true);
+      expect(kept.title, 't');
+      // Tombstone is still listed for the upstream push.
+      expect(
+        (await dao.getTombstonedChats()).map((c) => c.id),
+        contains('c1'),
+      );
+    });
+
+    test('unsynced edit preserved (local title wins)', () async {
+      final local = ChatSessionModel(
+        id: 'c2',
+        userId: 'u1',
+        title: 'local edit',
+        lastMessage: 'm',
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(1700000000000),
+        unread: 0,
+        isSynced: false,
+        isDeleted: false,
+      );
+      await dao.insert(local);
+      final remote = ChatSessionModel(
+        id: 'c2',
+        userId: 'u1',
+        title: 'remote title',
+        lastMessage: 'm',
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(1700000001000),
+        unread: 0,
+        isSynced: true,
+        isDeleted: false,
+      );
+      await dao.replaceChatsPreservingUnsynced([remote]);
+      final kept = await dao.getById('c2');
+      expect(kept, isNotNull);
+      expect(kept!.title, 'local edit');
+      expect(kept.isSynced, false);
+    });
+
+    test('unread preserved on synced-row replace', () async {
+      await dao.insert(chat(id: 'c3', unread: 5, isSynced: true));
+      final remote = ChatSessionModel(
+        id: 'c3',
+        userId: 'u1',
+        title: 'remote title',
+        lastMessage: 'm',
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(1700000002000),
+        unread: 0,
+        isSynced: true,
+        isDeleted: false,
+      );
+      await dao.replaceChatsPreservingUnsynced([remote]);
+      final kept = await dao.getById('c3');
+      expect(kept, isNotNull);
+      expect(kept!.title, 'remote title');
+      expect(kept.unread, 5);
+      expect(kept.isSynced, true);
+    });
+
+    test('batch insert of new remote rows', () async {
+      final remote = [
+        chat(id: 'n1', isSynced: true),
+        chat(id: 'n2', isSynced: true),
+        chat(id: 'n3', isSynced: true),
+      ];
+      await dao.replaceChatsPreservingUnsynced(remote);
+      final rows = await dao.getByUserId('u1');
+      expect(rows.map((c) => c.id).toSet(), {'n1', 'n2', 'n3'});
+      expect(rows.every((c) => c.isSynced), true);
+    });
+
+    test('LocalMessageDao.migrateUserId is a safe no-op without user_id column',
+        () async {
+      // Must not throw "no such column: user_id" — messages are scoped by
+      // chat_id, so the parent chat migration already re-homes them.
+      await LocalMessageDao.instance.migrateUserId('old-uid', 'new-uid');
     });
   });
 }

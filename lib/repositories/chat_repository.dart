@@ -23,20 +23,21 @@ class ChatRepository {
       return local;
     }
 
+    // Dashboard path uses the same Phase 2 primitives as the sync worker:
+    // paginated fetch + preserving batch replace, so offline deletes and
+    // unsynced edits are never resurrected here either.
     try {
-      final remoteChats = await SupabaseChatService.getChats(userId);
-      final merged = <String, ChatSessionModel>{
-        for (final chat in local) chat.id: chat,
-      };
-      for (final chat in remoteChats) {
-        final syncedChat = chat.copyWith(isSynced: true);
-        await _localChatDao.replaceChat(chat.id, syncedChat);
-        merged[chat.id] = syncedChat;
+      final remoteChats = await SupabaseChatService.getChatsPaged(userId);
+      final syncedChats =
+          remoteChats.map((chat) => chat.copyWith(isSynced: true)).toList();
+      await _localChatDao.replaceChatsPreservingUnsynced(syncedChats);
+      // Re-read: synced rows are now present, tombstones/unsynced locals
+      // untouched (replace skips them, query filters tombstones out).
+      final fresh = await _localChatDao.getByUserId(userId);
+      if (kDebugMode) {
+        debugPrint('[ChatRepository] getChatsForUser merged ${fresh.length}');
       }
-      final list = merged.values.toList()
-        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-      if (kDebugMode) debugPrint('[ChatRepository] getChatsForUser merged ${list.length}');
-      return list;
+      return fresh;
     } catch (e, stack) {
       if (kDebugMode) debugPrint('[ChatRepository] getChatsForUser remote failed: $e | $stack');
     }

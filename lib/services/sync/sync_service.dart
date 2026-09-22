@@ -153,6 +153,28 @@ class SyncService {
         _log('[Sync] chat ${chat.id} failed (keeps is_synced=0): $e | $st');
       }
     }
+
+    // Upstream deletion propagation (Phase 2): push offline tombstones
+    // (is_deleted=1, is_synced=0) to remote, then hard-delete locally.
+    // H6: failure keeps the tombstone pending for the next pass.
+    // M13: uses only the local uid snapshot above — never mutates session.
+    final tombstonedChats = await localChatDao.getTombstonedChats();
+    final pendingDeletes =
+        tombstonedChats.where((chat) => !chat.isSynced).toList();
+    _log('[Sync] flushing ${pendingDeletes.length} tombstoned chats');
+    for (final chat in pendingDeletes) {
+      try {
+        await _withBackoff(
+          () => SupabaseChatService.deleteChat(uid, chat.id),
+          'deleteChat ${chat.id}',
+        );
+        await localMsgDao.hardDeleteByChat(chat.id);
+        await localChatDao.hardDelete(chat.id);
+        _log('[Sync] chat ${chat.id} delete synced (hard-deleted locally)');
+      } catch (e, st) {
+        _log('[Sync] chat ${chat.id} delete failed (tombstone kept): $e | $st');
+      }
+    }
   }
 
   Future<void> _syncPendingUsers() async {
@@ -219,6 +241,9 @@ class SyncService {
     // No-op until Edge Function deployed — pending row stays unsynced.
   }
 
+  /// Batched refresh (Phase 2): one paginated fetch per table, one batch
+  /// replace per table. Never resurrects tombstones/unsynced rows
+  /// (`replace*PreservingUnsynced` skips `is_synced=0 OR is_deleted=1`).
   Future<void> _refreshLocalCacheFromRemote() async {
     final uid = AuthService.currentUser?.id;
     if (uid == null) {
@@ -229,45 +254,70 @@ class SyncService {
     final localChatDao = LocalChatDao.instance;
     final localMsgDao = LocalMessageDao.instance;
 
+    // Only prune tombstones when the remote chat list was actually fetched;
+    // otherwise an offline failure would look like "remote deleted all".
+    var chatsFetched = false;
+    var remoteChatIds = <String>{};
+
     try {
       final remoteChats = await _withBackoff(
-        () => SupabaseChatService.getChats(uid),
-        'getChats',
+        () => SupabaseChatService.getChatsPaged(uid),
+        'getChatsPaged',
       );
-      for (final chat in remoteChats) {
-        final syncedChat = chat.copyWith(isSynced: true);
-        try {
-          await localChatDao.replaceChat(chat.id, syncedChat);
-        } catch (e, st) {
-          _log('[Sync] replaceChat ${chat.id} failed: $e | $st');
-        }
+      final syncedChats =
+          remoteChats.map((chat) => chat.copyWith(isSynced: true)).toList();
+      try {
+        await localChatDao.replaceChatsPreservingUnsynced(syncedChats);
+      } catch (e, st) {
+        _log('[Sync] replaceChatsPreservingUnsynced failed: $e | $st');
       }
-      _log('[Sync] refreshed ${remoteChats.length} chats from remote');
+      remoteChatIds = syncedChats.map((chat) => chat.id).toSet();
+      chatsFetched = true;
+      _log('[Sync] refreshed ${syncedChats.length} chats from remote (paged, batched)');
     } catch (e, st) {
-      _log('[Sync] getChats failed: $e | $st');
+      _log('[Sync] getChatsPaged failed: $e | $st');
     }
 
     try {
-      final chats = await localChatDao.getByUserId(uid);
-      for (final chat in chats) {
+      final remoteMessages = await _withBackoff(
+        () => SupabaseMessageService.getAllMessagesPaged(uid),
+        'getAllMessagesPaged',
+      );
+      final syncedMessages =
+          remoteMessages.map((msg) => msg.copyWith(isSynced: true)).toList();
+      try {
+        await localMsgDao.replaceMessagesPreservingUnsynced(syncedMessages);
+      } catch (e, st) {
+        _log('[Sync] replaceMessagesPreservingUnsynced failed: $e | $st');
+      }
+      _log('[Sync] refreshed ${syncedMessages.length} messages from remote (paged, batched)');
+    } catch (e, st) {
+      _log('[Sync] getAllMessagesPaged failed: $e | $st');
+    }
+
+    // Downstream deletion propagation: tombstones whose rows are gone
+    // remotely are finished — hard-delete the chat + its messages locally.
+    // Tombstones still present remotely are kept for the next upstream push.
+    if (!chatsFetched) {
+      _log('[Sync] downstream prune skipped — remote chat list unavailable');
+      return;
+    }
+    try {
+      final tombstones = await localChatDao.getTombstonedChats();
+      var pruned = 0;
+      for (final tombstone in tombstones) {
+        if (remoteChatIds.contains(tombstone.id)) continue;
         try {
-          final remoteMessages = await _withBackoff(
-            () => SupabaseMessageService.getMessages(uid, chat.id),
-            'getMessages ${chat.id}',
-          );
-          for (final msg in remoteMessages) {
-            try {
-              await localMsgDao.replaceMessage(msg.id, msg.copyWith(isSynced: true));
-            } catch (e, st) {
-              _log('[Sync] replaceMessage ${msg.id} failed: $e | $st');
-            }
-          }
+          await localMsgDao.hardDeleteByChat(tombstone.id);
+          await localChatDao.hardDelete(tombstone.id);
+          pruned++;
         } catch (e, st) {
-          _log('[Sync] getMessages for chat ${chat.id} failed: $e | $st');
+          _log('[Sync] prune tombstone ${tombstone.id} failed: $e | $st');
         }
       }
+      _log('[Sync] pruned $pruned tombstoned chats (remote gone)');
     } catch (e, st) {
-      _log('[Sync] _refreshLocalCache outer failed: $e | $st');
+      _log('[Sync] downstream prune failed: $e | $st');
     }
   }
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../../core/constants/app_constants.dart';
@@ -8,9 +9,24 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
   static Database? _database;
 
+  /// Test-only override (sqflite_common_ffi in-memory DB).
+  ///
+  /// When set, [database] returns it instead of opening the app file DB,
+  /// so DAO integration tests run hermetically. Null in production.
+  @visibleForTesting
+  static Database? testDatabase;
+
   Future<Database> get database async {
+    final testDb = testDatabase;
+    if (testDb != null) return testDb;
     _database ??= await _initDatabase();
     return _database!;
+  }
+
+  /// Test-only reset for the override above.
+  @visibleForTesting
+  static void clearTestDatabase() {
+    testDatabase = null;
   }
 
   Future<Database> _initDatabase() async {

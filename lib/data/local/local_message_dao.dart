@@ -131,7 +131,33 @@ class LocalMessageDao {
     });
   }
 
+  /// Migrates message ownership after an offline → Supabase claim.
+  ///
+  /// Local `messages` rows are scoped by `chat_id` (no `user_id` column —
+  /// see `DatabaseHelper._onCreate`); migrating the parent `chat_sessions`
+  /// rows already re-homes every message. This probes `PRAGMA table_info`
+  /// first: if a future schema adds `messages.user_id`, it is updated with
+  /// the same pattern as `LocalChatDao.migrateUserId`; otherwise it is a
+  /// safe no-op so callers (`SyncService`, login claim) never crash with
+  /// "no such column: user_id".
   Future<void> migrateUserId(String oldUserId, String newUserId) async {
-    return;
+    if (oldUserId == newUserId) return;
+    final db = await _dbHelper.database;
+    final cols = await db.rawQuery('PRAGMA table_info(messages)');
+    final hasUserId =
+        cols.any((c) => (c['name'] as String?) == 'user_id');
+    if (!hasUserId) {
+      if (kDebugMode) {
+        debugPrint('[LocalMessageDao] migrateUserId no-op '
+            '(no user_id column; parent chat migration covers messages)');
+      }
+      return;
+    }
+    await db.update(
+      'messages',
+      {'user_id': newUserId},
+      where: 'user_id = ?',
+      whereArgs: [oldUserId],
+    );
   }
 }
