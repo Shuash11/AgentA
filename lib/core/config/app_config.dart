@@ -17,7 +17,6 @@ class AppConfig {
   // NOTE: String.fromEnvironment requires a literal key (compile-time),
   // so each secret gets its own const + dotenv fallback (dev only).
   static const _dGroq = String.fromEnvironment('GROQ_API_KEY');
-  static const _dMinimax = String.fromEnvironment('MINIMAX_API_KEY');
   static const _dKaggleUser = String.fromEnvironment('KAGGLE_USERNAME');
   static const _dKaggleKey = String.fromEnvironment('KAGGLE_KEY');
   static const _dHf = String.fromEnvironment('HF_TOKEN');
@@ -35,13 +34,11 @@ class AppConfig {
   }
 
   static String get groqApiKey => _withFallback(_dGroq, 'GROQ_API_KEY').trim();
-  static String get minimaxApiKey => _withFallback(_dMinimax, 'MINIMAX_API_KEY').trim();
   static String get kaggleUsername => _withFallback(_dKaggleUser, 'KAGGLE_USERNAME').trim();
   static String get kaggleKey => _withFallback(_dKaggleKey, 'KAGGLE_KEY').trim();
   static String get hfToken => _withFallback(_dHf, 'HF_TOKEN').trim();
 
   static const String groqEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
-  static const String minimaxEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
   static const String hfImageModel =
       'stabilityai/stable-diffusion-3-medium-diffusers';
   static String get hfImageEndpoint =>
@@ -53,10 +50,9 @@ class AppConfig {
       'https://api.github.com/repos/Shuash11/AgentA/releases/latest';
 
   static const String groqModel = 'allam-2-7b';
-  static const String minimaxModel = 'minimax/minimax-m2.7:free';
 
   /// Shared English-enforcing rule reused across every AI persona prompt
-  /// (Groq / MiniMax / Gemma) so all chat paths always respond in English.
+  /// (Groq / Gemma) so all chat paths always respond in English.
   static const String aiEnglishRule =
       'IMPORTANT: Always respond ONLY in English, regardless of the language '
       'the user writes in. Never reply in any other language.';
@@ -157,8 +153,7 @@ class AppConfig {
   }
 
   static bool get hasValidApiKeys =>
-      (groqApiKey.isNotEmpty && !groqApiKey.contains('your_')) ||
-      (minimaxApiKey.isNotEmpty && !minimaxApiKey.contains('your_'));
+      groqApiKey.isNotEmpty && !groqApiKey.contains('your_');
 
   /// Logs only lengths (never values) for trimmed env — satisfies M21.
   static void logTrimmedLengths() {

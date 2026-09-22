@@ -1,4 +1,4 @@
-enum AIModel { pollinations, groq, minimax, gemma }
+enum AIModel { pollinations, groq, gemma }
 
 extension AIModelExtension on AIModel {
   String get displayName {
@@ -7,8 +7,6 @@ extension AIModelExtension on AIModel {
         return 'Image Gen';
       case AIModel.groq:
         return 'Groq';
-      case AIModel.minimax:
-        return 'MiniMax';
       case AIModel.gemma:
         return 'Gemma';
     }
@@ -20,8 +18,6 @@ extension AIModelExtension on AIModel {
         return 'Pollinations AI - Generate images';
       case AIModel.groq:
         return 'Groq - ALLaM 2 7B';
-      case AIModel.minimax:
-        return 'MiniMax - M2.7 free';
       case AIModel.gemma:
         return 'Gemma - Local Offline AI';
     }

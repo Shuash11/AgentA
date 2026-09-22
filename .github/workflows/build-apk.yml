@@ -221,7 +221,6 @@ jobs:
       - name: Build APK (dart-define secrets, C1)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           GEMMA_MODEL_URL: ${{ secrets.GEMMA_MODEL_URL }}
@@ -230,13 +229,11 @@ jobs:
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         run: |
           # M21: trim all dart-defines (use trimmed env from earlier step)
-          MINIMAX_API_KEY_TRIMMED="$(echo "$MINIMAX_API_KEY" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
           KAGGLE_USERNAME_TRIMMED="$(echo "$KAGGLE_USERNAME" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
           KAGGLE_KEY_TRIMMED="$(echo "$KAGGLE_KEY" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
           GEMMA_MODEL_URL_TRIMMED="$(echo "$GEMMA_MODEL_URL" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
           flutter build apk --release \
             --dart-define=GROQ_API_KEY="${GROQ_API_KEY_TRIMMED:-$GROQ_API_KEY}" \
-            --dart-define=MINIMAX_API_KEY="$MINIMAX_API_KEY_TRIMMED" \
             --dart-define=KAGGLE_USERNAME="$KAGGLE_USERNAME_TRIMMED" \
             --dart-define=KAGGLE_KEY="$KAGGLE_KEY_TRIMMED" \
             --dart-define=GEMMA_MODEL_URL="$GEMMA_MODEL_URL_TRIMMED" \

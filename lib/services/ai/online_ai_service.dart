@@ -3,19 +3,16 @@ import '../../data/models/chat_message_model.dart';
 import 'ai_model.dart';
 import 'groq_service.dart';
 import 'huggingface_image_service.dart';
-import 'minimax_service.dart';
 import 'pollinations_service.dart';
 
 class OnlineAIService extends ChangeNotifier {
   final GroqService _groq;
-  final MiniMaxService _minimax;
   final PollinationsService _pollinations;
   final HuggingFaceImageService _huggingFace;
 
   AIModel _preferredModel = AIModel.groq;
 
-  OnlineAIService(
-      this._groq, this._minimax, this._pollinations, this._huggingFace);
+  OnlineAIService(this._groq, this._pollinations, this._huggingFace);
 
   AIModel get preferredModel => _preferredModel;
 
@@ -45,8 +42,6 @@ class OnlineAIService extends ChangeNotifier {
         return _pollinations.generateImage(prompt: newMessage);
       case AIModel.groq:
         return _groq.sendMessage(history: history, newMessage: newMessage);
-      case AIModel.minimax:
-        return _minimax.sendMessage(history: history, newMessage: newMessage);
       case AIModel.gemma:
         throw Exception('Gemma is an offline model and cannot be used in OnlineAIService.');
     }
@@ -66,9 +61,6 @@ class OnlineAIService extends ChangeNotifier {
       case AIModel.groq:
         yield* _groq.sendMessageStream(history: history, newMessage: newMessage);
         return;
-      case AIModel.minimax:
-        yield* _minimax.sendMessageStream(history: history, newMessage: newMessage);
-        return;
       case AIModel.gemma:
         throw Exception('Gemma is an offline model and cannot be used in OnlineAIService.');
     }
@@ -86,7 +78,6 @@ class OnlineAIService extends ChangeNotifier {
 
   void cancelActiveGeneration() {
     _groq.cancelGeneration();
-    _minimax.cancelGeneration();
     _huggingFace.cancelGeneration();
   }
 }

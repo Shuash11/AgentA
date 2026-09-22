@@ -571,9 +571,6 @@ class _ChatScreenState extends State<Chats> {
     if (lower.contains('groq api key not configured')) {
       return 'Groq API key is missing or invalid in .env.';
     }
-    if (lower.contains('minimax api key not configured')) {
-      return 'MiniMax API key is missing in .env.';
-    }
     if (lower.contains('huggingface') || lower.contains('hf_token')) {
       if (lower.contains('credits exhausted') || lower.contains('rate limit')) {
         return 'HuggingFace free limit reached. Wait a bit or stick with Pollinations.';
