@@ -46,4 +46,49 @@ class SupabaseMessageService {
         .eq('user_id', userId)
         .eq('chat_id', chatId);
   }
+
+  /// Paginated variant of [getMessages] for the sync path (Phase 1 primitive).
+  ///
+  /// Loops `.range(from, to)` — inclusive on both ends — with pages below
+  /// the Supabase default 1,000-row cap until a short page signals
+  /// completion. Mapping, ordering, and defaults mirror [getMessages];
+  /// existing callers are untouched.
+  static Future<List<ChatMessageModel>> getMessagesPaged(
+    String userId,
+    String chatId, {
+    int pageSize = 500,
+  }) async {
+    final effectivePageSize = pageSize.clamp(1, 1000);
+    final all = <ChatMessageModel>[];
+    var page = 0;
+    while (true) {
+      final from = page * effectivePageSize;
+      // range() is inclusive, so subtract 1 for an exact page window.
+      final to = from + effectivePageSize - 1;
+      final rows = await _db
+          .from('messages')
+          .select()
+          .eq('user_id', userId)
+          .eq('chat_id', chatId)
+          .order('timestamp')
+          .range(from, to);
+      final batch = (rows as List).map((row) {
+        final data = Map<String, dynamic>.from(row as Map);
+        return ChatMessageModel(
+          id: data['id'] as String? ?? '',
+          chatId: chatId,
+          text: data['text'] as String? ?? '',
+          isUser: data['is_user'] as bool? ?? false,
+          timestamp:
+              DateTime.tryParse(data['timestamp'] as String? ?? '') ??
+                  DateTime.now(),
+          isSynced: true,
+        );
+      }).toList();
+      all.addAll(batch);
+      if (batch.length < effectivePageSize) break;
+      page++;
+    }
+    return all;
+  }
 }
