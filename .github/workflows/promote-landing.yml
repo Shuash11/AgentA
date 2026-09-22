@@ -33,8 +33,15 @@ name: Promote to Landing (latest)
     # update engine detects, now also promote to the landing.
 
 # `actions: read` covers reading workflow runs + downloading their artifacts.
+# `contents: read` is REQUIRED for same-repo release reads: a permissions block
+# revokes all unlisted scopes, and the release-fallback `gh release download` /
+# `gh release list` calls use GITHUB_TOKEN (without contents: read, GitHub
+# returns 404 "release not found" for release downloads on a private repo).
+# Landing cross-repo WRITES keep using the landing-scoped LANDING_RELEASE_PAT
+# (unchanged — separate PAT permissions).
 permissions:
   actions: read
+  contents: read
 
 # Serialize promotions to the rolling `latest` target so rapid pushes queue
 # instead of interleaving (cancel-in-progress: false = queue, not cancel).
@@ -56,6 +63,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read
+      # contents: read is also required here for the same-repo release fallback
+      # (gh release download / gh release list) — see workflow-level note.
+      contents: read
     steps:
       - name: Guard required secret
         id: guard
@@ -115,7 +125,16 @@ jobs:
               # v* release's APK (better a recent release than nothing). This
               # may be from an OLDER commit than the triggering run — log it
               # as a warning so staleness stays visible.
-              NEWEST_VTAG="$(gh release list --repo "$GITHUB_REPOSITORY" --json tagName --jq '[.[] | select(.tagName | test("^v"))] | .[0].tagName' 2>/dev/null || true)"
+              # No silent error swallow here: a read-restricted token surfaces
+              # as 404 "not found" on private-repo releases, so real
+              # permission/API errors must fail loudly. Only an empty list
+              # ("no v* release exists") is a tolerated no-op (falls through to
+              # the final ::error:: below). `// empty` normalizes the empty-list
+              # jq result so no bogus "null" download is attempted.
+              if ! NEWEST_VTAG="$(gh release list --repo "$GITHUB_REPOSITORY" --json tagName --jq '[.[] | select(.tagName | test("^v"))] | .[0].tagName // empty')"; then
+                echo "::error::gh release list failed for $GITHUB_REPOSITORY — cannot read releases for the main-run fallback (permission or API error)."
+                exit 1
+              fi
               if [ -n "$NEWEST_VTAG" ] && gh release download "$NEWEST_VTAG" --repo "$GITHUB_REPOSITORY" --pattern "AgentA-*.apk" --dir ./artifacts; then
                 SRC="$(find ./artifacts -type f -name 'AgentA-*.apk' | head -n 1)"
                 if [ -n "$SRC" ]; then
