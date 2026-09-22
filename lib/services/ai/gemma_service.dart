@@ -80,11 +80,11 @@ Formatting rules:
 
     bool rehydrationFailed = false;
     try {
-      // Fresh process: the plugin's active-model spec is memory-only and is
-      // null until install()/setActiveModel runs in THIS process —
-      // getActiveModel() throws StateError otherwise. Rehydrate first;
-      // install() is idempotent and skips the download when the file is
-      // already in the plugin's storage.
+      // 1.8.4 auto-restores the active-model identity from SharedPreferences
+      // at initialize(), so hasActiveModel() is usually true at startup.
+      // ensureModelActive() remains as defense for storage-loss or failed
+      // restore cases; its install() is idempotent and skips the download
+      // when the file is already in the plugin's storage.
       if (!FlutterGemma.hasActiveModel()) {
         final rehydrated = await ModelDownloadService.ensureModelActive();
         rehydrationFailed = !rehydrated;
@@ -122,14 +122,17 @@ Formatting rules:
   }
 
   /// Maps a load failure to a friendly, brand-free reason.
+  /// Download failures arrive pre-classified from the typed
+  /// DownloadException path in ModelDownloadService; this heuristic covers
+  /// only non-download load failures (engine init, chat creation). Raw
+  /// exception text stays in kDebugMode logs, never in the UI.
   String _classifyLoadError(Object error, bool rehydrationFailed) {
     final raw = error.toString().toLowerCase();
     if (rehydrationFailed ||
         raw.contains('not installed') ||
         raw.contains('no such file') ||
         raw.contains('not found') ||
-        raw.contains('bad state') ||
-        raw.contains('null')) {
+        raw.contains('bad state')) {
       return 'Offline model is not installed.';
     }
     return 'Offline model failed to load.';

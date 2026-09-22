@@ -119,11 +119,13 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
       if (mounted && modelDownload.isReady) {
         await _completeOnce();
       } else if (mounted) {
-        // Never leave the UI in a dead progress state — surface the retry
-        // button instead of an eternal bar.
+        // Never leave the UI in a dead progress state — surface the typed
+        // friendly error from the service (brand-free, never raw), or the
+        // generic fallback, with the retry button below.
         setState(() {
           _downloading = false;
-          _errorMessage = 'Download did not finish. Tap to retry.';
+          _errorMessage = modelDownload.errorMessage ??
+              'Download did not finish. Tap to retry.';
         });
       }
     } catch (e) {
@@ -133,7 +135,8 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
       if (mounted) {
         setState(() {
           _downloading = false;
-          _errorMessage = 'Download did not complete. Please try again.';
+          _errorMessage = modelDownload.errorMessage ??
+              'Download did not complete. Please try again.';
         });
       }
     }

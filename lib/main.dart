@@ -168,8 +168,12 @@ class _AppLoaderState extends State<AppLoader> {
     try {
       // flutter_gemma 1.x: core registers NO engine by default — the
       // MediaPipe (.task) engine must be registered explicitly.
+      // maxDownloadRetries: smart retry/backoff for transient download
+      // errors on the ~529MB model install.
       await FlutterGemma.initialize(
-          inferenceEngines: const [MediaPipeEngine()]);
+        inferenceEngines: const [MediaPipeEngine()],
+        maxDownloadRetries: 10,
+      );
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[Main] FlutterGemma.initialize failed (ignored): $e');
