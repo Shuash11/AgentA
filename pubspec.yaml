@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 1.2.1+4
 
 environment:
-  sdk: ^3.6.0
+  sdk: ^3.12.0
 
 dependencies:
   flutter:
@@ -18,7 +18,8 @@ dependencies:
 
   http: ^1.2.1
 
-  flutter_gemma: ^0.13.1
+  flutter_gemma: ^1.8.4
+  flutter_gemma_mediapipe: ^1.0.6
   path_provider: ^2.1.4
 
   connectivity_plus: ^6.0.3

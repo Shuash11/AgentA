@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
+import 'package:flutter_gemma_mediapipe/flutter_gemma_mediapipe.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'theme/app_theme.dart';
 import 'cubit/app_providers.dart';
@@ -165,7 +166,10 @@ class _AppLoaderState extends State<AppLoader> {
     }
 
     try {
-      await FlutterGemma.initialize();
+      // flutter_gemma 1.x: core registers NO engine by default — the
+      // MediaPipe (.task) engine must be registered explicitly.
+      await FlutterGemma.initialize(
+          inferenceEngines: const [MediaPipeEngine()]);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[Main] FlutterGemma.initialize failed (ignored): $e');
