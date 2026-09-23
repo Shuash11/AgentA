@@ -298,6 +298,10 @@ class SyncService {
     // Downstream deletion propagation: tombstones whose rows are gone
     // remotely are finished — hard-delete the chat + its messages locally.
     // Tombstones still present remotely are kept for the next upstream push.
+    // Invariant: `getChatsPaged` loops until a short page, so a completed
+    // fetch means `remoteChatIds` is complete; any page failure throws and
+    // leaves `chatsFetched=false`, so an offline failure never looks like
+    // "remote deleted everything".
     if (!chatsFetched) {
       _log('[Sync] downstream prune skipped — remote chat list unavailable');
       return;
@@ -318,6 +322,20 @@ class SyncService {
       _log('[Sync] pruned $pruned tombstoned chats (remote gone)');
     } catch (e, st) {
       _log('[Sync] downstream prune failed: $e | $st');
+    }
+    // Ghost-chat prune: synced-but-alive rows absent remotely were deleted
+    // remotely without leaving a tombstone, so the loop above never sees
+    // them. Filters are disjoint (`shouldPruneLocalRow` is true only for
+    // is_synced=1, is_deleted=0 rows), so running after the tombstone loop
+    // is safe. Same `chatsFetched` guard applies — never runs after a
+    // fetch failure. Skips chats holding unsynced messages, so pending
+    // local work is never destroyed.
+    try {
+      final ghostsPruned =
+          await localChatDao.pruneChatsGoneRemote(remoteChatIds);
+      _log('[Sync] pruned $ghostsPruned ghost chats (remote gone)');
+    } catch (e, st) {
+      _log('[Sync] ghost prune failed: $e | $st');
     }
   }
 

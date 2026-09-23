@@ -66,14 +66,27 @@ kept for the next upstream push. Message rows have no independent tombstone
 fetch; they follow their parent chat (push deletes by chat, prune deletes
 by chat).
 
+Ghost chats (wired into `_refreshLocalCacheFromRemote` behind the
+`chatsFetched` guard, after the tombstone loop): a locally-synced chat
+(`is_synced = 1, is_deleted = 0`) absent from the fetched remote set was
+deleted remotely without leaving a tombstone, so the tombstone loop above
+never sees it. `LocalChatDao.pruneChatsGoneRemote(remoteChatIds)` covers
+this case — it prunes exactly the rows where `shouldPruneLocalRow` is true
+(`!existsRemotely && isSynced == 1 && isDeleted == 0`), hard-deleting each
+pruned chat plus its messages, and skips any chat still holding unsynced
+messages (`is_synced = 0 AND is_deleted = 0`, the `getUnsynced` filter) so
+pending local work is never destroyed. Same `chatsFetched` guard applies:
+only call after a successful full fetch, since `getChatsPaged` pages to a
+short page and the id set is complete.
+
 `ChatRepository.getChatsForUser` and `MessageRepository` refresh paths use
 the same paginated-fetch + preserving-replace primitives, so dashboard reads
 never resurrect tombstones or unsynced edits either.
 
 ## Guards
 
-- `chatsFetched` guard: the prune step runs only when the remote chat list
-  was actually fetched. If the fetch throws, `chatsFetched` stays false and
+- `chatsFetched` guard: both prune steps (tombstone loop and ghost prune)
+  run only when the remote chat list was actually fetched. If the fetch throws, `chatsFetched` stays false and
   pruning is skipped — an offline failure must never look like "remote
   deleted everything".
 - No-uid skip: both flush and refresh read `AuthService.currentUser?.id`

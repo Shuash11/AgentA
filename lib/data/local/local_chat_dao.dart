@@ -110,6 +110,22 @@ class LocalChatDao {
     );
   }
 
+  /// Pure ghost-chat guard for the downstream prune helper.
+  ///
+  /// Returns true only when a fully-synced, non-deleted local row is absent
+  /// from the fetched remote set — a ghost left behind by a remote delete
+  /// that arrived without a tombstone. Never true for unsynced rows (they
+  /// may be pending upstream push) or tombstones (`is_deleted = 1`, handled
+  /// by the existing tombstone prune loop). Exposed for unit tests.
+  @visibleForTesting
+  static bool shouldPruneLocalRow({
+    required int isSynced,
+    required int isDeleted,
+    required bool existsRemotely,
+  }) {
+    return !existsRemotely && isSynced == 1 && isDeleted == 0;
+  }
+
   Future<ChatSessionModel?> getById(String id) async {
     final db = await _dbHelper.database;
     final rows = await db.query(
@@ -223,6 +239,66 @@ class LocalChatDao {
       }
       await batch.commit(noResult: true);
     });
+  }
+
+  /// Downstream ghost-chat prune.
+  ///
+  /// Live caller: `SyncService._refreshLocalCacheFromRemote` ghost-prune step
+  /// (behind the `chatsFetched` guard) — prunes synced-but-alive rows absent
+  /// remotely after the tombstone loop.
+  ///
+  /// Hard-deletes fully-synced, non-deleted local chats absent from the
+  /// fetched remote set, plus their messages. Skips unsynced rows, tombstones
+  /// (via [shouldPruneLocalRow]), and any chat still holding unsynced
+  /// messages (same `is_synced = 0 AND is_deleted = 0` filter as
+  /// `getUnsynced`) so pending local work is never destroyed. Callers must
+  /// pass the complete remote id set and only call after a successful fetch
+  /// (the `chatsFetched` guard in `SyncService`); an empty set therefore
+  /// prunes every synced candidate. Returns the pruned chat count.
+  Future<int> pruneChatsGoneRemote(Set<String> remoteChatIds) async {
+    final db = await _dbHelper.database;
+    final rows = await db.query(
+      'chat_sessions',
+      columns: ['id', 'is_synced', 'is_deleted'],
+    );
+    if (rows.isEmpty) return 0;
+
+    final unsyncedMsgRows = await db.query(
+      'messages',
+      distinct: true,
+      columns: ['chat_id'],
+      where: 'is_synced = 0 AND is_deleted = 0',
+    );
+    final chatsWithUnsynced = <String>{
+      for (final row in unsyncedMsgRows) row['chat_id'] as String,
+    };
+
+    final toPrune = <String>[];
+    for (final row in rows) {
+      final id = row['id'] as String;
+      final isSynced = (row['is_synced'] as int?) ?? 0;
+      final isDeleted = (row['is_deleted'] as int?) ?? 0;
+      if (!shouldPruneLocalRow(
+        isSynced: isSynced,
+        isDeleted: isDeleted,
+        existsRemotely: remoteChatIds.contains(id),
+      )) {
+        continue;
+      }
+      if (chatsWithUnsynced.contains(id)) continue;
+      toPrune.add(id);
+    }
+    if (toPrune.isEmpty) return 0;
+
+    await db.transaction((txn) async {
+      final batch = txn.batch();
+      for (final id in toPrune) {
+        batch.delete('messages', where: 'chat_id = ?', whereArgs: [id]);
+        batch.delete('chat_sessions', where: 'id = ?', whereArgs: [id]);
+      }
+      await batch.commit(noResult: true);
+    });
+    return toPrune.length;
   }
 
   Future<void> migrateUserId(String oldUserId, String newUserId) async {
