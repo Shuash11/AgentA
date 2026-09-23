@@ -12,6 +12,7 @@ logs and to a bounded in-app diagnostics toggle.
 | `lib/main.dart` database init failure | `App data failed to initialize. Please try again.` | `kDebugMode` log at the throw site |
 | `lib/presentation/profile/editprofile.dart` save failure | `Could not save your profile. Please try again.` (SnackBar) | `debugPrint('[EditProfile] save failed: $e')` |
 | `lib/presentation/auth/login.dart` `_mapGoogleError` | `Google sign-in failed (<code>).` / `Google sign-in failed. Please try again.` / `... Check your connection.` | `debugPrint('[Login] Google sign-in failed: $e | $stack')` + typed `GoogleSignInFailure` |
+| `lib/presentation/dashboard/dashboard.dart` load failure | `Couldn't load your conversations.` + Retry button (never the empty state) | `debugPrint('[Dashboard] load chats failed: $e')` |
 
 ## Bounded diagnostics
 

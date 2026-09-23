@@ -71,3 +71,6 @@ val_out.txt
 val_done.txt
 watch_out.txt
 watch_done.txt
+
+# Supabase CLI local temp (untracked; never stage).
+supabase/.temp/

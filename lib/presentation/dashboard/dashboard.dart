@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -33,6 +34,7 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> {
   List<ChatSessionModel> _chats = [];
   bool _isLoading = true;
+  String? _loadError;
   bool _initialized = false;
   bool _wasOnline = true;
   StreamSubscription? _connectivitySubscription;
@@ -89,9 +91,12 @@ class _DashboardState extends State<Dashboard> {
 
   Future<void> _loadChats() async {
     if (!mounted) return;
-    if (_chats.isEmpty) {
-      setState(() => _isLoading = true);
-    }
+    setState(() {
+      _loadError = null;
+      if (_chats.isEmpty) {
+        _isLoading = true;
+      }
+    });
     try {
       final userId = await _localChatDao.getUserId();
       final chats = await _chatRepo.getChatsForUser(userId);
@@ -99,12 +104,19 @@ class _DashboardState extends State<Dashboard> {
         setState(() {
           _chats = chats;
           _isLoading = false;
+          _loadError = null;
         });
       }
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Dashboard] load chats failed: $e');
+      }
       if (mounted) {
-        
-        setState(() => _isLoading = false);
+        // Friendly static text only — raw detail stays in logs (error hygiene).
+        setState(() {
+          _isLoading = false;
+          _loadError = "Couldn't load your conversations.";
+        });
       }
     }
   }
@@ -258,6 +270,42 @@ void _newChat() async {
                 ? Center(
                     child: CircularProgressIndicator(color: colors.amber),
                   )
+                : _loadError != null
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: colors.amber.withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.error_outline_rounded,
+                                  color: colors.amber, size: 48),
+                            ),
+                            const SizedBox(height: AppSpacing.xl),
+                            Text(_loadError!,
+                                style: TextStyle(
+                                    fontSize: 20, fontWeight: FontWeight.w600, color: colors.text)),
+                            const SizedBox(height: AppSpacing.md),
+                            Text('Please try again.',
+                                style: TextStyle(color: colors.subtext, fontSize: 14)),
+                            const SizedBox(height: AppSpacing.base),
+                            ElevatedButton(
+                              onPressed: _loadChats,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: colors.amber,
+                                foregroundColor: Colors.black,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: AppRadius.buttonRadius,
+                                ),
+                              ),
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      )
                 : _chats.isEmpty
                     ? Center(
                         child: Column(
