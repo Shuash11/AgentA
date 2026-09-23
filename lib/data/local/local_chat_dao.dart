@@ -160,18 +160,15 @@ class LocalChatDao {
     return rows.map(ChatSessionModel.fromMap).toList();
   }
 
-  Future<void> replaceChat(String chatId, ChatSessionModel chat) async {
-    final db = await _dbHelper.database;
-    await db.insert('chat_sessions', chat.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-
   /// Batched remote refresh that never clobbers local state.
   ///
   /// Mirrors `LocalMessageDao.replaceMessagesPreservingUnsynced`: chunked
   /// (500) tombstone/unsynced probe, then a single transaction batch insert.
   /// Skips local rows with `is_synced = 0` or `is_deleted = 1`; for synced
   /// rows replaced from remote, the local `unread` count is preserved.
-  /// Phase 1 primitive only — no callers switch to it yet.
+  /// Live callers (Phase 2): `SyncService` batched refresh and
+  /// `ChatRepository.getChatsForUser` — both rely on the tombstone/unsynced
+  /// skip so offline deletes and unsynced edits are never resurrected.
   Future<void> replaceChatsPreservingUnsynced(
     List<ChatSessionModel> chats,
   ) async {

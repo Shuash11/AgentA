@@ -90,11 +90,6 @@ class LocalMessageDao {
     return rows.map(ChatMessageModel.fromMap).toList();
   }
 
-  Future<void> replaceMessage(String messageId, ChatMessageModel msg) async {
-    final db = await _dbHelper.database;
-    await db.insert('messages', msg.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-
   Future<void> replaceMessagesPreservingUnsynced(List<ChatMessageModel> messages) async {
     if (messages.isEmpty) return;
     final db = await _dbHelper.database;
