@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../cubit/theme/theme_cubit.dart';
@@ -59,9 +60,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
         );
       }
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[EditProfile] save failed: $e');
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save: ${e.toString()}'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Could not save your profile. Please try again.'), backgroundColor: Colors.red),
         );
       }
     } finally {

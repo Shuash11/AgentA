@@ -17,16 +17,38 @@ class AppAuthCredential {
 
 /// Typed failure for Google sign-in — replaces generic Exception(string).
 /// Preserves original code + description, adds actionable hint.
+///
+/// `detail` is display-bounded: dynamic sources (plugin internals, server
+/// messages) are truncated via [truncateDetail] at the throw sites so the
+/// in-app "Show details" toggle never renders unbounded text. The full raw
+/// value stays in `kDebugMode` logs (see `_log` calls before each throw).
+/// This object is in-memory only — never persisted (no DAO/session writes).
 class GoogleSignInFailure implements Exception {
   final String code;
   final String? detail;
   final String hint;
+
+  /// Max rendered detail length before an ellipsis suffix is appended.
+  static const int maxDetailLength = 200;
 
   const GoogleSignInFailure({
     required this.code,
     this.detail,
     required this.hint,
   });
+
+  /// Bounds a dynamic detail string for safe in-app display.
+  /// Returns null for null/empty/whitespace-only input (so the login
+  /// "Show details" toggle's `?? '(none)'` fallback renders); longer
+  /// input is cut to [max] chars plus a '...' suffix.
+  static String? truncateDetail(String? detail,
+      [int max = maxDetailLength]) {
+    if (detail == null) return null;
+    final trimmed = detail.trim();
+    if (trimmed.isEmpty) return null;
+    if (trimmed.length <= max) return trimmed;
+    return '${trimmed.substring(0, max)}...';
+  }
 
   @override
   String toString() {
@@ -187,7 +209,7 @@ class AuthService {
           '[AuthService] ensureGoogleInitialized FAILED validation: $validationError | idSuffix: ${_idSuffix(serverId)}');
       throw GoogleSignInFailure(
         code: 'not_configured',
-        detail: validationError,
+        detail: GoogleSignInFailure.truncateDetail(validationError),
         hint:
             'Add GOOGLE_SERVER_CLIENT_ID to .env (Web Client ID from Google Cloud Console). Must end with .apps.googleusercontent.com',
       );
@@ -210,7 +232,7 @@ class AuthService {
           '[AuthService] GoogleSignIn.initialize failed: $e | suffix: ...${_idSuffix(serverId)} | stack: $stack');
       throw GoogleSignInFailure(
         code: 'init_failed',
-        detail: e.toString(),
+        detail: GoogleSignInFailure.truncateDetail(e.toString()),
         hint:
             'GoogleSignIn initialization failed. Check GOOGLE_SERVER_CLIENT_ID and platform OAuth setup (SHA-1, bundle ID).',
       );
@@ -266,26 +288,31 @@ class AuthService {
         }
       }
 
+      // Bounded copy for display: the raw `detail` stays in the kDebugMode
+      // log above; the typed failure (detail + hint interpolations) renders
+      // in the in-app "Show details" toggle, so it must stay bounded.
+      final displayDetail = GoogleSignInFailure.truncateDetail(detail) ?? codeName;
+
       if (e.code == GoogleSignInExceptionCode.canceled) {
         throw GoogleSignInFailure(
           code: isReauth ? 'reauth_failed' : codeName,
-          detail: detail,
+          detail: displayDetail,
           hint: isReauth
-              ? 'Google rejected the saved sign-in (native: $detail). This build\'s signing '
+              ? 'Google rejected the saved sign-in (native: $displayDetail). This build\'s signing '
                   'certificate is not authorized for Google Sign-In, or the cached authorization '
                   'is stale. Fix: register the APK signing SHA-1 in Google Cloud Console as an '
                   'ANDROID OAuth client for package com.agenta.AgentA (each CI build prints the '
                   'exact fingerprint in its job summary; see docs/google-signin-setup.md), then '
                   'retry. Also confirm GOOGLE_SERVER_CLIENT_ID is the Web client ID from the same '
                   'project that Supabase Auth > Providers > Google uses.'
-              : 'Google sign-in canceled ($detail). If you did not cancel, this usually means SHA-1 / OAuth client or Supabase Google provider misconfiguration. Verify SHA-1 in Firebase/Google Cloud Console and that Supabase Dashboard > Auth > Providers > Google is enabled with correct Web Client ID/Secret.',
+              : 'Google sign-in canceled ($displayDetail). If you did not cancel, this usually means SHA-1 / OAuth client or Supabase Google provider misconfiguration. Verify SHA-1 in Firebase/Google Cloud Console and that Supabase Dashboard > Auth > Providers > Google is enabled with correct Web Client ID/Secret.',
         );
       }
       throw GoogleSignInFailure(
         code: codeName,
-        detail: detail,
+        detail: displayDetail,
         hint:
-            'Google sign-in failed ($detail). Check device connectivity and OAuth configuration.',
+            'Google sign-in failed ($displayDetail). Check device connectivity and OAuth configuration.',
       );
     } catch (e, stack) {
       _log('[AuthService] authenticate() unexpected error: $e | stack: $stack');
@@ -359,11 +386,13 @@ class AuthService {
       return res;
     } on AuthException catch (e) {
       _log('[AuthService] signInWithIdToken AuthException: ${e.message}');
+      final displayMessage =
+          GoogleSignInFailure.truncateDetail(e.message) ?? e.message;
       throw GoogleSignInFailure(
         code: 'supabase_rejected',
-        detail: e.message,
+        detail: displayMessage,
         hint:
-            'Supabase rejected Google token (check Dashboard Google provider + Web Client ID/Secret): ${e.message}',
+            'Supabase rejected Google token (check Dashboard Google provider + Web Client ID/Secret): $displayMessage',
       );
     } catch (e, stack) {
       _log(

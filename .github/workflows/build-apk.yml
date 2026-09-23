@@ -225,6 +225,19 @@ jobs:
             exit 1
           fi
 
+      # Error-hygiene guard: the exact raw-exception UI strings removed in
+      # the error-message hygiene task must not come back. Narrow on purpose —
+      # a broad 'toString' match would false-positive on legit kDebugMode
+      # logs (e.g. debugPrint('[Login] Google sign-in failed: $e')) and on
+      # the bounded displayDetail/hint classification code. lib/ only; test/
+      # fixtures may legitimately quote such strings.
+      - name: Guard - no raw exception text in UI
+        run: |
+          if grep -RqiE "Failed to save: \$\{e\.toString\(\)\}|Failed to load app config: \$e|Failed to initialize database: \$e|Google sign-in failed: \$detail|Google sign-in failed: \$\{e\.toString" lib/; then
+            echo "::error::Raw exception text leaked to UI"
+            exit 1
+          fi
+
       - name: Build APK (dart-define secrets, C1)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}

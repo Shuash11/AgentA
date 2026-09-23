@@ -583,11 +583,8 @@ class _LoginPageState extends State<LoginPage> {
             failure: e,
           );
         default:
-          final detail = (e.detail ?? '').trim();
           return _GoogleSignInPresentation(
-            message: detail.isEmpty
-                ? 'Google sign-in failed (${e.code}).'
-                : 'Google sign-in failed: $detail',
+            message: 'Google sign-in failed (${e.code}).',
             failure: e,
           );
       }
@@ -627,9 +624,8 @@ class _LoginPageState extends State<LoginPage> {
         message: 'Google sign-in failed. Check your connection.',
       );
     }
-    return _GoogleSignInPresentation(
-      message:
-          'Google sign-in failed: ${e.toString().replaceAll('Exception: ', '')}',
+    return const _GoogleSignInPresentation(
+      message: 'Google sign-in failed. Please try again.',
     );
   }
 

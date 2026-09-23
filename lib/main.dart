@@ -101,9 +101,10 @@ class _AppLoaderState extends State<AppLoader> {
       }
       if (!mounted) return;
       setState(() {
-        _initState = InitState(
+        _initState = const InitState(
           status: AppInitStatus.error,
-          errorMessage: 'Failed to load app config: $e',
+          errorMessage:
+              'App configuration failed to load. Please try again.',
         );
       });
       return;
@@ -194,9 +195,9 @@ class _AppLoaderState extends State<AppLoader> {
       }
       if (!mounted) return;
       setState(() {
-        _initState = InitState(
+        _initState = const InitState(
           status: AppInitStatus.error,
-          errorMessage: 'Failed to initialize database: $e',
+          errorMessage: 'App data failed to initialize. Please try again.',
         );
       });
       return;
