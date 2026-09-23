@@ -17,8 +17,6 @@ class AppConfig {
   // NOTE: String.fromEnvironment requires a literal key (compile-time),
   // so each secret gets its own const + dotenv fallback (dev only).
   static const _dGroq = String.fromEnvironment('GROQ_API_KEY');
-  static const _dKaggleUser = String.fromEnvironment('KAGGLE_USERNAME');
-  static const _dKaggleKey = String.fromEnvironment('KAGGLE_KEY');
   static const _dHf = String.fromEnvironment('HF_TOKEN');
   static const _dGemmaUrl = String.fromEnvironment('GEMMA_MODEL_URL');
   static const _dSupaUrl = String.fromEnvironment('SUPABASE_URL');
@@ -34,8 +32,6 @@ class AppConfig {
   }
 
   static String get groqApiKey => _withFallback(_dGroq, 'GROQ_API_KEY').trim();
-  static String get kaggleUsername => _withFallback(_dKaggleUser, 'KAGGLE_USERNAME').trim();
-  static String get kaggleKey => _withFallback(_dKaggleKey, 'KAGGLE_KEY').trim();
   static String get hfToken => _withFallback(_dHf, 'HF_TOKEN').trim();
 
   static const String groqEndpoint = 'https://api.groq.com/openai/v1/chat/completions';

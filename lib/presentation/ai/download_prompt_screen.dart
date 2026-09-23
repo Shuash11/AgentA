@@ -93,21 +93,6 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
     });
 
     try {
-      if (modelDownload.canUseKaggle) {
-        
-        try {
-          await modelDownload.installModelFromKaggle();
-          if (mounted && modelDownload.isReady) {
-            await _completeOnce();
-            return;
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint('[DownloadPrompt] Kaggle install failed, falling back to direct download: $e');
-          }
-        }
-      }
-
       await modelDownload.installModel();
 
       if (mounted && !modelDownload.isReady) {

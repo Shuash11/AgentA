@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import '../../core/config/app_config.dart';
 import '../../data/local/offline_model_dao.dart';
-import 'kaggle_download_service.dart';
 
 enum ModelStatus { notInstalled, installing, ready, error }
 
@@ -41,9 +40,6 @@ class ModelDownloadService extends ChangeNotifier {
   /// from the URL filename) always matches.
   static String get resolvedModelUrl =>
       AppConfig.gemmaModelUrl.isNotEmpty ? AppConfig.gemmaModelUrl : _modelUrl;
-
-  bool get canUseKaggle =>
-      AppConfig.kaggleUsername.isNotEmpty && AppConfig.kaggleKey.isNotEmpty;
 
   void _notifyStateChanged(ModelStatus oldStatus, double oldProgress) {
     if (oldStatus != _status || oldProgress != _progress) {
@@ -278,69 +274,6 @@ class ModelDownloadService extends ChangeNotifier {
       if (kDebugMode) debugPrint('[ModelDownload] ensureModelActive failed: $e');
       return false;
     }
-  }
-
-  Future<void> installModelFromKaggle() async {
-    if (!canUseKaggle) {
-      _errorMessage = 'Kaggle credentials not configured';
-      notifyListeners();
-      return;
-    }
-
-    if (_status == ModelStatus.installing || _status == ModelStatus.ready) return;
-
-    await checkModelExists();
-    if (_status == ModelStatus.ready) return;
-
-    _status = ModelStatus.installing;
-    _progress = 0.0;
-    _errorMessage = null;
-    _lastProgressTime = null;
-    _isSlowConnection = false;
-    _lastProgressValue = 0.0;
-    _lastNotifiedProgress = -1.0;
-    notifyListeners();
-
-    try {
-      final kaggle = createKaggleService();
-      
-      // Kaggle model reference for Gemma 3 1B
-      const modelRef = 'google/gemma-3/flax';
-      
-      final filePath = await kaggle.downloadModel(
-        modelRef: modelRef,
-        framework: 'gemma3',
-        instanceSlug: '1b-it-int4',
-        onProgress: (progress) {
-          _progress = progress;
-          _notifyProgress();
-        },
-      );
-
-      if (filePath != null) {
-        // The Kaggle download is a local file on disk, NOT a bundled Flutter
-        // asset — fromAsset() would fail to resolve it. fromFile() installs
-        // from the filesystem.
-        await FlutterGemma.installModel(modelType: ModelType.gemmaIt)
-            .fromFile(filePath)
-            .install();
-
-        _progress = 100.0;
-        await _dao.setModelReady(modelType: _modelType);
-        _status = ModelStatus.ready;
-      } else {
-        _status = ModelStatus.error;
-        _errorMessage = 'Failed to download from Kaggle';
-        await _dao.setModelError('Failed to download from Kaggle');
-      }
-    } catch (e) {
-      // fromFile().install() throws typed DownloadException for plugin-side
-      // failures; the Kaggle fetch itself throws plain errors. Both map to
-      // friendly states — raw detail stays in debugPrint.
-      _applyDownloadFailure(e, logTag: 'kaggle install');
-    }
-
-    notifyListeners();
   }
 
   String? get errorMessage => _errorMessage;
