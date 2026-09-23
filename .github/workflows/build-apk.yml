@@ -218,6 +218,13 @@ jobs:
             exit 1
           fi
 
+      - name: Guard - no Kaggle reintroduction
+        run: |
+          if grep -Rqi "kaggle" lib/ android/app/src .env.example; then
+            echo "::error::Kaggle references found - the dead fallback was removed, do not reintroduce it."
+            exit 1
+          fi
+
       - name: Build APK (dart-define secrets, C1)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
