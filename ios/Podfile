@@ -1,0 +1,74 @@
+# ios/Podfile — CocoaPods integration for the Runner app.
+#
+# SOURCE: adapted from the canonical Flutter 3.44.1 template at
+#   <FLUTTER_ROOT>/packages/flutter_tools/templates/cocoapods/Podfile-ios
+# (this machine: C:\flutter, `flutter --version` = 3.44.1 stable). The
+# structure below (flutter_root via Generated.xcconfig, podhelper require,
+# flutter_ios_podfile_setup, flutter_install_all_ios_pods, post_install with
+# flutter_additional_ios_build_settings) matches that template verbatim.
+#
+# DEVIATIONS FROM THE TEMPLATE (both required by flutter_gemma_mediapipe
+# 1.0.6, per its pub.dev README):
+#   1. `platform :ios, '16.0'` is set explicitly (template leaves it
+#      commented out at 13.0). The package README states: "iOS needs a 16.0
+#      minimum … set the floor in BOTH places (platform :ios, '16.0' in the
+#      Podfile and iOS Deployment Target on the Runner target)". Below 16.0,
+#      `pod install` fails naming flutter_gemma_mediapipe. The Runner target
+#      floor is set to 16.0 in project.pbxproj (all 3 build configurations)
+#      and MinimumOSVersion 16.0 in ios/Flutter/AppFrameworkInfo.plist.
+#   2. `use_frameworks! :linkage => :static` instead of the template's plain
+#      `use_frameworks!`, because "MediaPipe ships static xcframeworks".
+#
+# CAVEAT (honest best-effort): this Windows machine cannot run `pod install`
+# or build iOS, so this Podfile is buildable-by-construction (file-level)
+# only and has NOT been verified with CocoaPods. On a Mac with Xcode and
+# CocoaPods installed, run from the project root:
+#   flutter pub get
+#   cd ios && pod install && cd ..
+# If `pod install` fails, the error will name the offending dependency —
+# report that exact message back so the floor/linking can be revisited.
+# Do NOT hand-edit the generated Pods/ directory; re-run the steps above.
+
+# Uncomment this line to define a global platform for your project
+platform :ios, '16.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+  use_frameworks! :linkage => :static
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+  end
+end
