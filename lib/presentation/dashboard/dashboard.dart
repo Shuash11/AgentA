@@ -270,7 +270,43 @@ void _newChat() async {
                 ? Center(
                     child: CircularProgressIndicator(color: colors.amber),
                   )
-                : _loadError != null
+                : _chats.isNotEmpty
+                    ? Column(
+                        children: [
+                          if (_loadError != null) _buildStaleBanner(colors),
+                          Expanded(
+                            child: RefreshIndicator(
+                              onRefresh: _loadChats,
+                              color: colors.amber,
+                              child: RepaintBoundary(
+                                child: ListView.builder(
+                                  padding: const EdgeInsets.fromLTRB(AppSpacing.base, AppSpacing.base, AppSpacing.base, 88),
+                                  itemExtent: 108,
+                                  itemCount: _chats.length,
+                                  itemBuilder: (context, index) {
+                                    final chat = _chats[index];
+                                    return RepaintBoundary(
+                                      child: Dismissible(
+                                      key: ValueKey(chat.id),
+                                      direction: DismissDirection.endToStart,
+                                      confirmDismiss: (direction) async {
+                                        return await _showDeleteConfirmation(context);
+                                      },
+                                      onDismissed: (direction) {
+                                        _deleteChat(chat.id);
+                                      },
+                                      background: _dismissBackground,
+                                      child: _buildChatTile(chat, colors),
+                                    ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : _loadError != null
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -306,8 +342,7 @@ void _newChat() async {
                           ],
                         ),
                       )
-                : _chats.isEmpty
-                    ? Center(
+                : Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -328,34 +363,6 @@ void _newChat() async {
                             Text('Tap "New Chat" to start coaching',
                                 style: TextStyle(color: colors.subtext, fontSize: 14)),
                           ],
-                        ),
-                      )
-: RefreshIndicator(
-                        onRefresh: _loadChats,
-                        color: colors.amber,
-                        child: RepaintBoundary(
-                          child: ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(AppSpacing.base, AppSpacing.base, AppSpacing.base, 88),
-                            itemExtent: 108,
-                            itemCount: _chats.length,
-                            itemBuilder: (context, index) {
-                              final chat = _chats[index];
-                              return RepaintBoundary(
-                                child: Dismissible(
-                                key: ValueKey(chat.id),
-                                direction: DismissDirection.endToStart,
-                                confirmDismiss: (direction) async {
-                                  return await _showDeleteConfirmation(context);
-                                },
-                                onDismissed: (direction) {
-                                  _deleteChat(chat.id);
-                                },
-                                background: _dismissBackground,
-                                child: _buildChatTile(chat, colors),
-                              ),
-                              );
-                            },
-                          ),
                         ),
                       ),
             ),
@@ -378,6 +385,55 @@ void _newChat() async {
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar:
           widget.showBottomNav ? const BottomNav1(selectedIndex: 0) : null,
+    );
+  }
+
+  /// Inline non-blocking banner shown above a populated list when a
+  /// reload fails. Keeps the saved chats visible; never blocks scrolling
+  /// and has no dismiss affordance beyond a successful retry.
+  Widget _buildStaleBanner(ThemeColors colors) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: colors.amber.withValues(alpha: 0.15),
+        border: Border(
+          left: BorderSide(color: colors.amber, width: 3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: colors.amber, size: 16),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              "Couldn't refresh \u2014 showing your saved chats",
+              style: TextStyle(
+                color: colors.text.withValues(alpha: 0.9),
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          TextButton(
+            onPressed: _loadChats,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Retry',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
