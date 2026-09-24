@@ -14,32 +14,17 @@ class SupabaseChatService {
     });
   }
 
-  static Future<List<ChatSessionModel>> getChats(String userId) async {
-    final rows = await _db.from('chats').select().eq('user_id', userId);
-    return (rows as List).map((row) {
-      final data = Map<String, dynamic>.from(row as Map);
-      return ChatSessionModel(
-        id: data['id'] as String? ?? '',
-        userId: userId,
-        title: data['title'] as String? ?? '',
-        lastMessage: data['last_message'] as String? ?? '',
-        updatedAt: DateTime.tryParse(data['updated_at'] as String? ?? '') ??
-            DateTime.now(),
-      );
-    }).toList();
-  }
-
   static Future<void> deleteChat(String userId, String chatId) async {
     await _db.from('chats').delete().eq('id', chatId).eq('user_id', userId);
   }
 
-  /// Paginated variant of [getChats] for the sync path (Phase 1 primitive).
+  /// Paginated fetch of chats for the sync path (Phase 1 primitive).
   ///
   /// Supabase applies a default 1,000-row cap per query, so a single
   /// `select()` silently drops rows for long-time users. This loops
   /// `.range(from, to)` — which is inclusive on both ends — with pages
   /// below the cap until a short page signals completion. Mapping and
-  /// defaults mirror [getChats]; existing callers are untouched.
+  /// defaults mirror [getChatsPaged]; existing callers are untouched.
   static Future<List<ChatSessionModel>> getChatsPaged(
     String userId, {
     int pageSize = 500,

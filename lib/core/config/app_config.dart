@@ -185,20 +185,6 @@ class AppConfig {
     }
   }
 
-  static bool get hasValidApiKeys =>
-      groqApiKey.isNotEmpty && !groqApiKey.contains('your_');
-
-  /// Logs only lengths (never values) for trimmed env — satisfies M21.
-  static void logTrimmedLengths() {
-    if (!kDebugMode) return;
-    debugPrint(
-        '[AppConfig] env lengths — SUPABASE_URL:${supabaseUrl.length} '
-        'SUPABASE_PUBLISHABLE_KEY:${supabasePublishableKey.length} '
-        'GOOGLE_SERVER_CLIENT_ID:${googleServerClientId.length} '
-        'GROQ_API_KEY:${groqApiKey.length} '
-        'HF_TOKEN:${hfToken.length}');
-  }
-
   /// Returns lengths map for badge/debug UI without exposing secrets.
   static Map<String, int> get envLengths => {
         'SUPABASE_URL': supabaseUrl.length,

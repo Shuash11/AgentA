@@ -162,11 +162,6 @@ class LocalChatDao {
     await db.delete('chat_sessions', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<void> delete(String id) async {
-    final db = await _dbHelper.database;
-    await db.delete('chat_sessions', where: 'id = ?', whereArgs: [id]);
-  }
-
   Future<List<ChatSessionModel>> getUnsynced() async {
     final db = await _dbHelper.database;
     final rows = await db.query(

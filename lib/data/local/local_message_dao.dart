@@ -56,11 +56,6 @@ class LocalMessageDao {
     );
   }
 
-  Future<void> delete(String id) async {
-    final db = await _dbHelper.database;
-    await db.delete('messages', where: 'id = ?', whereArgs: [id]);
-  }
-
   Future<void> markDeletedByChat(String chatId) async {
     final db = await _dbHelper.database;
     await db.update(
@@ -72,11 +67,6 @@ class LocalMessageDao {
   }
 
   Future<void> hardDeleteByChat(String chatId) async {
-    final db = await _dbHelper.database;
-    await db.delete('messages', where: 'chat_id = ?', whereArgs: [chatId]);
-  }
-
-  Future<void> deleteByChat(String chatId) async {
     final db = await _dbHelper.database;
     await db.delete('messages', where: 'chat_id = ?', whereArgs: [chatId]);
   }

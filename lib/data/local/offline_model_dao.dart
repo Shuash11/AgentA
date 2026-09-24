@@ -77,26 +77,6 @@ class OfflineModelDao {
     );
   }
 
-  Future<void> setModelSkipped() async {
-    final db = await _dbHelper.database;
-    final now = DateTime.now().millisecondsSinceEpoch;
-
-    await db.insert(
-      _tableName,
-      {
-        'id': _singleRowId,
-        'model_type': 'gemma3-1b-it-int4',
-        'status': ModelDbStatus.skipped.name,
-        'downloaded_at': null,
-        'file_path': null,
-        'version': null,
-        'created_at': now,
-        'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
   Future<Map<String, dynamic>?> getModelStatus() async {
     final db = await _dbHelper.database;
     final rows = await db.query(
@@ -129,11 +109,6 @@ class OfflineModelDao {
   Future<bool> isModelReady() async {
     final status = await getStatus();
     return status == ModelDbStatus.ready;
-  }
-
-  Future<bool> hasUserSkipped() async {
-    final status = await getStatus();
-    return status == ModelDbStatus.skipped;
   }
 
   Future<void> clearModelStatus() async {

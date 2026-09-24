@@ -107,7 +107,7 @@ class _RegisterPageState extends State<RegisterPage> {
               cred.uid, email, displayName, recoveryCode);
           isOnline = true;
         } catch (_) {
-          // Finding 6: signUp succeeded — only the profile write failed.
+          // signUp succeeded — only the profile write failed.
           // Keep the dialog states mutually consistent: the account is
           // online (no offline warning), only the email note is shown.
           emailConfirmationPending = true;

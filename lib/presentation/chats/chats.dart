@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
+import '../../core/utils/chat_error_classifier.dart';
 import '../../core/utils/connectivity_service.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../cubit/connectivity/connectivity_cubit.dart';
@@ -519,7 +520,7 @@ class _ChatScreenState extends State<Chats> {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_friendlyErrorMessage(e.toString())),
+          content: Text(ChatErrorClassifier.friendly(e.toString())),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -534,8 +535,9 @@ class _ChatScreenState extends State<Chats> {
     if (!mounted) return;
 
     final rawText = error.toString();
-    final errorText = _friendlyErrorMessage(rawText);
-    final needsDownloadAction = _isOfflineNotReady(rawText);
+    final errorText = ChatErrorClassifier.friendly(rawText);
+    final needsDownloadAction =
+        ChatErrorClassifier.isOfflineNotReady(rawText);
     final partialAiMsgId = _partialAiMsgId;
     final errorMsg = ChatMessageModel(
       id: const Uuid().v4(),
@@ -561,7 +563,7 @@ class _ChatScreenState extends State<Chats> {
     if (needsDownloadAction) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text(offlineNotReadyMessage),
+          content: const Text(ChatErrorClassifier.offlineNotReadyMessage),
           behavior: SnackBarBehavior.floating,
           action: SnackBarAction(
             label: 'Get model',
@@ -570,53 +572,6 @@ class _ChatScreenState extends State<Chats> {
         ),
       );
     }
-  }
-
-  static const String offlineNotReadyMessage =
-      'Agenta Offline AI is still getting ready. Try again in a moment.';
-
-  bool _isOfflineNotReady(String rawError) {
-    final lower = rawError.toLowerCase();
-    return lower.contains('offline model is not ready') ||
-        lower.contains('offline ai model is not ready') ||
-        lower.contains('offline mode is enabled') ||
-        lower.contains('still getting ready') ||
-        lower.contains('offline model is not installed') ||
-        lower.contains('offline model failed to load');
-  }
-
-  String _friendlyErrorMessage(String rawError) {
-    final lower = rawError.toLowerCase();
-
-    if (_isOfflineNotReady(rawError) || lower.contains('no internet')) {
-      if (_isOfflineNotReady(rawError)) {
-        return offlineNotReadyMessage;
-      }
-      return 'No internet. If your offline model is installed, try again in a moment.';
-    }
-    if (lower.contains('groq api key not configured')) {
-      return 'Chat service is not configured correctly.';
-    }
-    if (lower.contains('huggingface') || lower.contains('hf_token')) {
-      if (lower.contains('credits exhausted') || lower.contains('rate limit')) {
-        return 'HD image generation: free limit reached. Try again later or use standard image generation.';
-      }
-      if (lower.contains('warming up') || lower.contains('timed out')) {
-        return 'HD image generation is warming up. Try again in a moment.';
-      }
-      if (lower.contains('not configured') || lower.contains('invalid')) {
-        return 'HD image generation is not configured correctly.';
-      }
-      return 'HD image generation failed. Please try again.';
-    }
-    if (lower.contains('pollinations')) {
-      return 'Image generation failed. Please try again.';
-    }
-    if (lower.contains('api error') || lower.contains('service error')) {
-      return 'The selected AI model failed to respond. Please try again.';
-    }
-
-    return 'The selected AI model failed to respond. Please try again.';
   }
 
   bool get _isNearBottom {

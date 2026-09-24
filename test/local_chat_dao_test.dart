@@ -167,8 +167,7 @@ void main() {
       );
     });
 
-    test('remote services expose paginated variants alongside originals', () {
-      expect(SupabaseChatService.getChats, isA<Function>());
+    test('remote services expose paginated variants', () {
       expect(SupabaseChatService.getChatsPaged, isA<Function>());
       expect(SupabaseMessageService.getMessages, isA<Function>());
       expect(SupabaseMessageService.getMessagesPaged, isA<Function>());

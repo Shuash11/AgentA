@@ -463,8 +463,4 @@ class ModelDownloadService extends ChangeNotifier {
   }
 
   String? get errorMessage => _errorMessage;
-
-  Future<bool> hasUserSkipped() async {
-    return await _dao.hasUserSkipped();
-  }
 }

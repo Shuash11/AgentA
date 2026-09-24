@@ -14,7 +14,7 @@ class LocalUserDao {
     String provider = 'password',
     String passwordSalt = '',
   }) async {
-    // Finding 7: when the incoming recovery code is empty (e.g. online login
+    // When the incoming recovery code is empty (e.g. online login
     // re-saves the local row without a new code), preserve the existing
     // recovery-code hash so a successful login never overwrites it.
     var effectiveRecoveryCode = recoveryCode;
