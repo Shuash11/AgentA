@@ -169,11 +169,14 @@ class _AppLoaderState extends State<AppLoader> {
     try {
       // flutter_gemma 1.x: core registers NO engine by default — the
       // MediaPipe (.task) engine must be registered explicitly.
-      // maxDownloadRetries: smart retry/backoff for transient download
-      // errors on the ~529MB model install.
+      // Retry budget: 3. Each attempt can run up to the 30-min install
+      // ceiling in ModelDownloadService (the 3-min stall watchdog covers
+      // the silent case), so a larger budget could never complete within
+      // the timeout — 3 keeps the worst case inside a plausible session
+      // while transient errors still get retried.
       await FlutterGemma.initialize(
         inferenceEngines: const [MediaPipeEngine()],
-        maxDownloadRetries: 10,
+        maxDownloadRetries: 3,
       );
     } catch (e) {
       if (kDebugMode) {

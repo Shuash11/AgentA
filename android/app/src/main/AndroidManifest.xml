@@ -1,11 +1,16 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    <!-- Foreground download: the ~529MB model install runs as a foreground
-         service (dataSync type, declared by the downloader plugin) so Android
-         cannot kill it in the background. DATA_SYNC type needs the matching
-         permission on Android 14+; POST_NOTIFICATIONS (runtime-granted on
-         Android 13+) lets the progress notification show. -->
+    <!-- Foreground download (background_downloader 9.5.9 doc/CONFIG.md:39-46):
+         the offline model install runs as a foreground service with
+         dataSync type so Android cannot kill it in the background. On
+         Android 14+ (SDK 35 target) the DATA_SYNC type needs BOTH the
+         matching permission below AND the SystemForegroundService
+         declaration under <application> — the plugin merges only its own
+         UIDTJobService, not WorkManager's SystemForegroundService.
+         POST_NOTIFICATIONS (runtime-granted on Android 13+) lets the
+         progress notification show. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
@@ -43,6 +48,14 @@
                 <data android:scheme="com.agenta.agenta" android:host="reset"/>
             </intent-filter>
         </activity>
+        <!-- WorkManager foreground-service declaration required by
+             background_downloader 9.5.9 (doc/CONFIG.md:39-46): without
+             android:foregroundServiceType="dataSync" here, the download's
+             setForeground() call fails on Android 14+ and kills the app. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

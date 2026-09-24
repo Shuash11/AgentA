@@ -8,6 +8,19 @@ import '../../data/local/offline_model_dao.dart';
 
 enum ModelStatus { notInstalled, installing, ready, error }
 
+/// Typed stall signal: the app-side watchdog fires this after
+/// [ModelDownloadService.stallTimeoutForTest]'s production value elapses with
+/// zero progress events. Brand-free; maps to a friendly retryable message in
+/// [_friendlyDownloadError]. Raw plugin detail never reaches the UI.
+class DownloadStalledException implements Exception {
+  const DownloadStalledException([this.message = 'download stalled']);
+
+  final String message;
+
+  @override
+  String toString() => 'DownloadStalledException: $message';
+}
+
 class ModelDownloadService extends ChangeNotifier {
   final OfflineModelDao _dao = OfflineModelDao();
   ModelStatus _status = ModelStatus.notInstalled;
@@ -18,6 +31,34 @@ class ModelDownloadService extends ChangeNotifier {
   double _lastProgressValue = 0.0;
   double _lastNotifiedProgress = -1.0;
   static const double _notifyThreshold = 1.0;
+
+  /// Permission-request ceiling. Mirrors the plugin's own 10s guard around
+  /// its identical native request (smart_downloader): the host callback can
+  /// never arrive, which would hang the await forever ahead of install().
+  /// On timeout we treat the grant as denied and proceed — denial never
+  /// blocks the download, it only hides the foreground notification.
+  static const Duration _permissionTimeout = Duration(seconds: 10);
+
+  /// Belt-and-braces ceiling for the whole install future.
+  static const Duration _installTimeout = Duration(minutes: 30);
+
+  /// Stall watchdog window: 3 minutes with zero progress events. Generous
+  /// vs the 60s slow-connection heuristic above (a merely slow transfer
+  /// still emits events and keeps resetting this timer).
+  static const Duration _stallTimeout = Duration(minutes: 3);
+
+  /// Token for the in-flight install chain. Cancelling it asks the plugin
+  /// to stop the native task (FileDownloader().cancelTaskWithId), so the
+  /// download never outlives the app giving up on it.
+  CancelToken? _activeCancelToken;
+
+  /// App-side stall watchdog, armed while installing and reset on every
+  /// progress event. Null when no install is in flight.
+  Timer? _stallWatchdog;
+
+  /// Set when the watchdog fires. Guards the install future's follow-on
+  /// cancellation error from overwriting the surfaced stall state.
+  bool _stallFired = false;
 
   ModelStatus get status => _status;
   double get progress => _progress;
@@ -72,7 +113,39 @@ class ModelDownloadService extends ChangeNotifier {
         notifyListeners();
       }
     }
+    // Any event — even one without an increase — proves the native task
+    // is alive, so the stall watchdog restarts from here.
+    if (_status == ModelStatus.installing) _armStallWatchdog();
     _notifyProgress();
+  }
+
+  /// (Re)arms the stall watchdog for [_stallTimeout] from now. Previous
+  /// timer, if any, is cancelled first — at most one is ever pending.
+  void _armStallWatchdog() {
+    _cancelStallWatchdog();
+    _stallWatchdog =
+        Timer(stallTimeoutOverrideForTest ?? _stallTimeout, _onStallTimeout);
+  }
+
+  /// Cancels the stall watchdog without touching anything else. Safe to
+  /// call when no timer is pending.
+  void _cancelStallWatchdog() {
+    _stallWatchdog?.cancel();
+    _stallWatchdog = null;
+  }
+
+  /// Watchdog handler: no progress event arrived within the window, so the
+  /// native task is presumed silently dead. Cancels it via the token and
+  /// surfaces a typed, retryable stall error. Stale fires (state already
+  /// left installing) are ignored.
+  void _onStallTimeout() {
+    _stallWatchdog = null;
+    if (_status != ModelStatus.installing) return;
+    _stallFired = true;
+    _activeCancelToken?.cancel('Download stalled');
+    _applyDownloadFailure(const DownloadStalledException(),
+        logTag: 'stallWatchdog');
+    notifyListeners();
   }
 
   Future<void> checkModelExists() async {
@@ -135,6 +208,9 @@ class ModelDownloadService extends ChangeNotifier {
     _isSlowConnection = false;
     _lastProgressValue = 0.0;
     _lastNotifiedProgress = -1.0;
+    _stallFired = false;
+    final token = CancelToken();
+    _activeCancelToken = token;
     notifyListeners();
 
     // Android 13+ shows the foreground-service progress notification only
@@ -142,30 +218,55 @@ class ModelDownloadService extends ChangeNotifier {
     // blocks the download, it only hides the notification.
     await _ensureNotificationPermission();
 
+    _armStallWatchdog();
     try {
-      // foreground: true keeps the ~529MB transfer alive when the app is
-      // backgrounded (WorkManager alone is subject to background limits).
+      // Foreground (AppConfig.foregroundDownload, default true) keeps the
+      // ~529MB transfer alive when the app is backgrounded (WorkManager
+      // alone is subject to background limits). FOREGROUND_DOWNLOAD=false
+      // is the no-rebuild workaround when the foreground path fails.
       // Timeout stays as belt-and-braces.
       // install() is idempotent (skips the download when the file is already
       // in the plugin's storage) and resolves only AFTER finalization, when
       // the active spec is set. Completing early — at the 100% progress
       // event — raced the plugin's file move and left the gate stuck, so
       // readiness is marked strictly after this future resolves.
-      await FlutterGemma.installModel(modelType: ModelType.gemmaIt)
-          .fromNetwork(resolvedModelUrl, foreground: true)
-          .withProgress(_onDownloadProgress)
-          .install()
-          .timeout(const Duration(minutes: 30));
+      // The CancelToken ties the native task's lifetime to ours: whenever
+      // the app gives up (timeout, stall, any failure), the token is
+      // cancelled so the native download stops instead of lingering.
+      final installFuture = installOverrideForTest != null
+          ? installOverrideForTest!(token)
+          : FlutterGemma.installModel(modelType: ModelType.gemmaIt)
+              .fromNetwork(resolvedModelUrl,
+                  foreground: AppConfig.foregroundDownload)
+              .withProgress(_onDownloadProgress)
+              .withCancelToken(token)
+              .install();
+      await installFuture
+          .timeout(installTimeoutOverrideForTest ?? _installTimeout);
 
+      _cancelStallWatchdog();
+      _activeCancelToken = null;
       _progress = 100.0;
       await _dao.setModelReady(modelType: _modelType);
       _status = ModelStatus.ready;
     } catch (e) {
-      // Tolerance: some devices close the connection right after the final
-      // byte while the install future unwinds. If the transfer reached 100%,
-      // the file is complete — settle briefly and mark ready (load-time
-      // rehydration covers any residual plugin-side finalization).
-      if (_progress >= 100.0) {
+      _cancelStallWatchdog();
+      _activeCancelToken = null;
+      // Stop the native task whenever the app gives up. Redundant when the
+      // watchdog already cancelled (cancel() is idempotent), and harmless
+      // when the transfer already finished — the plugin simply has nothing
+      // left to cancel.
+      if (!token.isCancelled) token.cancel('App gave up on the download');
+      if (_stallFired) {
+        // The watchdog already surfaced the typed stall error above; the
+        // install future's follow-on cancellation error must not overwrite
+        // it back to a silent/neutral state.
+      } else if (_progress >= 100.0) {
+        // Tolerance: some devices close the connection right after the final
+        // byte while the install future unwinds. If the transfer reached
+        // 100%, the file is complete — settle briefly and mark ready
+        // (load-time rehydration covers any residual plugin-side
+        // finalization).
         await Future.delayed(const Duration(seconds: 2));
         await _dao.setModelReady(modelType: _modelType);
         _status = ModelStatus.ready;
@@ -181,13 +282,35 @@ class ModelDownloadService extends ChangeNotifier {
   }
 
   /// Requests the Android 13+ POST_NOTIFICATIONS runtime grant via the host
-  /// MainActivity. Always returns quickly; false (denied, non-Android, or
-  /// channel unavailable e.g. in widget tests) never blocks the download.
+  /// MainActivity. Always resolves within [_permissionTimeout] (the host
+  /// callback can never arrive, which used to hang this await forever ahead
+  /// of install()); false (denied, timed out, non-Android, or channel
+  /// unavailable e.g. in widget tests) never blocks the download.
   Future<bool> _ensureNotificationPermission() async {
+    // Test seam first so VM unit tests (non-Android host) can drive the
+    // timeout path; production always takes the platform/channel path below.
+    final testRequest = permissionRequestOverrideForTest;
+    final testTimeout = permissionTimeoutOverrideForTest;
+    if (testRequest != null || testTimeout != null) {
+      try {
+        final request = testRequest ?? () async => true;
+        final granted = await request().timeout(
+          testTimeout ?? _permissionTimeout,
+          onTimeout: () => false,
+        );
+        return granted ?? false;
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[ModelDownload] notification permission request failed: $e');
+        }
+        return false;
+      }
+    }
     if (!Platform.isAndroid) return true;
     try {
       final granted = await _notificationsChannel
-          .invokeMethod<bool>('requestNotificationPermission');
+          .invokeMethod<bool>('requestNotificationPermission')
+          .timeout(_permissionTimeout, onTimeout: () => false);
       return granted ?? false;
     } catch (e) {
       if (kDebugMode) {
@@ -223,6 +346,12 @@ class ModelDownloadService extends ChangeNotifier {
   /// Returns the user-facing message for [error], or null when the failure
   /// should stay silent (user cancellation).
   String? _friendlyDownloadError(Object error) {
+    // Raw plugin cancellation (thrown by CancelToken.throwIfCancelled before
+    // the task starts) stays silent exactly like the mapped CanceledError.
+    if (CancelToken.isCancel(error)) return null;
+    if (error is DownloadStalledException) {
+      return 'Download stalled. Please try again.';
+    }
     if (error is DownloadException) {
       return switch (error.error) {
         NotFoundError() =>
@@ -244,7 +373,13 @@ class ModelDownloadService extends ChangeNotifier {
     return 'Download failed. Please try again.';
   }
 
-  // Test hooks: thin delegates over the private pure helpers above.
+  @override
+  void dispose() {
+    _cancelStallWatchdog();
+    super.dispose();
+  }
+
+  // Test hooks: thin delegates/overrides over the privates above.
   // Annotated — not public API. Production logic lives in the privates.
   @visibleForTesting
   String? friendlyDownloadErrorForTest(Object error) =>
@@ -254,19 +389,70 @@ class ModelDownloadService extends ChangeNotifier {
   void applyDownloadFailureForTest(Object error, String logTag) =>
       _applyDownloadFailure(error, logTag: logTag);
 
+  /// Production timeout ceilings, exposed read-only for tests.
+  @visibleForTesting
+  static Duration get permissionTimeoutForTest => _permissionTimeout;
+
+  @visibleForTesting
+  static Duration get stallTimeoutForTest => _stallTimeout;
+
+  @visibleForTesting
+  static Duration get installTimeoutForTest => _installTimeout;
+
+  /// Overrides the platform permission request (test-only). When set,
+  /// [_ensureNotificationPermission] uses it instead of the host channel,
+  /// even on non-Android VM hosts.
+  @visibleForTesting
+  Future<bool?> Function()? permissionRequestOverrideForTest;
+
+  /// Overrides the permission-request ceiling (test-only).
+  @visibleForTesting
+  Duration? permissionTimeoutOverrideForTest;
+
+  /// Overrides the stall-watchdog window (test-only).
+  @visibleForTesting
+  Duration? stallTimeoutOverrideForTest;
+
+  /// Overrides the whole-install ceiling (test-only).
+  @visibleForTesting
+  Duration? installTimeoutOverrideForTest;
+
+  /// Overrides the plugin install chain (test-only). Receives the same
+  /// [CancelToken] production passes to `.withCancelToken`, so tests can
+  /// observe cancellation without touching the native plugin.
+  @visibleForTesting
+  Future<void> Function(CancelToken token)? installOverrideForTest;
+
+  @visibleForTesting
+  Future<bool> ensureNotificationPermissionForTest() =>
+      _ensureNotificationPermission();
+
+  /// Fires the watchdog handler immediately, without waiting out the
+  /// window. Only takes effect while installing (matches the timer path).
+  @visibleForTesting
+  void fireStallTimeoutForTest() => _onStallTimeout();
+
+  @visibleForTesting
+  bool get hasActiveWatchdogForTest => _stallWatchdog?.isActive ?? false;
+
+  @visibleForTesting
+  bool get stallFiredForTest => _stallFired;
+
   /// Re-establishes the plugin's active-model spec for this process.
   /// On flutter_gemma 1.8.4, initialize() already auto-restores the
   /// previously-active model identity from SharedPreferences, so
   /// hasActiveModel() is usually true at startup and this returns early.
   /// The install() below is the defensive remainder: it is idempotent
   /// (skips the download when the file is already in the plugin's storage)
-  /// and transparently re-downloads — as a foreground service — when the
-  /// storage was lost or prefs restore failed.
+  /// and transparently re-downloads — foreground per
+  /// [AppConfig.foregroundDownload] — when the storage was lost or prefs
+  /// restore failed.
   static Future<bool> ensureModelActive() async {
     if (FlutterGemma.hasActiveModel()) return true;
     try {
       await FlutterGemma.installModel(modelType: ModelType.gemmaIt)
-          .fromNetwork(resolvedModelUrl, foreground: true)
+          .fromNetwork(resolvedModelUrl,
+              foreground: AppConfig.foregroundDownload)
           .install()
           .timeout(const Duration(minutes: 30));
       return FlutterGemma.hasActiveModel();

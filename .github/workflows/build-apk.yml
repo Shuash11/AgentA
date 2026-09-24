@@ -256,6 +256,56 @@ jobs:
             --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY_TRIMMED:-$SUPABASE_PUBLISHABLE_KEY}" \
             --dart-define=GOOGLE_SERVER_CLIENT_ID="${GOOGLE_SERVER_CLIENT_ID_TRIMMED:-}"
 
+      # Foreground-download crash-fix guard: the offline model install runs
+      # as a WorkManager foreground service with dataSync type, which on
+      # Android 14+ needs the SystemForegroundService declaration with
+      # foregroundServiceType="dataSync" in the MERGED manifest. The plugin
+      # merges only its own UIDTJobService (which also carries a dataSync
+      # type), so two naive greps would false-pass — and the source comments
+      # quote both strings, so grepping the source alone would false-pass
+      # too. Hence the node-aware check: the lines after the service's
+      # android:name must contain the dataSync type (attribute order in the
+      # merged output is not contractual, so -A5, not -A1).
+      # Placement: AFTER the build (verify the artifact we actually ship),
+      # not a separate pre-build gradle invocation (saves a ~2-min AGP
+      # configure + merge on CI). Path discovery via find covers both AGP
+      # layouts (merged_manifest/ and merged_manifests/); release filter
+      # first, all-flavours fallback so an AGP path rename fails loudly
+      # instead of silently passing.
+      # Negative control: deleting the <service> node from
+      # android/app/src/main/AndroidManifest.xml (leaving comments + the
+      # plugin's UIDTJobService) fails this step on both the source and the
+      # merged checks.
+      - name: Guard - foreground service in merged manifest
+        run: |
+          SRC="android/app/src/main/AndroidManifest.xml"
+          NODE='androidx.work.impl.foreground.SystemForegroundService'
+          if ! grep -A3 "$NODE" "$SRC" | grep -q 'foregroundServiceType="dataSync"'; then
+            echo "::error::Source manifest lost the SystemForegroundService dataSync declaration (android/app/src/main/AndroidManifest.xml). The offline download crashes on Android 14+ without it."
+            exit 1
+          fi
+          CANDIDATES="$(find build/app/intermediates -path '*merged_manifest*' -name 'AndroidManifest.xml' 2>/dev/null)"
+          if [ -z "$CANDIDATES" ]; then
+            echo "::error::No merged manifest found under build/app/intermediates (expected after flutter build apk). AGP layout may have changed — update the Guard step."
+            exit 1
+          fi
+          RELEASE_ONLY="$(echo "$CANDIDATES" | grep -i 'release' || true)"
+          if [ -n "$RELEASE_ONLY" ]; then
+            CANDIDATES="$RELEASE_ONLY"
+          fi
+          echo "Checking merged manifest(s):"
+          echo "$CANDIDATES"
+          FAIL=0
+          for M in $CANDIDATES; do
+            if grep -A5 "$NODE" "$M" | grep -q 'foregroundServiceType="dataSync"'; then
+              echo "OK: $M"
+            else
+              echo "::error::Merged manifest missing SystemForegroundService dataSync declaration: $M"
+              FAIL=1
+            fi
+          done
+          exit $FAIL
+
       - name: Rename APK
         run: |
           mkdir -p dist

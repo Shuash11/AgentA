@@ -19,6 +19,8 @@ class AppConfig {
   static const _dGroq = String.fromEnvironment('GROQ_API_KEY');
   static const _dHf = String.fromEnvironment('HF_TOKEN');
   static const _dGemmaUrl = String.fromEnvironment('GEMMA_MODEL_URL');
+  static const _dForegroundDownload =
+      String.fromEnvironment('FOREGROUND_DOWNLOAD');
   static const _dSupaUrl = String.fromEnvironment('SUPABASE_URL');
   static const _dSupaKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
   static const _dGoogleId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
@@ -55,6 +57,41 @@ class AppConfig {
 
   static String get gemmaModelUrl => _withFallback(_dGemmaUrl, 'GEMMA_MODEL_URL').trim();
   static const String gemmaModelFilename = 'gemma-offline.task';
+
+  /// Foreground-service experiment override for the offline model download.
+  /// Env `FOREGROUND_DOWNLOAD`, default true when unset or unrecognised.
+  /// Flip to 'false' (via --dart-define or .env, no code change) as an
+  /// immediate workaround if the foreground path fails on a device.
+  static bool get foregroundDownload {
+    final test = _foregroundDownloadOverrideForTest;
+    if (test != null) return test;
+    final raw =
+        _withFallback(_dForegroundDownload, 'FOREGROUND_DOWNLOAD').trim();
+    return _parseForegroundDownload(raw);
+  }
+
+  static bool _parseForegroundDownload(String raw) {
+    final normalized = raw.trim().toLowerCase();
+    if (normalized.isEmpty) return true;
+    if (normalized == 'false') return false;
+    if (normalized == 'true') return true;
+    return true;
+  }
+
+  // Test-only override backing field (setter below is the visible entry).
+  static bool? _foregroundDownloadOverrideForTest;
+
+  /// Test-only override for [foregroundDownload]; null restores env behavior.
+  @visibleForTesting
+  static set foregroundDownloadOverrideForTest(bool? value) {
+    _foregroundDownloadOverrideForTest = value;
+  }
+
+  /// Test-only entry point for the 'true'/'false' parsing (case-insensitive,
+  /// default true).
+  @visibleForTesting
+  static bool parseForegroundDownloadForTest(String raw) =>
+      _parseForegroundDownload(raw);
 
   static String get supabaseUrl => _withFallback(_dSupaUrl, 'SUPABASE_URL').trim();
   static String get supabasePublishableKey =>

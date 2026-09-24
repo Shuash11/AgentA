@@ -57,3 +57,35 @@ It is intentionally narrow: broad `toString` matching would
 false-positive on the legitimate `kDebugMode` logs and the bounded
 `displayDetail`/hint classification above. `test/` is excluded so
 fixtures may quote such strings.
+
+## Offline model download failures
+
+`ModelDownloadService` maps every install failure to a friendly static
+string (raw plugin detail stays in `kDebugMode` logs):
+
+| Failure | UI shows | Note |
+| --- | --- | --- |
+| Silent stall (no progress for 3 min) | `Download stalled. Please try again.` | App-side watchdog; retryable, cancels the native task via `CancelToken` |
+| Overall timeout (30 min) | `Download timed out. Please try again.` | Belt-and-braces ceiling around the whole install |
+| User cancellation | silent (previous state kept) | `CanceledError` / `CancelToken.isCancel` map to `null` |
+| No connectivity | `No internet connection. Download will resume when you are back online.` | Typed `NetworkError` |
+| Other typed errors | `Download failed. Please try again.` (or the specific not-found / rejected / rate-limited text) | See `_friendlyDownloadError` |
+
+Crash fix: the download runs as a foreground service with `dataSync`
+type, which on Android 14+ requires the `SystemForegroundService`
+declaration (`android:foregroundServiceType="dataSync"`) in the merged
+manifest. The plugin merges only its own service, so the app declares
+it in `android/app/src/main/AndroidManifest.xml` (`tools:node="merge"`).
+CI verifies it (`Guard - foreground service in merged manifest`): a
+node-aware grep on the source manifest plus every release merged
+manifest produced by the build — naive string greps would false-pass on
+comments and on the plugin's own `dataSync` service.
+
+Experiment override: `FOREGROUND_DOWNLOAD` (default `true`; `'false'`
+falls back to the background path without a rebuild) via
+`AppConfig.foregroundDownload`.
+
+Retry budget: `maxDownloadRetries: 3` in `lib/main.dart`. Each attempt
+can run up to the 30-min install ceiling above, so a larger budget
+could never complete within the timeout — 3 keeps the worst case
+inside a plausible session while transient errors still get retried.
