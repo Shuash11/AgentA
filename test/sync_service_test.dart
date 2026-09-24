@@ -12,18 +12,20 @@ import 'package:aiproject/services/sync/sync_service.dart';
 // SyncService worker depends on (tombstones, preserving replace, batched
 // pagination, H6 failure retention, no-uid skip).
 //
-// Honest scope note: `SyncService` hard-instantiates its singleton DAOs and
-// calls static `Supabase*Service` / `AuthService.currentUser` with no
-// `@visibleForTesting` seams, and Phase 3 forbids production-logic changes
-// to make tests pass — so no remote fakes were injected. What this file
-// proves instead:
-//   * the DAO-level contracts the worker relies on, against a real
-//     in-memory database (`DatabaseHelper.testDatabase`), and
-//   * the public no-uid behaviour of `SyncService` itself
-//     (`flushPending` no-op, pending counters, migration passthrough).
-// The remote halves (push/delete/list calls) are covered by code inspection
-// and documented in `docs/sync.md`. If a future change adds seams, extend
-// this file with full flush+refresh fakes.
+// Scope: `SyncService` exposes additive `@visibleForTesting` seams for its
+// hard-wired dependencies (DAO singletons, `Supabase*Service` statics,
+// `AuthService.currentUser`) that default to the real singletons/statics,
+// so production behavior is identical. Groups (a)–(h) below prove the
+// DAO-level contracts the worker relies on against a real in-memory
+// database (`DatabaseHelper.testDatabase`), plus the public no-uid
+// behaviour of `SyncService` itself (`flushPending` no-op, pending
+// counters, migration passthrough). Group (i) drives the remote halves end
+// to end through those seams with a fake remote (`FakeSyncRemote`):
+// flush push (success + H6 failure retention), tombstone delete sync,
+// paged refresh fetches with the `chatsFetched` guard, and tombstone+ghost
+// composition through a full flush+refresh cycle. The pending-signup path
+// (`LocalUserDao`/`SessionManager`) has no seam and stays covered by the
+// no-uid skip test. `docs/sync.md` documents the worker contract.
 
 ChatSessionModel syncChat({
   String id = 'c1',
@@ -106,6 +108,54 @@ Future<int> pruneGhostsGoneRemote(
 }) async {
   if (!chatsFetched) return 0;
   return LocalChatDao.instance.pruneChatsGoneRemote(remoteChatIds);
+}
+
+/// In-memory fake for the `Supabase*Service` statics behind the
+/// `SyncService` `@visibleForTesting` seams. The `fail*` flags simulate
+/// remote failure; a generic [Exception] is non-retryable
+/// (`AuthRetryPolicy`), so the worker's H6 path runs without backoff
+/// delays.
+class FakeSyncRemote {
+  final pushedChats = <String, ChatSessionModel>{};
+  final pushedMessages = <String, ChatMessageModel>{};
+  final deletedChatIds = <String>[];
+  List<ChatSessionModel> chatsToServe = [];
+  List<ChatMessageModel> messagesToServe = [];
+  int getChatsPagedCalls = 0;
+  int getAllMessagesPagedCalls = 0;
+  bool failSaves = false;
+  bool failDeletes = false;
+  bool failLists = false;
+}
+
+/// Wires [fake] into a `SyncService` via the `@visibleForTesting` seams.
+/// Defaults the uid to 'u1' — tests never touch `AuthService.currentUser`.
+SyncService syncWithFakeRemote(FakeSyncRemote fake, {String uid = 'u1'}) {
+  final sync = SyncService(ConnectivityService.instance);
+  sync.currentUserIdOverrideForTest = () => uid;
+  sync.saveChatOverrideForTest = (u, chat) async {
+    if (fake.failSaves) throw Exception('fake saveChat failure');
+    fake.pushedChats[chat.id] = chat;
+  };
+  sync.saveMessageOverrideForTest = (u, chatId, msg) async {
+    if (fake.failSaves) throw Exception('fake saveMessage failure');
+    fake.pushedMessages[msg.id] = msg;
+  };
+  sync.deleteChatOverrideForTest = (u, chatId) async {
+    if (fake.failDeletes) throw Exception('fake deleteChat failure');
+    fake.deletedChatIds.add(chatId);
+  };
+  sync.getChatsPagedOverrideForTest = (u) async {
+    fake.getChatsPagedCalls++;
+    if (fake.failLists) throw Exception('fake getChatsPaged failure');
+    return fake.chatsToServe;
+  };
+  sync.getAllMessagesPagedOverrideForTest = (u) async {
+    fake.getAllMessagesPagedCalls++;
+    if (fake.failLists) throw Exception('fake getAllMessagesPaged failure');
+    return fake.messagesToServe;
+  };
+  return sync;
 }
 
 Future<void> createSyncSchema(Database db) async {
@@ -621,6 +671,195 @@ void main() {
             where: 'chat_id = ? AND id = ?', whereArgs: ['c3', 'm-c3']),
         hasLength(1),
       );
+    });
+  });
+
+  group('(i) remote halves via SyncService seams — flush+refresh fakes', () {
+    test('(a) flush success pushes unsynced rows and marks them synced',
+        () async {
+      await chatDao.insert(syncChat(id: 'c1', isSynced: false));
+      await msgDao.insert(
+        syncMessage(id: 'm1', chatId: 'c1', isSynced: false),
+      );
+
+      final fake = FakeSyncRemote();
+      final sync = syncWithFakeRemote(fake);
+
+      await sync.flushPending();
+
+      expect(fake.pushedChats.keys, contains('c1'));
+      expect(fake.pushedMessages.keys, contains('m1'));
+      expect((await chatDao.getById('c1'))!.isSynced, true);
+      final msgRows = await db.query(
+        'messages',
+        where: 'id = ?',
+        whereArgs: ['m1'],
+      );
+      expect(msgRows.single['is_synced'], 1);
+      sync.dispose();
+    });
+
+    test('(b) flush failure keeps is_synced=0 for chats+messages (H6)',
+        () async {
+      await chatDao.insert(syncChat(id: 'c1', isSynced: false));
+      await msgDao.insert(
+        syncMessage(id: 'm1', chatId: 'c1', isSynced: false),
+      );
+
+      final fake = FakeSyncRemote()..failSaves = true;
+      final sync = syncWithFakeRemote(fake);
+
+      await sync.flushPending();
+
+      expect(fake.pushedChats, isEmpty);
+      expect(fake.pushedMessages, isEmpty);
+      expect((await chatDao.getById('c1'))!.isSynced, false);
+      expect(
+        (await msgDao.getUnsynced()).map((m) => m.id),
+        contains('m1'),
+      );
+      sync.dispose();
+    });
+
+    test('(c) tombstone delete is pushed remotely then hard-deleted locally',
+        () async {
+      await chatDao.insert(
+        syncChat(id: 'dead', isSynced: false, isDeleted: true),
+      );
+      await msgDao.insert(
+        syncMessage(id: 'm1', chatId: 'dead', isSynced: true),
+      );
+
+      final fake = FakeSyncRemote();
+      final sync = syncWithFakeRemote(fake);
+
+      await sync.flushPending();
+
+      expect(fake.deletedChatIds, contains('dead'));
+      expect(await chatDao.getById('dead'), isNull);
+      expect(
+        await db.query('messages',
+            where: 'chat_id = ?', whereArgs: ['dead']),
+        isEmpty,
+      );
+      sync.dispose();
+    });
+
+    test('(c) failed delete keeps the tombstone queued (H6)', () async {
+      await chatDao.insert(
+        syncChat(id: 'retry', isSynced: false, isDeleted: true),
+      );
+
+      final fake = FakeSyncRemote()..failDeletes = true;
+      final sync = syncWithFakeRemote(fake);
+
+      await sync.flushPending();
+
+      expect(fake.deletedChatIds, isEmpty);
+      final kept = await chatDao.getById('retry');
+      expect(kept, isNotNull);
+      expect(kept!.isSynced, false);
+      expect(kept.isDeleted, true);
+      sync.dispose();
+    });
+
+    test('(d) refresh drives the paged fetches, preserves local edits',
+        () async {
+      await chatDao.insert(
+        syncChat(id: 'local', title: 'local edit', isSynced: false),
+      );
+
+      final fake = FakeSyncRemote()
+        ..chatsToServe = [
+          syncChat(id: 'local', title: 'remote title', isSynced: true),
+          syncChat(id: 'remote-new', title: 'new', isSynced: true),
+        ]
+        ..messagesToServe = [
+          syncMessage(
+            id: 'rm1',
+            chatId: 'remote-new',
+            text: 'new',
+            isSynced: true,
+          ),
+        ];
+      final sync = syncWithFakeRemote(fake);
+
+      await sync.refreshLocalCacheForTest();
+
+      expect(fake.getChatsPagedCalls, greaterThanOrEqualTo(1));
+      expect(fake.getAllMessagesPagedCalls, greaterThanOrEqualTo(1));
+      // Unsynced local edit wins over the served remote row (flush first).
+      expect((await chatDao.getById('local'))!.title, 'local edit');
+      expect(await chatDao.getById('remote-new'), isNotNull);
+      expect(
+        (await msgDao.getByChat('remote-new')).map((m) => m.id),
+        contains('rm1'),
+      );
+      sync.dispose();
+    });
+
+    test('(d) failed remote list never prunes (chatsFetched guard)',
+        () async {
+      await chatDao.insert(syncChat(id: 'ghost', isSynced: true));
+
+      final fake = FakeSyncRemote()..failLists = true;
+      final sync = syncWithFakeRemote(fake);
+
+      // Must not throw and must not prune: an offline failure never looks
+      // like "remote deleted everything".
+      await sync.refreshLocalCacheForTest();
+
+      expect(await chatDao.getById('ghost'), isNotNull);
+      sync.dispose();
+    });
+
+    test('(e) full refresh composes tombstone + ghost prune', () async {
+      await chatDao.insert(
+        syncChat(id: 'dead', isSynced: false, isDeleted: true),
+      );
+      await chatDao.insert(syncChat(id: 'ghost', isSynced: true));
+      await msgDao.insert(
+        syncMessage(id: 'm-ghost', chatId: 'ghost', isSynced: true),
+      );
+      await chatDao.insert(syncChat(id: 'alive', isSynced: true));
+
+      final fake = FakeSyncRemote()
+        ..chatsToServe = [syncChat(id: 'alive', isSynced: true)];
+      final sync = syncWithFakeRemote(fake);
+
+      await sync.refreshLocalCacheForTest();
+
+      expect(await chatDao.getById('dead'), isNull);
+      expect(await chatDao.getById('ghost'), isNull);
+      expect(
+        await db.query('messages',
+            where: 'chat_id = ?', whereArgs: ['ghost']),
+        isEmpty,
+      );
+      expect(await chatDao.getById('alive'), isNotNull);
+      sync.dispose();
+    });
+
+    test('(e) flush+refresh end to end: delete pushed, ghost pruned',
+        () async {
+      await chatDao.insert(
+        syncChat(id: 'dead', isSynced: false, isDeleted: true),
+      );
+      await chatDao.insert(syncChat(id: 'ghost', isSynced: true));
+      await chatDao.insert(syncChat(id: 'alive', isSynced: true));
+
+      final fake = FakeSyncRemote()
+        ..chatsToServe = [syncChat(id: 'alive', isSynced: true)];
+      final sync = syncWithFakeRemote(fake);
+
+      await sync.flushPending();
+      expect(fake.deletedChatIds, contains('dead'));
+      expect(await chatDao.getById('dead'), isNull);
+
+      await sync.refreshLocalCacheForTest();
+      expect(await chatDao.getById('ghost'), isNull);
+      expect(await chatDao.getById('alive'), isNotNull);
+      sync.dispose();
     });
   });
 }
