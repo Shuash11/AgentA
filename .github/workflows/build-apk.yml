@@ -36,7 +36,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: "3.44.1"
+          # Keep this pin on the same stable line as dev machines; audit at each cycle.
+          flutter-version: "3.47.6"
           cache: false
 
       # C1: .env is never bundled (pubspec has no `.env` asset) and never
