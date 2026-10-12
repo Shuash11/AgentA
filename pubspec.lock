@@ -334,22 +334,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.2.1"
-  flutter_gemma:
+  flutter_edge_ai:
     dependency: "direct main"
     description:
-      name: flutter_gemma
-      sha256: "71c96fc592b1ee785c17195ee8f9227383300c9c74ffaa9c5af41dd893530f7e"
+      name: flutter_edge_ai
+      sha256: e2f59ff31072094285ddede81ec0ca799b88afceff01bdddf1149ef54cb86927
       url: "https://pub.dev"
     source: hosted
     version: "1.11.4"
-  flutter_gemma_mediapipe:
+  flutter_edge_ai_mediapipe:
     dependency: "direct main"
     description:
-      name: flutter_gemma_mediapipe
-      sha256: "8d873f4a7bd2f874116dd47a9096b26f7f9115e82826e1a575ce88217384eaad"
+      name: flutter_edge_ai_mediapipe
+      sha256: "286cf0949bb240a6ffdc0d1216689294283b2671750f92f83e176efb3518d789"
       url: "https://pub.dev"
     source: hosted
-    version: "1.0.9"
+    version: "1.0.8"
   flutter_launcher_icons:
     dependency: "direct dev"
     description:

@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
+import 'package:flutter_edge_ai/flutter_edge_ai.dart';
 import '../../core/config/app_config.dart';
 import '../../data/local/offline_model_dao.dart';
 import '../../data/models/chat_message_model.dart';
@@ -86,7 +86,7 @@ Formatting rules:
       // ensureModelActive() remains as defense for storage-loss or failed
       // restore cases; its install() is idempotent and skips the download
       // when the file is already in the plugin's storage.
-      if (!FlutterGemma.hasActiveModel()) {
+      if (!FlutterEdgeAi.hasActiveModel()) {
         final rehydrated = await ModelDownloadService.ensureModelActive();
         rehydrationFailed = !rehydrated;
         if (kDebugMode && !rehydrated) {
@@ -96,7 +96,7 @@ Formatting rules:
         }
       }
 
-      _model = await FlutterGemma.getActiveModel(
+      _model = await FlutterEdgeAi.getActiveModel(
         maxTokens: _maxTokens,
         preferredBackend: PreferredBackend.cpu,
       );

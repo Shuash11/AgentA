@@ -1,4 +1,4 @@
-import 'package:flutter_gemma/flutter_gemma.dart';
+import 'package:flutter_edge_ai/flutter_edge_ai.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:aiproject/data/models/chat_message_model.dart';
 import 'package:aiproject/services/ai/gemma_service.dart';

@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
-import 'package:flutter_gemma_mediapipe/flutter_gemma_mediapipe.dart';
+import 'package:flutter_edge_ai/flutter_edge_ai.dart';
+import 'package:flutter_edge_ai_mediapipe/flutter_edge_ai_mediapipe.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'theme/app_theme.dart';
 import 'cubit/app_providers.dart';
@@ -172,20 +172,20 @@ class _AppLoaderState extends State<AppLoader> {
     }
 
     try {
-      // flutter_gemma 1.x: core registers NO engine by default — the
+      // flutter_edge_ai 1.x: core registers NO engine by default — the
       // MediaPipe (.task) engine must be registered explicitly.
       // Retry budget: 3. Each attempt can run up to the 30-min install
       // ceiling in ModelDownloadService (the 3-min stall watchdog covers
       // the silent case), so a larger budget could never complete within
       // the timeout — 3 keeps the worst case inside a plausible session
       // while transient errors still get retried.
-      await FlutterGemma.initialize(
+      await FlutterEdgeAi.initialize(
         inferenceEngines: const [MediaPipeEngine()],
         maxDownloadRetries: 3,
       );
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[Main] FlutterGemma.initialize failed (ignored): $e');
+        debugPrint('[Main] FlutterEdgeAi.initialize failed (ignored): $e');
       }
     }
     if (!mounted) return;

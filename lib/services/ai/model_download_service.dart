@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
+import 'package:flutter_edge_ai/flutter_edge_ai.dart';
 import '../../core/config/app_config.dart';
 import '../../data/local/offline_model_dao.dart';
 
@@ -185,7 +185,7 @@ class ModelDownloadService extends ChangeNotifier {
           // No path recorded — the plugin owns the model storage (app-private,
           // cleared together with our DB). Trust the DB flag: it is only
           // written after a completed install. Never gate on
-          // FlutterGemma.hasActiveModel() here — that spec is in-memory only
+          // FlutterEdgeAi.hasActiveModel() here — that spec is in-memory only
           // (null after every restart), so requiring it would downgrade a
           // fully downloaded model and keep the download gate closed forever.
           // If the plugin's copy were truly lost, ensureModelActive() at load
@@ -244,7 +244,7 @@ class ModelDownloadService extends ChangeNotifier {
       // cancelled so the native download stops instead of lingering.
       final installFuture = installOverrideForTest != null
           ? installOverrideForTest!(token)
-          : FlutterGemma.installModel(modelType: ModelType.gemmaIt)
+          : FlutterEdgeAi.installModel(modelType: ModelType.gemmaIt)
                 .fromNetwork(
                   resolvedModelUrl,
                   foreground: AppConfig.foregroundDownload,
@@ -339,7 +339,7 @@ class ModelDownloadService extends ChangeNotifier {
   }
 
   /// Maps a download/install failure to a friendly, brand-free UI state.
-  /// flutter_gemma 1.x throws typed [DownloadException] (switch over its
+  /// flutter_edge_ai 1.x throws typed [DownloadException] (switch over its
   /// sealed [DownloadError]); anything else gets a generic friendly message.
   /// Raw exception detail goes to debugPrint only — never to the UI.
   /// Cancellation is silent/neutral: back to not-installed with no error.
@@ -457,7 +457,7 @@ class ModelDownloadService extends ChangeNotifier {
   bool get stallFiredForTest => _stallFired;
 
   /// Re-establishes the plugin's active-model spec for this process.
-  /// On flutter_gemma 1.8.4, initialize() already auto-restores the
+  /// On flutter_edge_ai 1.11.4, initialize() already auto-restores the
   /// previously-active model identity from SharedPreferences, so
   /// hasActiveModel() is usually true at startup and this returns early.
   /// The install() below is the defensive remainder: it is idempotent
@@ -466,16 +466,16 @@ class ModelDownloadService extends ChangeNotifier {
   /// [AppConfig.foregroundDownload] — when the storage was lost or prefs
   /// restore failed.
   static Future<bool> ensureModelActive() async {
-    if (FlutterGemma.hasActiveModel()) return true;
+    if (FlutterEdgeAi.hasActiveModel()) return true;
     try {
-      await FlutterGemma.installModel(modelType: ModelType.gemmaIt)
+      await FlutterEdgeAi.installModel(modelType: ModelType.gemmaIt)
           .fromNetwork(
             resolvedModelUrl,
             foreground: AppConfig.foregroundDownload,
           )
           .install()
           .timeout(const Duration(minutes: 30));
-      return FlutterGemma.hasActiveModel();
+      return FlutterEdgeAi.hasActiveModel();
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[ModelDownload] ensureModelActive failed: $e');
