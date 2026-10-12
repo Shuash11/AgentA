@@ -1,6 +1,6 @@
 # Cycle 2 — Dart Format Compliance + CI Format Gate
 
-**status:** active
+**status:** done (closed 2026-10-13 — all phases PASS, push executed, CI green, format gate live)
 **created:** 2026-10-13
 **created by:** Adviser (self-improvement cycle 2 audit)
 **repo:** C:\projects\aiproject (AgentA) — branch main @ dd65308
@@ -124,7 +124,8 @@ Ranking rationale: user directive is bug-first — the fresh diagnostics show **
 | 2026-10-13 | Cycle-2 audit recorded; plan created `active` (task F7). |
 | 2026-10-13 | **P1 BLOCKER + RULING** — format pass introduced 30 `curly_braces_in_flow_control_structures` infos (12 lib files), analyze exit 1, would red CI. Adviser verified ground truth on the live tree (30 issues, one code, exit 1). **RULING: BRACE-FIX AUTHORIZED** — `dart fix --apply --code=curly_braces_in_flow_control_structures` addendum folded into P1; single `refactor:` commit (no known-red intermediate); Reviewer determinism audit specified. Alternatives (lint disable / --no-fatal-infos / revert format) rejected as gate-weakening or self-defeating. |
 | 2026-10-13 | **P1 + P2 IMPLEMENTED, SINGLE-PASS REVIEW PASS, PUSH APPROVED by Adviser.** Adviser independently re-ran all gates on the commit-bound tree: format idempotent (0 changed, exit 0), analyze "No issues found!" exit 0, 208/208 tests. Scope verified: 80 .dart files (64 lib + 16 test), P2 = +2 lines correctly placed (after `flutter pub get`, before `flutter analyze`), brace addendum = 12 lib files / 0 test files (Reviewer determinism audit: replica-of-HEAD + format + dart fix byte-identical to tree, 0 mismatches). Commits approved: `refactor: apply dart format and brace-wrap lint compliance (no behavior change)` / `ci: enforce dart format gate in Build APK` / `docs(plans): close cycle 1 and open cycle 2 plan` (stage `plans/` explicitly — deletion, `plans/done/` move, new cycle-2 file; never root-wide add). Version bump: none; next tag carries 1.2.4. |
-| pending | agent-push: push main, watch Build APK → green **including the new `Enforce dart format` step** (definitive acceptance), expect Promote to Landing on success. F3 annotations non-blocking. On green: Adviser marks plan `done`, moves to `plans/done/`. On red: capture `gh run view --log-failed`, plan stays `active`, fix phase planned. |
+| 2026-10-13 | **Push EXECUTED** — `e944bd8` refactor (format + brace compliance, 80 files), `43de0fa` ci (format gate, +2), `59d060f` docs(plans); remote main = `59d060f`; no version bump; tags untouched. |
+| 2026-10-13 | **CI GREEN — PLAN CLOSED.** Build APK run **38287161921 SUCCESS (13m59s)**: pub get ✓, **`Enforce dart format` ✓ PASSED** (the definitive acceptance — the CRLF risk did not materialize), analyze ✓, tests ✓, Build APK ✓, artifact ✓. Promote to Landing run **38288748232 SUCCESS (47s)** — real promotion: artifact download, H9 guard, landing upload, public URL verified, Vercel deploy triggered. Annotations: only the expected F3 non-blocking items. Every phase PASSed the single review; push Adviser-approved and executed; both workflows green. The format gate is live: future drift fails CI before analyze. Moved to `plans/done/`. |
 
 - F3 is the pre-ranked top item for cycle 3 (cheap, quick); then F8/F9/F10/F14/F17.
 - F4, F5, F12 remain **CLOUD-BLOCKED** — live Supabase project access (deploy/introspect) required; escalate to the user before scheduling.
