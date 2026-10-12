@@ -1,6 +1,6 @@
 # Cycle 3 — GitHub Actions Deprecation Upgrade
 
-**status:** active
+**status:** done (closed 2026-10-13 — P1 PASS, push executed, BOTH workflows green, deprecation annotations gone)
 **created:** 2026-10-13
 **created by:** Adviser (self-improvement cycle 3 audit)
 **repo:** C:\projects\aiproject (AgentA) — branch main @ 59d060f
@@ -106,7 +106,8 @@ Ranking rationale: no bug-class findings exist in analyzer/test ground truth; F3
 |---|---|
 | 2026-10-13 | Cycle-3 audit recorded; plan created `active` (task F3). |
 | 2026-10-13 | **P1 IMPLEMENTED, SINGLE-PASS REVIEW PASS, PUSH APPROVED by Adviser.** Adviser verified the diff: exactly 4 version-ref lines across 2 workflows (checkout@v7 ×2, setup-java@v6, upload-artifact@v7), zero remaining @v4 refs, inputs untouched, flutter-action@v2 + softprops@v2 untouched. Fallback clause NOT exercised. Reviewer primary-source verification: checkout v7 drop-in (fork-PR guard provably inapplicable here); setup-java v6.0.1 fixes temurin 17; upload-artifact v7 keeps name/path/retention-days; all three majors run node24 — and Node 20 was removed from runners 2026-09-23, so this bump clears an imminent HARD break, not just warnings (corrected citation slug: `2025-09-19-deprecation-of-node-20-on-github-actions-runners`; plan's original slug 404s). Baseline gates green (analyze, format 0 changed, 208/208). Commits approved: `ci: upgrade GitHub Actions off deprecated Node 20 runtimes (checkout v7, setup-java v6, upload-artifact v7)` then `docs(plans): close cycle 2 and open cycle 3 plan`. Version bump: none; next tag carries 1.2.4. |
-| pending | agent-push: push main, watch BOTH workflows → Build APK green (all guards + format gate + analyze + tests + APK build, annotations clean of F3 items) AND Promote to Landing green (its checkout@v7 gets first real exercise: PAT guard, download, H9 guard, upload, URL verify, Vercel). On green: Adviser marks plan `done`, moves to `plans/done/`, opens cycle-4 audit. On red: capture `gh run view --log-failed`, plan stays `active`, fix phase possibly invokes the fallback clause. |
+| 2026-10-13 | **Push EXECUTED** — `5c8133f` ci (4 version refs, both workflows), `3e7cb17` docs(plans); remote main = `3e7cb17`; no version bump; tags untouched. |
+| 2026-10-13 | **CI GREEN — PLAN CLOSED.** Build APK run **38292663386 SUCCESS (13m12s)**: all guards + `Enforce dart format` + analyze + tests + APK build green; **checkout@v7, setup-java@v6, upload-artifact@v7 all exercised clean**; **F3 annotations GONE** (no Node 20 deprecation, no setup-java v4 deprecation) with zero NEW deprecation annotations — remaining annotations are info-only (V2 signer digests, ubuntu-latest→Ubuntu 26 note) and predate this cycle. Promote to Landing run **38294145342 SUCCESS (41s)**: full promotion path (PAT guard → artifact download → H9 → upload → URL verify → checkout@v7 first exercise → pill patch → Vercel deploy). Transparency note: one month-old STALE queued run exists (34749579707, created 2026-09-13, SHA 7343c13) — unrelated to any push, can never complete against current main; recorded as backlog F19. Moved to `plans/done/`. |
 
 ## Backlog governance
 
