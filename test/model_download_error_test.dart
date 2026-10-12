@@ -18,38 +18,45 @@ void main() {
     test('maps every DownloadError subtype to its friendly state', () {
       expect(
         service.friendlyDownloadErrorForTest(
-            const DownloadException(DownloadError.notFound())),
+          const DownloadException(DownloadError.notFound()),
+        ),
         'The offline model file could not be found at its source. '
         'Check the download link.',
       );
       expect(
         service.friendlyDownloadErrorForTest(
-            const DownloadException(DownloadError.unauthorized())),
+          const DownloadException(DownloadError.unauthorized()),
+        ),
         'The model source rejected the download.',
       );
       expect(
         service.friendlyDownloadErrorForTest(
-            const DownloadException(DownloadError.forbidden())),
+          const DownloadException(DownloadError.forbidden()),
+        ),
         'The model source rejected the download.',
       );
       expect(
         service.friendlyDownloadErrorForTest(
-            const DownloadException(DownloadError.rateLimited())),
+          const DownloadException(DownloadError.rateLimited()),
+        ),
         'Too many download attempts. Try again later.',
       );
       expect(
         service.friendlyDownloadErrorForTest(
-            const DownloadException(DownloadError.network('reset'))),
+          const DownloadException(DownloadError.network('reset')),
+        ),
         'No internet connection. Download will resume when you are back online.',
       );
       expect(
         service.friendlyDownloadErrorForTest(
-            const DownloadException(DownloadError.serverError(503))),
+          const DownloadException(DownloadError.serverError(503)),
+        ),
         'Download failed. Please try again.',
       );
       expect(
         service.friendlyDownloadErrorForTest(
-            const DownloadException(DownloadError.unknown('weird'))),
+          const DownloadException(DownloadError.unknown('weird')),
+        ),
         'Download failed. Please try again.',
       );
     });
@@ -57,7 +64,8 @@ void main() {
     test('cancellation stays silent (null)', () {
       expect(
         service.friendlyDownloadErrorForTest(
-            const DownloadException(DownloadError.canceled())),
+          const DownloadException(DownloadError.canceled()),
+        ),
         isNull,
       );
     });
@@ -65,7 +73,8 @@ void main() {
     test('timeout and unknown failures get generic friendly states', () {
       expect(
         service.friendlyDownloadErrorForTest(
-            TimeoutException('install', const Duration(minutes: 30))),
+          TimeoutException('install', const Duration(minutes: 30)),
+        ),
         'Download timed out. Please try again.',
       );
       expect(
@@ -101,13 +110,17 @@ void main() {
         'abc',
       ];
       for (final error in errors) {
-        final message =
-            service.friendlyDownloadErrorForTest(DownloadException(error));
+        final message = service.friendlyDownloadErrorForTest(
+          DownloadException(error),
+        );
         expect(message, isNotNull, reason: '$error');
         final lower = message!.toLowerCase();
         for (final token in banned) {
-          expect(lower.contains(token), isFalse,
-              reason: 'message "$message" leaks "$token"');
+          expect(
+            lower.contains(token),
+            isFalse,
+            reason: 'message "$message" leaks "$token"',
+          );
         }
       }
     });
@@ -124,11 +137,14 @@ void main() {
     test('raw plugin cancellation stays silent (null)', () {
       expect(
         service.friendlyDownloadErrorForTest(
-            DownloadCancelledException('User cancelled', StackTrace.empty)),
+          DownloadCancelledException('User cancelled', StackTrace.empty),
+        ),
         isNull,
       );
-      expect(CancelToken.isCancel(
-          DownloadCancelledException('x', StackTrace.empty)), isTrue);
+      expect(
+        CancelToken.isCancel(DownloadCancelledException('x', StackTrace.empty)),
+        isTrue,
+      );
     });
 
     test('stall/timeout/cancel states stay brand-free', () {
@@ -145,7 +161,8 @@ void main() {
       final messages = [
         service.friendlyDownloadErrorForTest(const DownloadStalledException()),
         service.friendlyDownloadErrorForTest(
-            TimeoutException('install', const Duration(minutes: 30))),
+          TimeoutException('install', const Duration(minutes: 30)),
+        ),
       ];
       for (final message in messages) {
         expect(message, isNotNull);
@@ -153,8 +170,11 @@ void main() {
         for (final token in banned) {
           // Friendly copy must not leak raw exception detail; the typed
           // toString()s may carry it, the UI strings must not.
-          expect(lower.contains(token), isFalse,
-              reason: 'message "$message" leaks "$token"');
+          expect(
+            lower.contains(token),
+            isFalse,
+            reason: 'message "$message" leaks "$token"',
+          );
         }
       }
     });
@@ -260,25 +280,33 @@ void main() {
       service.dispose();
     });
 
-    test('production ceilings: permission 10s, stall 3min, install 30min',
-        () {
-      expect(ModelDownloadService.permissionTimeoutForTest,
-          const Duration(seconds: 10));
-      expect(ModelDownloadService.stallTimeoutForTest,
-          const Duration(minutes: 3));
-      expect(ModelDownloadService.installTimeoutForTest,
-          const Duration(minutes: 30));
+    test('production ceilings: permission 10s, stall 3min, install 30min', () {
+      expect(
+        ModelDownloadService.permissionTimeoutForTest,
+        const Duration(seconds: 10),
+      );
+      expect(
+        ModelDownloadService.stallTimeoutForTest,
+        const Duration(minutes: 3),
+      );
+      expect(
+        ModelDownloadService.installTimeoutForTest,
+        const Duration(minutes: 30),
+      );
       // The stall window must stay above the 60s slow-connection heuristic
       // (a merely slow transfer still emits events and resets the timer).
-      expect(ModelDownloadService.stallTimeoutForTest,
-          greaterThan(const Duration(seconds: 60)));
+      expect(
+        ModelDownloadService.stallTimeoutForTest,
+        greaterThan(const Duration(seconds: 60)),
+      );
     });
 
     test('hanging permission request resolves as denied, quickly', () async {
-      service.permissionRequestOverrideForTest =
-          () => Completer<bool?>().future; // never completes
-      service.permissionTimeoutOverrideForTest =
-          const Duration(milliseconds: 200);
+      service.permissionRequestOverrideForTest = () =>
+          Completer<bool?>().future; // never completes
+      service.permissionTimeoutOverrideForTest = const Duration(
+        milliseconds: 200,
+      );
       final watch = Stopwatch()..start();
       final granted = await service.ensureNotificationPermissionForTest();
       watch.stop();
@@ -287,10 +315,11 @@ void main() {
     });
 
     test('download still starts after the permission request hangs', () async {
-      service.permissionRequestOverrideForTest =
-          () => Completer<bool?>().future; // never completes
-      service.permissionTimeoutOverrideForTest =
-          const Duration(milliseconds: 200);
+      service.permissionRequestOverrideForTest = () =>
+          Completer<bool?>().future; // never completes
+      service.permissionTimeoutOverrideForTest = const Duration(
+        milliseconds: 200,
+      );
       var installStarted = false;
       service.installOverrideForTest = (token) async {
         installStarted = true;
@@ -303,8 +332,9 @@ void main() {
     });
 
     test('watchdog is armed in flight and cleared on success', () async {
-      service.permissionTimeoutOverrideForTest =
-          const Duration(milliseconds: 50);
+      service.permissionTimeoutOverrideForTest = const Duration(
+        milliseconds: 50,
+      );
       service.stallTimeoutOverrideForTest = const Duration(seconds: 5);
       var armedInFlight = false;
       service.installOverrideForTest = (token) async {
@@ -316,61 +346,66 @@ void main() {
       expect(service.hasActiveWatchdogForTest, isFalse);
     });
 
-    test('simulated stall surfaces typed error, cancels token, retryable',
-        () async {
-      service.permissionTimeoutOverrideForTest =
-          const Duration(milliseconds: 50);
-      service.stallTimeoutOverrideForTest =
-          const Duration(milliseconds: 200);
-      CancelToken? captured;
-      service.installOverrideForTest = (token) async {
-        captured = token;
-        // Hang past the watchdog window, then surface the cancellation the
-        // plugin raises for the cancelled native task.
-        await Future.delayed(const Duration(seconds: 1));
-        throw const DownloadException(DownloadError.canceled());
-      };
-      await service.installModel();
-      expect(service.stallFiredForTest, isTrue);
-      expect(captured, isNotNull);
-      expect(captured!.isCancelled, isTrue);
-      expect(service.status, ModelStatus.error);
-      expect(service.errorMessage, 'Download stalled. Please try again.');
-      expect(service.hasActiveWatchdogForTest, isFalse);
+    test(
+      'simulated stall surfaces typed error, cancels token, retryable',
+      () async {
+        service.permissionTimeoutOverrideForTest = const Duration(
+          milliseconds: 50,
+        );
+        service.stallTimeoutOverrideForTest = const Duration(milliseconds: 200);
+        CancelToken? captured;
+        service.installOverrideForTest = (token) async {
+          captured = token;
+          // Hang past the watchdog window, then surface the cancellation the
+          // plugin raises for the cancelled native task.
+          await Future.delayed(const Duration(seconds: 1));
+          throw const DownloadException(DownloadError.canceled());
+        };
+        await service.installModel();
+        expect(service.stallFiredForTest, isTrue);
+        expect(captured, isNotNull);
+        expect(captured!.isCancelled, isTrue);
+        expect(service.status, ModelStatus.error);
+        expect(service.errorMessage, 'Download stalled. Please try again.');
+        expect(service.hasActiveWatchdogForTest, isFalse);
 
-      // Retryable: a fresh attempt proceeds instead of wedging on installing.
-      service.installOverrideForTest = (token) async {};
-      await service.installModel();
-      expect(service.status, ModelStatus.ready);
-      expect(service.errorMessage, isNull);
-    });
+        // Retryable: a fresh attempt proceeds instead of wedging on installing.
+        service.installOverrideForTest = (token) async {};
+        await service.installModel();
+        expect(service.status, ModelStatus.ready);
+        expect(service.errorMessage, isNull);
+      },
+    );
 
-    test('.timeout() path cancels the native task via the CancelToken',
-        () async {
-      service.permissionTimeoutOverrideForTest =
-          const Duration(milliseconds: 50);
-      // Keep the watchdog out of the way so only the install ceiling fires.
-      service.stallTimeoutOverrideForTest = const Duration(seconds: 30);
-      service.installTimeoutOverrideForTest =
-          const Duration(milliseconds: 300);
-      CancelToken? captured;
-      service.installOverrideForTest = (token) async {
-        captured = token;
-        await Completer<void>().future; // silently-dead native task
-      };
-      await service.installModel();
-      expect(captured, isNotNull);
-      expect(captured!.isCancelled, isTrue);
-      expect(service.stallFiredForTest, isFalse);
-      expect(service.status, ModelStatus.error);
-      expect(service.errorMessage, 'Download timed out. Please try again.');
-      expect(service.hasActiveWatchdogForTest, isFalse);
-    });
+    test(
+      '.timeout() path cancels the native task via the CancelToken',
+      () async {
+        service.permissionTimeoutOverrideForTest = const Duration(
+          milliseconds: 50,
+        );
+        // Keep the watchdog out of the way so only the install ceiling fires.
+        service.stallTimeoutOverrideForTest = const Duration(seconds: 30);
+        service.installTimeoutOverrideForTest = const Duration(
+          milliseconds: 300,
+        );
+        CancelToken? captured;
+        service.installOverrideForTest = (token) async {
+          captured = token;
+          await Completer<void>().future; // silently-dead native task
+        };
+        await service.installModel();
+        expect(captured, isNotNull);
+        expect(captured!.isCancelled, isTrue);
+        expect(service.stallFiredForTest, isFalse);
+        expect(service.status, ModelStatus.error);
+        expect(service.errorMessage, 'Download timed out. Please try again.');
+        expect(service.hasActiveWatchdogForTest, isFalse);
+      },
+    );
 
     test('dispose cancels a pending watchdog without leaking', () async {
       final stray = ModelDownloadService();
-      stray.permissionTimeoutOverrideForTest =
-          const Duration(milliseconds: 50);
+      stray.permissionTimeoutOverrideForTest = const Duration(milliseconds: 50);
       stray.stallTimeoutOverrideForTest = const Duration(seconds: 5);
       stray.installOverrideForTest = (token) async {
         await Completer<void>().future; // stays in flight

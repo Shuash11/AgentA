@@ -17,26 +17,67 @@ void main() {
       expect(AuthRetryPolicy.isRetryable(e), true);
     });
 
-    test('AuthRetryableFetchException with a status code is still retryable', () {
-      final e = AuthRetryableFetchException(statusCode: null);
-      expect(AuthRetryPolicy.isRetryable(e), true);
-    });
+    test(
+      'AuthRetryableFetchException with a status code is still retryable',
+      () {
+        final e = AuthRetryableFetchException(statusCode: null);
+        expect(AuthRetryPolicy.isRetryable(e), true);
+      },
+    );
 
     test('AuthException retryable status codes unchanged', () {
-      expect(AuthRetryPolicy.isRetryable(const AuthException('x', statusCode: '408')), true);
-      expect(AuthRetryPolicy.isRetryable(const AuthException('x', statusCode: '429')), true);
-      expect(AuthRetryPolicy.isRetryable(const AuthException('x', statusCode: '500')), true);
-      expect(AuthRetryPolicy.isRetryable(const AuthException('x', statusCode: '503')), true);
+      expect(
+        AuthRetryPolicy.isRetryable(
+          const AuthException('x', statusCode: '408'),
+        ),
+        true,
+      );
+      expect(
+        AuthRetryPolicy.isRetryable(
+          const AuthException('x', statusCode: '429'),
+        ),
+        true,
+      );
+      expect(
+        AuthRetryPolicy.isRetryable(
+          const AuthException('x', statusCode: '500'),
+        ),
+        true,
+      );
+      expect(
+        AuthRetryPolicy.isRetryable(
+          const AuthException('x', statusCode: '503'),
+        ),
+        true,
+      );
     });
 
     test('AuthException non-retryable status codes unchanged', () {
-      expect(AuthRetryPolicy.isRetryable(const AuthException('x', statusCode: '400')), false);
-      expect(AuthRetryPolicy.isRetryable(const AuthException('x', statusCode: '401')), false);
-      expect(AuthRetryPolicy.isRetryable(const AuthException('x', statusCode: '403')), false);
+      expect(
+        AuthRetryPolicy.isRetryable(
+          const AuthException('x', statusCode: '400'),
+        ),
+        false,
+      );
+      expect(
+        AuthRetryPolicy.isRetryable(
+          const AuthException('x', statusCode: '401'),
+        ),
+        false,
+      );
+      expect(
+        AuthRetryPolicy.isRetryable(
+          const AuthException('x', statusCode: '403'),
+        ),
+        false,
+      );
     });
 
     test('network exceptions are retryable', () {
-      expect(AuthRetryPolicy.isRetryable(const SocketException('offline')), true);
+      expect(
+        AuthRetryPolicy.isRetryable(const SocketException('offline')),
+        true,
+      );
       expect(AuthRetryPolicy.isRetryable(TimeoutException('timeout')), true);
     });
   });

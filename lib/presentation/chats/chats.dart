@@ -187,8 +187,9 @@ class _ChatScreenState extends State<Chats> {
   }
 
   Future<void> _refreshRemoteInBackground() async {
-    final remoteMsgs =
-        await _messageRepo.refreshMessagesFromRemote(widget.chatId);
+    final remoteMsgs = await _messageRepo.refreshMessagesFromRemote(
+      widget.chatId,
+    );
     if (!mounted || remoteMsgs.isEmpty) return;
 
     final Map<String, ChatMessageModel> mergedMap = {
@@ -327,8 +328,9 @@ class _ChatScreenState extends State<Chats> {
       if (_streamingUpdateScheduled) return;
       _streamingUpdateScheduled = true;
       _streamingTimer?.cancel();
-      final currentMessage =
-          _messages.isNotEmpty && !_messages.last.isUser ? _messages.last : null;
+      final currentMessage = _messages.isNotEmpty && !_messages.last.isUser
+          ? _messages.last
+          : null;
       if (currentMessage == null) {
         _streamingUpdateScheduled = false;
         return;
@@ -340,8 +342,9 @@ class _ChatScreenState extends State<Chats> {
           return;
         }
         _streamingUpdateScheduled = false;
-        final messageIndex =
-            _messages.indexWhere((msg) => msg.id == currentMessage.id);
+        final messageIndex = _messages.indexWhere(
+          (msg) => msg.id == currentMessage.id,
+        );
         if (messageIndex == -1) return;
 
         final messages = [..._messages];
@@ -446,13 +449,15 @@ class _ChatScreenState extends State<Chats> {
 
     if (_messages.isEmpty) return;
     final finalMsg = _messages.last;
-    await _messageRepo.saveMessage(ChatMessageModel(
-      id: finalMsg.id,
-      chatId: finalMsg.chatId,
-      text: finalMsg.text,
-      isUser: false,
-      timestamp: finalMsg.timestamp,
-    ));
+    await _messageRepo.saveMessage(
+      ChatMessageModel(
+        id: finalMsg.id,
+        chatId: finalMsg.chatId,
+        text: finalMsg.text,
+        isUser: false,
+        timestamp: finalMsg.timestamp,
+      ),
+    );
   }
 
   void _stopGeneration() async {
@@ -466,8 +471,7 @@ class _ChatScreenState extends State<Chats> {
     _aiService.cancelActiveGeneration();
 
     if (!mounted) return;
-    if (_partialAiMsgId != null &&
-        stoppedGenerationId < _activeGenerationId) {
+    if (_partialAiMsgId != null && stoppedGenerationId < _activeGenerationId) {
       _setMessages(
         _messages.where((msg) => msg.id != _partialAiMsgId).toList(),
       );
@@ -489,7 +493,9 @@ class _ChatScreenState extends State<Chats> {
     }
     if (prompt.isEmpty) {
       final failedUrl = _messages[index].text.trim();
-      final match = RegExp(r'pollinations\.ai/prompt/([^?]+)').firstMatch(failedUrl);
+      final match = RegExp(
+        r'pollinations\.ai/prompt/([^?]+)',
+      ).firstMatch(failedUrl);
       if (match != null) {
         prompt = Uri.decodeComponent(match.group(1)!);
       }
@@ -536,8 +542,7 @@ class _ChatScreenState extends State<Chats> {
 
     final rawText = error.toString();
     final errorText = ChatErrorClassifier.friendly(rawText);
-    final needsDownloadAction =
-        ChatErrorClassifier.isOfflineNotReady(rawText);
+    final needsDownloadAction = ChatErrorClassifier.isOfflineNotReady(rawText);
     final partialAiMsgId = _partialAiMsgId;
     final errorMsg = ChatMessageModel(
       id: const Uuid().v4(),
@@ -550,10 +555,7 @@ class _ChatScreenState extends State<Chats> {
     _partialAiMsgId = null;
     final messages = partialAiMsgId == null
         ? [..._messages, errorMsg]
-        : [
-            ..._messages.where((msg) => msg.id != partialAiMsgId),
-            errorMsg,
-          ];
+        : [..._messages.where((msg) => msg.id != partialAiMsgId), errorMsg];
     _setMessages(messages);
     _setActivity(isTyping: false, isInitializingModel: false);
 

@@ -21,7 +21,8 @@ class GemmaService extends ChangeNotifier {
   static const int _maxHistoryChars = 1000;
   static const String greetingText =
       "Hello! I'm AgentA, What would you like to work on today?";
-  static const String _systemInstruction = '''
+  static const String _systemInstruction =
+      '''
 You are AgentA, a helpful AI assistant inside this app.
 
 Rules:
@@ -89,7 +90,9 @@ Formatting rules:
         final rehydrated = await ModelDownloadService.ensureModelActive();
         rehydrationFailed = !rehydrated;
         if (kDebugMode && !rehydrated) {
-          debugPrint('[GemmaService] model rehydration failed — load will retry via gate');
+          debugPrint(
+            '[GemmaService] model rehydration failed — load will retry via gate',
+          );
         }
       }
 
@@ -149,15 +152,13 @@ Formatting rules:
       _truncateAtSentence(text, limit);
 
   @visibleForTesting
-  bool endsAtNaturalBreakForTest(String token) =>
-      _endsAtNaturalBreak(token);
+  bool endsAtNaturalBreakForTest(String token) => _endsAtNaturalBreak(token);
 
   @visibleForTesting
   List<ChatMessageModel> recentHistoryForTest(
     List<ChatMessageModel> history, {
     required String currentMessage,
-  }) =>
-      _getRecentHistory(history, currentMessage: currentMessage);
+  }) => _getRecentHistory(history, currentMessage: currentMessage);
 
   Future<bool> ensureReady() async {
     if (isReady) {
@@ -181,8 +182,9 @@ Formatting rules:
     if (history.isEmpty) return [];
 
     final usableHistory = List<ChatMessageModel>.from(history);
-    usableHistory.removeWhere((msg) =>
-        msg.text.trim().isEmpty || msg.text.trim() == greetingText);
+    usableHistory.removeWhere(
+      (msg) => msg.text.trim().isEmpty || msg.text.trim() == greetingText,
+    );
     if (usableHistory.isNotEmpty &&
         usableHistory.last.isUser &&
         usableHistory.last.text.trim() == currentMessage.trim()) {
@@ -190,8 +192,7 @@ Formatting rules:
     }
 
     final recent = usableHistory.length > _maxHistoryMessages
-        ? usableHistory.sublist(
-            usableHistory.length - _maxHistoryMessages)
+        ? usableHistory.sublist(usableHistory.length - _maxHistoryMessages)
         : usableHistory;
     return recent.map((m) {
       final t = m.text.trim();
@@ -254,7 +255,8 @@ Formatting rules:
       // The .task runtime applies the chat template and prepends the
       // systemInstruction itself — send the plain user text only.
       await chat.addQueryChunk(
-          Message.text(text: newMessage.trim(), isUser: true));
+        Message.text(text: newMessage.trim(), isUser: true),
+      );
       final response = await chat.generateChatResponse();
 
       if (response is TextResponse) {
@@ -303,7 +305,8 @@ Formatting rules:
       // The .task runtime applies the chat template and prepends the
       // systemInstruction itself — send the plain user text only.
       await chat.addQueryChunk(
-          Message.text(text: newMessage.trim(), isUser: true));
+        Message.text(text: newMessage.trim(), isUser: true),
+      );
 
       final flushTimer = Stopwatch()..start();
       final tokenBuffer = StringBuffer();
@@ -314,7 +317,8 @@ Formatting rules:
         if (response is TextResponse) {
           tokenBuffer.write(response.token);
 
-          final shouldFlush = flushTimer.elapsed >= _streamFlushInterval ||
+          final shouldFlush =
+              flushTimer.elapsed >= _streamFlushInterval ||
               tokenBuffer.length >= _streamFlushChars ||
               _endsAtNaturalBreak(response.token);
 

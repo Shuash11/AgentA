@@ -13,7 +13,7 @@ class SecurityPage extends StatelessWidget {
     // H8: raw codes are shown once at creation only; only the hash is
     // stored, so there is nothing to "view" afterwards.
     if (!context.mounted) return;
-    
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -32,7 +32,10 @@ class SecurityPage extends StatelessWidget {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('Close', style: TextStyle(color: colors.subtext))),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close', style: TextStyle(color: colors.subtext)),
+          ),
         ],
       ),
     );
@@ -66,10 +69,24 @@ class SecurityPage extends StatelessWidget {
 
     final success = await SecurityService.deleteAccount();
     if (success && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account deleted'), backgroundColor: Colors.red));
-      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginPage()), (route) => false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Account deleted'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (route) => false,
+      );
     } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to delete account'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to delete account'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -83,7 +100,11 @@ class SecurityPage extends StatelessWidget {
         title: Text('Security', style: TextStyle(color: colors.text)),
         backgroundColor: colors.surface,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: colors.text, size: 20),
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: colors.text,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -98,13 +119,23 @@ class SecurityPage extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppRadius.md),
                 child: Container(
                   padding: const EdgeInsets.all(AppSpacing.base),
-                  decoration: BoxDecoration(color: colors.card, borderRadius: BorderRadius.circular(AppRadius.md)),
-                  child: Row(children: [
-                    Icon(Icons.key, color: colors.amber),
-                    const SizedBox(width: AppSpacing.base),
-                    Expanded(child: Text('View Recovery Code', style: TextStyle(color: colors.text))),
-                    Icon(Icons.chevron_right, color: colors.subtext),
-                  ]),
+                  decoration: BoxDecoration(
+                    color: colors.card,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.key, color: colors.amber),
+                      const SizedBox(width: AppSpacing.base),
+                      Expanded(
+                        child: Text(
+                          'View Recovery Code',
+                          style: TextStyle(color: colors.text),
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, color: colors.subtext),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -116,12 +147,22 @@ class SecurityPage extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppRadius.md),
                 child: Container(
                   padding: const EdgeInsets.all(AppSpacing.base),
-                  decoration: BoxDecoration(color: colors.card, borderRadius: BorderRadius.circular(AppRadius.md)),
-                  child: Row(children: [
-                    Icon(Icons.delete, color: colors.error),
-                    const SizedBox(width: AppSpacing.base),
-                    Expanded(child: Text('Delete Account', style: TextStyle(color: colors.error))),
-                  ]),
+                  decoration: BoxDecoration(
+                    color: colors.card,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, color: colors.error),
+                      const SizedBox(width: AppSpacing.base),
+                      Expanded(
+                        child: Text(
+                          'Delete Account',
+                          style: TextStyle(color: colors.error),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

@@ -68,17 +68,23 @@ void main() {
     test('maps missing-model signals to not-installed', () {
       expect(
         service.classifyLoadErrorForTest(
-            StateError('Bad state: No active model'), false),
+          StateError('Bad state: No active model'),
+          false,
+        ),
         'Offline model is not installed.',
       );
       expect(
         service.classifyLoadErrorForTest(
-            Exception('model not installed'), false),
+          Exception('model not installed'),
+          false,
+        ),
         'Offline model is not installed.',
       );
       expect(
         service.classifyLoadErrorForTest(
-            Exception('No such file or directory'), false),
+          Exception('No such file or directory'),
+          false,
+        ),
         'Offline model is not installed.',
       );
       expect(
@@ -98,7 +104,9 @@ void main() {
       // Phase 2 regression lock: the old raw.contains('null') branch is gone.
       expect(
         service.classifyLoadErrorForTest(
-            Exception('Null check operator used on a null value'), false),
+          Exception('Null check operator used on a null value'),
+          false,
+        ),
         'Offline model failed to load.',
       );
     });
@@ -113,8 +121,9 @@ void main() {
     test('typed download errors fall through to failed-to-load here', () {
       // Download UX is owned by ModelDownloadService's typed mapping;
       // this classifier only handles non-download load failures.
-      const typed =
-          DownloadException(DownloadError.network('connection reset'));
+      const typed = DownloadException(
+        DownloadError.network('connection reset'),
+      );
       expect(
         service.classifyLoadErrorForTest(typed, false),
         'Offline model failed to load.',
@@ -125,8 +134,7 @@ void main() {
   group('GemmaService.endsAtNaturalBreak', () {
     test('punctuation endings break', () {
       for (final token in ['hello.', 'a,', 'x:', 'y;', 'wow!', 'really?']) {
-        expect(service.endsAtNaturalBreakForTest(token), isTrue,
-            reason: token);
+        expect(service.endsAtNaturalBreakForTest(token), isTrue, reason: token);
       }
       // A trailing newline still flushes when punctuation precedes it —
       // trimRight runs first, so the '.' decides here.
@@ -156,31 +164,37 @@ void main() {
         _msg('   ', id: 'b'),
         _msg('real question', id: 'r'),
       ];
-      final recent =
-          service.recentHistoryForTest(history, currentMessage: 'next');
+      final recent = service.recentHistoryForTest(
+        history,
+        currentMessage: 'next',
+      );
       expect(recent.map((m) => m.id), ['r']);
     });
 
     test('removes a trailing duplicate of the new user message', () {
       final history = [_msg('hi', id: 'a'), _msg('current', id: 'dup')];
-      final recent =
-          service.recentHistoryForTest(history, currentMessage: 'current');
+      final recent = service.recentHistoryForTest(
+        history,
+        currentMessage: 'current',
+      );
       expect(recent.map((m) => m.id), ['a']);
     });
 
     test('keeps a same-text trailing assistant message', () {
       final history = [_msg('current', isUser: false, id: 'asst')];
-      final recent =
-          service.recentHistoryForTest(history, currentMessage: 'current');
+      final recent = service.recentHistoryForTest(
+        history,
+        currentMessage: 'current',
+      );
       expect(recent.map((m) => m.id), ['asst']);
     });
 
     test('caps history at the most recent messages', () {
-      final history = [
-        for (var i = 0; i < 10; i++) _msg('msg $i', id: 'm$i'),
-      ];
-      final recent =
-          service.recentHistoryForTest(history, currentMessage: 'new');
+      final history = [for (var i = 0; i < 10; i++) _msg('msg $i', id: 'm$i')];
+      final recent = service.recentHistoryForTest(
+        history,
+        currentMessage: 'new',
+      );
       expect(recent, hasLength(8));
       expect(recent.first.id, 'm2');
       expect(recent.last.id, 'm9');
@@ -189,8 +203,10 @@ void main() {
     test('truncates over-cap messages at a sentence boundary', () {
       final longText = '${'Sentence one. ' * 100}tail without end';
       final history = [_msg(longText, id: 'long', isUser: false)];
-      final recent =
-          service.recentHistoryForTest(history, currentMessage: 'new');
+      final recent = service.recentHistoryForTest(
+        history,
+        currentMessage: 'new',
+      );
       expect(recent, hasLength(1));
       final truncated = recent.first;
       expect(truncated.text.endsWith('…'), isTrue);

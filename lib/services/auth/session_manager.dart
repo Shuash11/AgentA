@@ -89,7 +89,9 @@ class SessionManager {
       } catch (e) {
         // L20: best-effort wipe, but never silently — log so a failing
         // storage layer is diagnosable.
-        if (kDebugMode) debugPrint('[SessionManager] legacy pwd_* sweep failed: $e');
+        if (kDebugMode) {
+          debugPrint('[SessionManager] legacy pwd_* sweep failed: $e');
+        }
       }
     } catch (e) {
       if (kDebugMode) debugPrint('[SessionManager] session clear failed: $e');
@@ -109,7 +111,9 @@ class SessionManager {
     try {
       await _storage.delete(key: legacyPwdKey(localId));
     } catch (e) {
-      if (kDebugMode) debugPrint('[SessionManager] dropStashedPassword failed: $e');
+      if (kDebugMode) {
+        debugPrint('[SessionManager] dropStashedPassword failed: $e');
+      }
     }
   }
 

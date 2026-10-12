@@ -39,7 +39,7 @@ class _ProfilePageState extends State<ProfilePage> {
         _displayName = meta == null
             ? null
             : (meta['display_name'] ?? meta['full_name'] ?? meta['name'])
-                as String?;
+                  as String?;
         _email = user.email;
 
         if (_displayName == null || _displayName!.isEmpty) {
@@ -49,7 +49,9 @@ class _ProfilePageState extends State<ProfilePage> {
             try {
               await AuthService.updateDisplayName(_displayName!);
             } catch (e) {
-              if (kDebugMode) debugPrint('[Profile] display-name backfill failed: $e');
+              if (kDebugMode) {
+                debugPrint('[Profile] display-name backfill failed: $e');
+              }
             }
           }
         }
@@ -84,90 +86,127 @@ class _ProfilePageState extends State<ProfilePage> {
                     radius: 50,
                     backgroundColor: colors.amber,
                     child: Text(
-                      _displayName?.isNotEmpty == true ? _displayName![0].toUpperCase() : 'U',
+                      _displayName?.isNotEmpty == true
+                          ? _displayName![0].toUpperCase()
+                          : 'U',
                       style: const TextStyle(fontSize: 36, color: Colors.black),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     _displayName ?? 'User',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: colors.text),
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: colors.text,
+                    ),
                   ),
                   Text(_email ?? '', style: TextStyle(color: colors.subtext)),
-            const SizedBox(height: 32),
-            _tile(
-              Icons.person,
-              'Edit Profile',
-              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfilePage())),
-              colors,
-            ),
-            const SizedBox(height: 12),
-            _tile(
-              Icons.lock,
-              'Change Password',
-              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RecoveryCodePage())),
-              colors,
-            ),
-            const SizedBox(height: 12),
-            _tile(
-              Icons.security,
-              'Security',
-              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SecurityPage())),
-              colors,
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.error,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: () async {
-                  final colors = context.read<ThemeCubit>().state.colors;
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      backgroundColor: colors.card,
-                      title: Text('Sign Out?', style: TextStyle(color: colors.text)),
-                      content: Text(
-                        'Any unsynced data will be preserved and uploaded when you sign back in.',
-                        style: TextStyle(color: colors.subtext),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: Text('Cancel', style: TextStyle(color: colors.subtext)),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: Text('Sign Out', style: TextStyle(color: colors.amber)),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (confirmed != true) return;
-
-                  await AuthService.logout();
-                  if (context.mounted) {
-                    Navigator.pushAndRemoveUntil(
+                  const SizedBox(height: 32),
+                  _tile(
+                    Icons.person,
+                    'Edit Profile',
+                    () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const LoginPage()),
-                      (route) => false,
-                    );
-                  }
-                },
-                child: const Text('Sign Out'),
+                      MaterialPageRoute(
+                        builder: (_) => const EditProfilePage(),
+                      ),
+                    ),
+                    colors,
+                  ),
+                  const SizedBox(height: 12),
+                  _tile(
+                    Icons.lock,
+                    'Change Password',
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const RecoveryCodePage(),
+                      ),
+                    ),
+                    colors,
+                  ),
+                  const SizedBox(height: 12),
+                  _tile(
+                    Icons.security,
+                    'Security',
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SecurityPage()),
+                    ),
+                    colors,
+                  ),
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.error,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () async {
+                        final colors = context.read<ThemeCubit>().state.colors;
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: colors.card,
+                            title: Text(
+                              'Sign Out?',
+                              style: TextStyle(color: colors.text),
+                            ),
+                            content: Text(
+                              'Any unsynced data will be preserved and uploaded when you sign back in.',
+                              style: TextStyle(color: colors.subtext),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: Text(
+                                  'Cancel',
+                                  style: TextStyle(color: colors.subtext),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: Text(
+                                  'Sign Out',
+                                  style: TextStyle(color: colors.amber),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true) return;
+
+                        await AuthService.logout();
+                        if (context.mounted) {
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const LoginPage(),
+                            ),
+                            (route) => false,
+                          );
+                        }
+                      },
+                      child: const Text('Sign Out'),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: widget.showBottomNav ? const BottomNav1(selectedIndex: 1) : null,
+      bottomNavigationBar: widget.showBottomNav
+          ? const BottomNav1(selectedIndex: 1)
+          : null,
     );
   }
 
-  Widget _tile(IconData icon, String title, VoidCallback onTap, ThemeColors colors) {
+  Widget _tile(
+    IconData icon,
+    String title,
+    VoidCallback onTap,
+    ThemeColors colors,
+  ) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -184,7 +223,9 @@ class _ProfilePageState extends State<ProfilePage> {
             children: [
               Icon(icon, color: colors.amber),
               const SizedBox(width: AppSpacing.base),
-              Expanded(child: Text(title, style: TextStyle(color: colors.text))),
+              Expanded(
+                child: Text(title, style: TextStyle(color: colors.text)),
+              ),
               Icon(Icons.chevron_right, color: colors.subtext),
             ],
           ),

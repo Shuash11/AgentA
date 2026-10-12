@@ -16,25 +16,25 @@ class ConnectivityState {
   });
 
   factory ConnectivityState.offline() => const ConnectivityState(
-        status: InternetStatus.offline,
-        isOnline: false,
-        hasNoInternet: true,
-        isLimited: false,
-      );
+    status: InternetStatus.offline,
+    isOnline: false,
+    hasNoInternet: true,
+    isLimited: false,
+  );
 
   factory ConnectivityState.online() => const ConnectivityState(
-        status: InternetStatus.online,
-        isOnline: true,
-        hasNoInternet: false,
-        isLimited: false,
-      );
+    status: InternetStatus.online,
+    isOnline: true,
+    hasNoInternet: false,
+    isLimited: false,
+  );
 
   factory ConnectivityState.limited() => const ConnectivityState(
-        status: InternetStatus.limited,
-        isOnline: false,
-        hasNoInternet: false,
-        isLimited: true,
-      );
+    status: InternetStatus.limited,
+    isOnline: false,
+    hasNoInternet: false,
+    isLimited: true,
+  );
 
   ConnectivityState copyWith({
     InternetStatus? status,
@@ -56,7 +56,7 @@ class ConnectivityCubit extends Cubit<ConnectivityState> {
   StreamSubscription<InternetStatus>? _subscription;
 
   ConnectivityCubit(this._connectivityService)
-      : super(ConnectivityState.offline()) {
+    : super(ConnectivityState.offline()) {
     _init();
   }
 

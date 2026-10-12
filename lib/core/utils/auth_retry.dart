@@ -19,7 +19,9 @@ class AuthRetryPolicy {
 
   static bool isRetryable(Object error) {
     if (error is SocketException) {
-      if (kDebugMode) debugPrint('[AuthRetry] SocketException => retryable: $error');
+      if (kDebugMode) {
+        debugPrint('[AuthRetry] SocketException => retryable: $error');
+      }
       return true;
     }
     if (error is TimeoutException) {
@@ -27,7 +29,9 @@ class AuthRetryPolicy {
       return true;
     }
     if (error is HttpException) {
-      if (kDebugMode) debugPrint('[AuthRetry] HttpException => retryable: $error');
+      if (kDebugMode) {
+        debugPrint('[AuthRetry] HttpException => retryable: $error');
+      }
       return true;
     }
     if (error is AuthRetryableFetchException) {
@@ -45,7 +49,8 @@ class AuthRetryPolicy {
       final isRetryableCode = _isRetryableStatusCode(code);
       if (kDebugMode) {
         debugPrint(
-            '[AuthRetry] AuthException statusCode=$code message=${error.message} => retryable=$isRetryableCode');
+          '[AuthRetry] AuthException statusCode=$code message=${error.message} => retryable=$isRetryableCode',
+        );
       }
       return isRetryableCode;
     }
@@ -55,17 +60,23 @@ class AuthRetryPolicy {
       final dynamic d = error;
       final sc = d.statusCode as String?;
       if (sc != null && _isRetryableStatusCode(sc)) {
-        if (kDebugMode) debugPrint('[AuthRetry] dynamic statusCode=$sc => retryable');
+        if (kDebugMode) {
+          debugPrint('[AuthRetry] dynamic statusCode=$sc => retryable');
+        }
         return true;
       }
     } catch (e) {
       // L20: the probe throws for error types without a statusCode getter —
       // expected, but log it so nothing is silently swallowed.
       if (kDebugMode) {
-        debugPrint('[AuthRetry] statusCode probe failed for ${error.runtimeType}: $e');
+        debugPrint(
+          '[AuthRetry] statusCode probe failed for ${error.runtimeType}: $e',
+        );
       }
     }
-    if (kDebugMode) debugPrint('[AuthRetry] ${error.runtimeType} => not retryable');
+    if (kDebugMode) {
+      debugPrint('[AuthRetry] ${error.runtimeType} => not retryable');
+    }
     return false;
   }
 

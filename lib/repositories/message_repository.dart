@@ -14,19 +14,34 @@ class MessageRepository {
     return await _localMsgDao.getByChat(chatId);
   }
 
-  Future<List<ChatMessageModel>> refreshMessagesFromRemote(String chatId) async {
+  Future<List<ChatMessageModel>> refreshMessagesFromRemote(
+    String chatId,
+  ) async {
     final uid = await _userId;
     if (!await _connectivity.isOnline() || uid.isEmpty) {
       return [];
     }
     try {
-      final remoteMessages = await SupabaseMessageService.getMessages(uid, chatId);
-      final syncedMsgs = remoteMessages.map((m) => m.copyWith(isSynced: true)).toList();
+      final remoteMessages = await SupabaseMessageService.getMessages(
+        uid,
+        chatId,
+      );
+      final syncedMsgs = remoteMessages
+          .map((m) => m.copyWith(isSynced: true))
+          .toList();
       await _localMsgDao.replaceMessagesPreservingUnsynced(syncedMsgs);
-      if (kDebugMode) debugPrint('[MessageRepository] refresh ${remoteMessages.length} for $chatId');
+      if (kDebugMode) {
+        debugPrint(
+          '[MessageRepository] refresh ${remoteMessages.length} for $chatId',
+        );
+      }
       return remoteMessages;
     } catch (e, stack) {
-      if (kDebugMode) debugPrint('[MessageRepository] refreshMessagesFromRemote failed: $e | $stack');
+      if (kDebugMode) {
+        debugPrint(
+          '[MessageRepository] refreshMessagesFromRemote failed: $e | $stack',
+        );
+      }
       return [];
     }
   }
@@ -37,12 +52,21 @@ class MessageRepository {
 
     if (isOnline && uid.isNotEmpty) {
       try {
-        final remoteMessages = await SupabaseMessageService.getMessages(uid, chatId);
-        final syncedMsgs = remoteMessages.map((m) => m.copyWith(isSynced: true)).toList();
+        final remoteMessages = await SupabaseMessageService.getMessages(
+          uid,
+          chatId,
+        );
+        final syncedMsgs = remoteMessages
+            .map((m) => m.copyWith(isSynced: true))
+            .toList();
         await _localMsgDao.replaceMessagesPreservingUnsynced(syncedMsgs);
         return remoteMessages;
       } catch (e, stack) {
-        if (kDebugMode) debugPrint('[MessageRepository] getMessages remote failed (keeps local): $e | $stack');
+        if (kDebugMode) {
+          debugPrint(
+            '[MessageRepository] getMessages remote failed (keeps local): $e | $stack',
+          );
+        }
       }
     }
 
@@ -56,9 +80,15 @@ class MessageRepository {
       try {
         await SupabaseMessageService.saveMessage(uid, msg.chatId, msg);
         await _localMsgDao.update(msg.copyWith(isSynced: true));
-        if (kDebugMode) debugPrint('[MessageRepository] saveMessage ${msg.id} synced');
+        if (kDebugMode) {
+          debugPrint('[MessageRepository] saveMessage ${msg.id} synced');
+        }
       } catch (e, stack) {
-        if (kDebugMode) debugPrint('[MessageRepository] saveMessage ${msg.id} failed keeps is_synced=0: $e | $stack');
+        if (kDebugMode) {
+          debugPrint(
+            '[MessageRepository] saveMessage ${msg.id} failed keeps is_synced=0: $e | $stack',
+          );
+        }
         // keep is_synced=0
       }
     }
@@ -71,9 +101,15 @@ class MessageRepository {
       try {
         await SupabaseMessageService.deleteMessages(uid, chatId);
         await _localMsgDao.hardDeleteByChat(chatId);
-        if (kDebugMode) debugPrint('[MessageRepository] deleteMessages $chatId synced');
+        if (kDebugMode) {
+          debugPrint('[MessageRepository] deleteMessages $chatId synced');
+        }
       } catch (e, stack) {
-        if (kDebugMode) debugPrint('[MessageRepository] deleteMessages $chatId failed: $e | $stack');
+        if (kDebugMode) {
+          debugPrint(
+            '[MessageRepository] deleteMessages $chatId failed: $e | $stack',
+          );
+        }
       }
     }
   }

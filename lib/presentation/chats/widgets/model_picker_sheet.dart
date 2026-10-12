@@ -61,21 +61,19 @@ Future<void> showModelPickerSheet({
                     onDownloadRequested();
                   },
                 ),
-                ...AIModel.values.where((m) => m != AIModel.gemma).map(
-                  (model) {
-                    return _ModelTile(
-                      model: model,
-                      colors: colors,
-                      aiService: aiService,
-                      isOnline: aiService.isOnline,
-                      onSelected: (model) {
-                        onModelSelected(model);
-                        Navigator.pop(sheetContext);
-                      },
-                      onDownloadRequested: onDownloadRequested,
-                    );
-                  },
-                ),
+                ...AIModel.values.where((m) => m != AIModel.gemma).map((model) {
+                  return _ModelTile(
+                    model: model,
+                    colors: colors,
+                    aiService: aiService,
+                    isOnline: aiService.isOnline,
+                    onSelected: (model) {
+                      onModelSelected(model);
+                      Navigator.pop(sheetContext);
+                    },
+                    onDownloadRequested: onDownloadRequested,
+                  );
+                }),
                 const SizedBox(height: 20),
               ],
             ),
@@ -108,8 +106,7 @@ class _ModelTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSelected = aiService.preferredModel == model;
-    final isAvailable =
-        model == AIModel.gemma ? isOfflineModelReady : isOnline;
+    final isAvailable = model == AIModel.gemma ? isOfflineModelReady : isOnline;
     final isGemmaUnready = model == AIModel.gemma && !isOfflineModelReady;
     final isDisabled = !isAvailable;
 
@@ -122,8 +119,8 @@ class _ModelTile extends StatelessWidget {
           color: isSelected
               ? colors.amber.withValues(alpha: 0.1)
               : isDisabled
-                  ? colors.border.withValues(alpha: 0.3)
-                  : colors.input,
+              ? colors.border.withValues(alpha: 0.3)
+              : colors.input,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(
@@ -133,8 +130,8 @@ class _ModelTile extends StatelessWidget {
           color: isSelected
               ? colors.amber
               : isDisabled
-                  ? colors.subtext.withValues(alpha: 0.5)
-                  : colors.subtext,
+              ? colors.subtext.withValues(alpha: 0.5)
+              : colors.subtext,
           size: 24,
         ),
       ),
@@ -144,8 +141,8 @@ class _ModelTile extends StatelessWidget {
           color: isSelected
               ? colors.amber
               : isDisabled
-                  ? colors.text.withValues(alpha: 0.5)
-                  : colors.text,
+              ? colors.text.withValues(alpha: 0.5)
+              : colors.text,
           fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
           fontSize: 16,
         ),
@@ -154,8 +151,8 @@ class _ModelTile extends StatelessWidget {
         isGemmaUnready
             ? 'Download to use offline'
             : isDisabled
-                ? 'Requires Internet'
-                : model.description,
+            ? 'Requires Internet'
+            : model.description,
         style: TextStyle(
           color: isDisabled
               ? colors.subtext.withValues(alpha: 0.5)
@@ -168,8 +165,8 @@ class _ModelTile extends StatelessWidget {
       onTap: isAvailable
           ? () => onSelected(model)
           : isGemmaUnready
-              ? onDownloadRequested
-              : null,
+          ? onDownloadRequested
+          : null,
     );
   }
 

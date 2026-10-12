@@ -67,9 +67,7 @@ ChatMessageModel syncMessage({
 
 /// Mirrors the upstream-queue filter in `SyncService._flushPending`:
 /// only tombstones still marked unsynced are pushed remotely.
-List<ChatSessionModel> pendingDeleteQueue(
-  List<ChatSessionModel> tombstones,
-) {
+List<ChatSessionModel> pendingDeleteQueue(List<ChatSessionModel> tombstones) {
   return tombstones.where((chat) => !chat.isSynced).toList();
 }
 
@@ -228,33 +226,33 @@ void main() {
   });
 
   group('(a) tombstone lifecycle — offline delete never reappears', () {
-    test('refresh with same id keeps the tombstone, hides it from lists',
-        () async {
-      await chatDao.insert(
-        syncChat(id: 'c1', isSynced: false, isDeleted: true),
-      );
+    test(
+      'refresh with same id keeps the tombstone, hides it from lists',
+      () async {
+        await chatDao.insert(
+          syncChat(id: 'c1', isSynced: false, isDeleted: true),
+        );
 
-      // Remote still holds the old row; the preserving replace must skip it.
-      await chatDao.replaceChatsPreservingUnsynced(
-        [syncChat(id: 'c1', isSynced: true)],
-      );
+        // Remote still holds the old row; the preserving replace must skip it.
+        await chatDao.replaceChatsPreservingUnsynced([
+          syncChat(id: 'c1', isSynced: true),
+        ]);
 
-      final kept = await chatDao.getById('c1');
-      expect(kept, isNotNull);
-      expect(kept!.isDeleted, true);
-      expect(kept.isSynced, false);
-      expect(await chatDao.getByUserId('u1'), isEmpty);
-      expect(
-        (await chatDao.getTombstonedChats()).map((c) => c.id),
-        contains('c1'),
-      );
-    });
+        final kept = await chatDao.getById('c1');
+        expect(kept, isNotNull);
+        expect(kept!.isDeleted, true);
+        expect(kept.isSynced, false);
+        expect(await chatDao.getByUserId('u1'), isEmpty);
+        expect(
+          (await chatDao.getTombstonedChats()).map((c) => c.id),
+          contains('c1'),
+        );
+      },
+    );
 
     test('message tombstones survive a preserving message refresh', () async {
       await chatDao.insert(syncChat(id: 'c1', isSynced: true));
-      await msgDao.insert(
-        syncMessage(id: 'm1', chatId: 'c1', isSynced: true),
-      );
+      await msgDao.insert(syncMessage(id: 'm1', chatId: 'c1', isSynced: true));
       await db.update(
         'messages',
         {'is_deleted': 1, 'is_synced': 0},
@@ -262,11 +260,15 @@ void main() {
         whereArgs: ['m1'],
       );
 
-      await msgDao.replaceMessagesPreservingUnsynced(
-        [syncMessage(id: 'm1', chatId: 'c1', isSynced: true)],
-      );
+      await msgDao.replaceMessagesPreservingUnsynced([
+        syncMessage(id: 'm1', chatId: 'c1', isSynced: true),
+      ]);
 
-      final rows = await db.query('messages', where: 'id = ?', whereArgs: ['m1']);
+      final rows = await db.query(
+        'messages',
+        where: 'id = ?',
+        whereArgs: ['m1'],
+      );
       expect(rows.single['is_deleted'], 1);
       expect(await msgDao.getByChat('c1'), isEmpty);
     });
@@ -299,8 +301,7 @@ void main() {
 
       expect(await chatDao.getById('gone'), isNull);
       expect(
-        await db.query('messages',
-            where: 'chat_id = ?', whereArgs: ['gone']),
+        await db.query('messages', where: 'chat_id = ?', whereArgs: ['gone']),
         isEmpty,
       );
       expect(await chatDao.getTombstonedChats(), isEmpty);
@@ -314,47 +315,43 @@ void main() {
       );
       await msgDao.insert(syncMessage(id: 'm1', chatId: 'dead'));
 
-      final pruned = await pruneTombstonesGoneRemote(
-        {'other-chat'},
-        chatsFetched: true,
-      );
+      final pruned = await pruneTombstonesGoneRemote({
+        'other-chat',
+      }, chatsFetched: true);
 
       expect(pruned, 1);
       expect(await chatDao.getById('dead'), isNull);
       expect(
-        await db.query('messages',
-            where: 'chat_id = ?', whereArgs: ['dead']),
+        await db.query('messages', where: 'chat_id = ?', whereArgs: ['dead']),
         isEmpty,
       );
     });
 
-    test('tombstone still present remotely is kept for the next push',
-        () async {
-      await chatDao.insert(
-        syncChat(id: 'keep', isSynced: false, isDeleted: true),
-      );
+    test(
+      'tombstone still present remotely is kept for the next push',
+      () async {
+        await chatDao.insert(
+          syncChat(id: 'keep', isSynced: false, isDeleted: true),
+        );
 
-      final pruned = await pruneTombstonesGoneRemote(
-        {'keep'},
-        chatsFetched: true,
-      );
+        final pruned = await pruneTombstonesGoneRemote({
+          'keep',
+        }, chatsFetched: true);
 
-      expect(pruned, 0);
-      expect(
-        (await chatDao.getTombstonedChats()).map((c) => c.id),
-        contains('keep'),
-      );
-    });
+        expect(pruned, 0);
+        expect(
+          (await chatDao.getTombstonedChats()).map((c) => c.id),
+          contains('keep'),
+        );
+      },
+    );
 
     test('chatsFetched guard: failed fetch never prunes', () async {
       await chatDao.insert(
         syncChat(id: 'guarded', isSynced: false, isDeleted: true),
       );
 
-      final pruned = await pruneTombstonesGoneRemote(
-        {},
-        chatsFetched: false,
-      );
+      final pruned = await pruneTombstonesGoneRemote({}, chatsFetched: false);
 
       expect(pruned, 0);
       expect(await chatDao.getById('guarded'), isNotNull);
@@ -368,37 +365,51 @@ void main() {
       );
 
       // Refresh first: unsynced row must win.
-      await chatDao.replaceChatsPreservingUnsynced(
-        [syncChat(id: 'c1', title: 'remote title', isSynced: true)],
-      );
+      await chatDao.replaceChatsPreservingUnsynced([
+        syncChat(id: 'c1', title: 'remote title', isSynced: true),
+      ]);
       expect((await chatDao.getById('c1'))!.title, 'local edit');
 
       // Simulated flush marks the row synced; the next refresh applies.
-      await chatDao.update(syncChat(id: 'c1', title: 'local edit', isSynced: true));
-      await chatDao.replaceChatsPreservingUnsynced(
-        [syncChat(id: 'c1', title: 'remote title', isSynced: true)],
+      await chatDao.update(
+        syncChat(id: 'c1', title: 'local edit', isSynced: true),
       );
+      await chatDao.replaceChatsPreservingUnsynced([
+        syncChat(id: 'c1', title: 'remote title', isSynced: true),
+      ]);
       final applied = (await chatDao.getById('c1'))!;
       expect(applied.title, 'remote title');
       expect(applied.isSynced, true);
     });
 
-    test('synced rows refresh while unsynced messages are preserved',
-        () async {
+    test('synced rows refresh while unsynced messages are preserved', () async {
       await chatDao.insert(syncChat(id: 'c1', isSynced: true));
       await msgDao.insert(
         syncMessage(id: 'local-only', chatId: 'c1', isSynced: false),
       );
 
       await msgDao.replaceMessagesPreservingUnsynced([
-        syncMessage(id: 'local-only', chatId: 'c1', text: 'remote', isSynced: true),
-        syncMessage(id: 'remote-new', chatId: 'c1', text: 'new', isSynced: true),
+        syncMessage(
+          id: 'local-only',
+          chatId: 'c1',
+          text: 'remote',
+          isSynced: true,
+        ),
+        syncMessage(
+          id: 'remote-new',
+          chatId: 'c1',
+          text: 'new',
+          isSynced: true,
+        ),
       ]);
 
       final rows = await msgDao.getByChat('c1');
       expect(rows.map((m) => m.id), contains('remote-new'));
-      final keptLocal = await db.query('messages',
-          where: 'id = ?', whereArgs: ['local-only']);
+      final keptLocal = await db.query(
+        'messages',
+        where: 'id = ?',
+        whereArgs: ['local-only'],
+      );
       expect(keptLocal.single['text'], 'hello');
       expect(keptLocal.single['is_synced'], 0);
     });
@@ -422,16 +433,16 @@ void main() {
       expect(500.clamp(1, 1000), 500);
     });
 
-    test('preserving chat replace handles a 1,200-row remote batch',
-        () async {
+    test('preserving chat replace handles a 1,200-row remote batch', () async {
       final remote = List.generate(
         1200,
         (i) => syncChat(id: 'bulk-$i', isSynced: true),
       );
       await chatDao.replaceChatsPreservingUnsynced(remote);
 
-      final countRow =
-          await db.rawQuery('SELECT COUNT(*) AS n FROM chat_sessions');
+      final countRow = await db.rawQuery(
+        'SELECT COUNT(*) AS n FROM chat_sessions',
+      );
       expect(countRow.single['n'], 1200);
     });
 
@@ -443,8 +454,10 @@ void main() {
       );
       await msgDao.replaceMessagesPreservingUnsynced(remote);
 
-      final countRow = await db
-          .rawQuery('SELECT COUNT(*) AS n FROM messages WHERE chat_id = ?', ['c1']);
+      final countRow = await db.rawQuery(
+        'SELECT COUNT(*) AS n FROM messages WHERE chat_id = ?',
+        ['c1'],
+      );
       expect(countRow.single['n'], 600);
     });
   });
@@ -468,10 +481,7 @@ void main() {
       );
 
       // Failure path never calls update(isSynced: true).
-      expect(
-        (await msgDao.getUnsynced()).map((m) => m.id),
-        contains('unsent'),
-      );
+      expect((await msgDao.getUnsynced()).map((m) => m.id), contains('unsent'));
     });
 
     test('tombstones are excluded from the unsynced-edit list', () async {
@@ -482,10 +492,7 @@ void main() {
         syncChat(id: 'e1', title: 'edit', isSynced: false, isDeleted: false),
       );
 
-      expect(
-        (await chatDao.getUnsynced()).map((c) => c.id),
-        contains('e1'),
-      );
+      expect((await chatDao.getUnsynced()).map((c) => c.id), contains('e1'));
       expect(
         (await chatDao.getUnsynced()).map((c) => c.id),
         isNot(contains('t1')),
@@ -540,24 +547,21 @@ void main() {
     });
   });
 
-  group('(h) ghost-chat prune — synced rows gone remotely without tombstone',
-      () {
+  group('(h) ghost-chat prune — synced rows gone remotely without tombstone', () {
     test('ghost absent remotely is pruned with its messages', () async {
       await chatDao.insert(syncChat(id: 'ghost', isSynced: true));
       await msgDao.insert(
         syncMessage(id: 'm1', chatId: 'ghost', isSynced: true),
       );
 
-      final pruned = await pruneGhostsGoneRemote(
-        {'other-chat'},
-        chatsFetched: true,
-      );
+      final pruned = await pruneGhostsGoneRemote({
+        'other-chat',
+      }, chatsFetched: true);
 
       expect(pruned, 1);
       expect(await chatDao.getById('ghost'), isNull);
       expect(
-        await db.query('messages',
-            where: 'chat_id = ?', whereArgs: ['ghost']),
+        await db.query('messages', where: 'chat_id = ?', whereArgs: ['ghost']),
         isEmpty,
       );
     });
@@ -565,19 +569,14 @@ void main() {
     test('ghost still present remotely is kept', () async {
       await chatDao.insert(syncChat(id: 'alive', isSynced: true));
 
-      final pruned = await pruneGhostsGoneRemote(
-        {'alive'},
-        chatsFetched: true,
-      );
+      final pruned = await pruneGhostsGoneRemote({'alive'}, chatsFetched: true);
 
       expect(pruned, 0);
       expect(await chatDao.getById('alive'), isNotNull);
     });
 
     test('unsynced rows and tombstones are never ghost-pruned', () async {
-      await chatDao.insert(
-        syncChat(id: 'pending', isSynced: false),
-      );
+      await chatDao.insert(syncChat(id: 'pending', isSynced: false));
       await chatDao.insert(
         syncChat(id: 'tomb', isSynced: true, isDeleted: true),
       );
@@ -587,10 +586,9 @@ void main() {
         syncMessage(id: 'unsent', chatId: 'busy', isSynced: false),
       );
 
-      final pruned = await pruneGhostsGoneRemote(
-        {'other-chat'},
-        chatsFetched: true,
-      );
+      final pruned = await pruneGhostsGoneRemote({
+        'other-chat',
+      }, chatsFetched: true);
 
       expect(pruned, 0);
       expect(await chatDao.getById('pending'), isNotNull);
@@ -604,10 +602,7 @@ void main() {
     test('chatsFetched guard: failed fetch never ghost-prunes', () async {
       await chatDao.insert(syncChat(id: 'ghost', isSynced: true));
 
-      final pruned = await pruneGhostsGoneRemote(
-        {},
-        chatsFetched: false,
-      );
+      final pruned = await pruneGhostsGoneRemote({}, chatsFetched: false);
 
       expect(pruned, 0);
       expect(await chatDao.getById('ghost'), isNotNull);
@@ -621,14 +616,13 @@ void main() {
       await chatDao.insert(syncChat(id: 'alive', isSynced: true));
 
       // Production order: tombstones first, then ghosts.
-      final tombstonesPruned = await pruneTombstonesGoneRemote(
-        {'alive', 'ghost'},
-        chatsFetched: true,
-      );
-      final ghostsPruned = await pruneGhostsGoneRemote(
-        {'alive'},
-        chatsFetched: true,
-      );
+      final tombstonesPruned = await pruneTombstonesGoneRemote({
+        'alive',
+        'ghost',
+      }, chatsFetched: true);
+      final ghostsPruned = await pruneGhostsGoneRemote({
+        'alive',
+      }, chatsFetched: true);
 
       expect(tombstonesPruned, 1);
       expect(ghostsPruned, 1);
@@ -637,113 +631,119 @@ void main() {
       expect(await chatDao.getById('alive'), isNotNull);
     });
 
-    test('end-to-end ghost regression: c1 pruned with messages, c2 + c3 survive',
-        () async {
-      // c1: synced ghost absent remotely (+ synced message to prove cascade).
-      await chatDao.insert(syncChat(id: 'c1', isSynced: true));
-      await msgDao.insert(
-        syncMessage(id: 'm-c1', chatId: 'c1', isSynced: true),
-      );
-      // c2: unsynced local-only row — never pruned even when listed remotely.
-      await chatDao.insert(syncChat(id: 'c2', isSynced: false));
-      // c3: synced row still present remotely (+ message that must survive).
-      await chatDao.insert(syncChat(id: 'c3', isSynced: true));
-      await msgDao.insert(
-        syncMessage(id: 'm-c3', chatId: 'c3', isSynced: true),
-      );
+    test(
+      'end-to-end ghost regression: c1 pruned with messages, c2 + c3 survive',
+      () async {
+        // c1: synced ghost absent remotely (+ synced message to prove cascade).
+        await chatDao.insert(syncChat(id: 'c1', isSynced: true));
+        await msgDao.insert(
+          syncMessage(id: 'm-c1', chatId: 'c1', isSynced: true),
+        );
+        // c2: unsynced local-only row — never pruned even when listed remotely.
+        await chatDao.insert(syncChat(id: 'c2', isSynced: false));
+        // c3: synced row still present remotely (+ message that must survive).
+        await chatDao.insert(syncChat(id: 'c3', isSynced: true));
+        await msgDao.insert(
+          syncMessage(id: 'm-c3', chatId: 'c3', isSynced: true),
+        );
 
-      final pruned = await pruneGhostsGoneRemote(
-        {'c2', 'c3'},
-        chatsFetched: true,
-      );
+        final pruned = await pruneGhostsGoneRemote({
+          'c2',
+          'c3',
+        }, chatsFetched: true);
 
-      expect(pruned, 1);
-      expect(await chatDao.getById('c1'), isNull);
-      expect(
-        await db.query('messages',
-            where: 'chat_id = ?', whereArgs: ['c1']),
-        isEmpty,
-      );
-      expect(await chatDao.getById('c2'), isNotNull);
-      expect(await chatDao.getById('c3'), isNotNull);
-      expect(
-        await db.query('messages',
-            where: 'chat_id = ? AND id = ?', whereArgs: ['c3', 'm-c3']),
-        hasLength(1),
-      );
-    });
+        expect(pruned, 1);
+        expect(await chatDao.getById('c1'), isNull);
+        expect(
+          await db.query('messages', where: 'chat_id = ?', whereArgs: ['c1']),
+          isEmpty,
+        );
+        expect(await chatDao.getById('c2'), isNotNull);
+        expect(await chatDao.getById('c3'), isNotNull);
+        expect(
+          await db.query(
+            'messages',
+            where: 'chat_id = ? AND id = ?',
+            whereArgs: ['c3', 'm-c3'],
+          ),
+          hasLength(1),
+        );
+      },
+    );
   });
 
   group('(i) remote halves via SyncService seams — flush+refresh fakes', () {
-    test('(a) flush success pushes unsynced rows and marks them synced',
-        () async {
-      await chatDao.insert(syncChat(id: 'c1', isSynced: false));
-      await msgDao.insert(
-        syncMessage(id: 'm1', chatId: 'c1', isSynced: false),
-      );
+    test(
+      '(a) flush success pushes unsynced rows and marks them synced',
+      () async {
+        await chatDao.insert(syncChat(id: 'c1', isSynced: false));
+        await msgDao.insert(
+          syncMessage(id: 'm1', chatId: 'c1', isSynced: false),
+        );
 
-      final fake = FakeSyncRemote();
-      final sync = syncWithFakeRemote(fake);
+        final fake = FakeSyncRemote();
+        final sync = syncWithFakeRemote(fake);
 
-      await sync.flushPending();
+        await sync.flushPending();
 
-      expect(fake.pushedChats.keys, contains('c1'));
-      expect(fake.pushedMessages.keys, contains('m1'));
-      expect((await chatDao.getById('c1'))!.isSynced, true);
-      final msgRows = await db.query(
-        'messages',
-        where: 'id = ?',
-        whereArgs: ['m1'],
-      );
-      expect(msgRows.single['is_synced'], 1);
-      sync.dispose();
-    });
+        expect(fake.pushedChats.keys, contains('c1'));
+        expect(fake.pushedMessages.keys, contains('m1'));
+        expect((await chatDao.getById('c1'))!.isSynced, true);
+        final msgRows = await db.query(
+          'messages',
+          where: 'id = ?',
+          whereArgs: ['m1'],
+        );
+        expect(msgRows.single['is_synced'], 1);
+        sync.dispose();
+      },
+    );
 
-    test('(b) flush failure keeps is_synced=0 for chats+messages (H6)',
-        () async {
-      await chatDao.insert(syncChat(id: 'c1', isSynced: false));
-      await msgDao.insert(
-        syncMessage(id: 'm1', chatId: 'c1', isSynced: false),
-      );
+    test(
+      '(b) flush failure keeps is_synced=0 for chats+messages (H6)',
+      () async {
+        await chatDao.insert(syncChat(id: 'c1', isSynced: false));
+        await msgDao.insert(
+          syncMessage(id: 'm1', chatId: 'c1', isSynced: false),
+        );
 
-      final fake = FakeSyncRemote()..failSaves = true;
-      final sync = syncWithFakeRemote(fake);
+        final fake = FakeSyncRemote()..failSaves = true;
+        final sync = syncWithFakeRemote(fake);
 
-      await sync.flushPending();
+        await sync.flushPending();
 
-      expect(fake.pushedChats, isEmpty);
-      expect(fake.pushedMessages, isEmpty);
-      expect((await chatDao.getById('c1'))!.isSynced, false);
-      expect(
-        (await msgDao.getUnsynced()).map((m) => m.id),
-        contains('m1'),
-      );
-      sync.dispose();
-    });
+        expect(fake.pushedChats, isEmpty);
+        expect(fake.pushedMessages, isEmpty);
+        expect((await chatDao.getById('c1'))!.isSynced, false);
+        expect((await msgDao.getUnsynced()).map((m) => m.id), contains('m1'));
+        sync.dispose();
+      },
+    );
 
-    test('(c) tombstone delete is pushed remotely then hard-deleted locally',
-        () async {
-      await chatDao.insert(
-        syncChat(id: 'dead', isSynced: false, isDeleted: true),
-      );
-      await msgDao.insert(
-        syncMessage(id: 'm1', chatId: 'dead', isSynced: true),
-      );
+    test(
+      '(c) tombstone delete is pushed remotely then hard-deleted locally',
+      () async {
+        await chatDao.insert(
+          syncChat(id: 'dead', isSynced: false, isDeleted: true),
+        );
+        await msgDao.insert(
+          syncMessage(id: 'm1', chatId: 'dead', isSynced: true),
+        );
 
-      final fake = FakeSyncRemote();
-      final sync = syncWithFakeRemote(fake);
+        final fake = FakeSyncRemote();
+        final sync = syncWithFakeRemote(fake);
 
-      await sync.flushPending();
+        await sync.flushPending();
 
-      expect(fake.deletedChatIds, contains('dead'));
-      expect(await chatDao.getById('dead'), isNull);
-      expect(
-        await db.query('messages',
-            where: 'chat_id = ?', whereArgs: ['dead']),
-        isEmpty,
-      );
-      sync.dispose();
-    });
+        expect(fake.deletedChatIds, contains('dead'));
+        expect(await chatDao.getById('dead'), isNull);
+        expect(
+          await db.query('messages', where: 'chat_id = ?', whereArgs: ['dead']),
+          isEmpty,
+        );
+        sync.dispose();
+      },
+    );
 
     test('(c) failed delete keeps the tombstone queued (H6)', () async {
       await chatDao.insert(
@@ -763,43 +763,44 @@ void main() {
       sync.dispose();
     });
 
-    test('(d) refresh drives the paged fetches, preserves local edits',
-        () async {
-      await chatDao.insert(
-        syncChat(id: 'local', title: 'local edit', isSynced: false),
-      );
+    test(
+      '(d) refresh drives the paged fetches, preserves local edits',
+      () async {
+        await chatDao.insert(
+          syncChat(id: 'local', title: 'local edit', isSynced: false),
+        );
 
-      final fake = FakeSyncRemote()
-        ..chatsToServe = [
-          syncChat(id: 'local', title: 'remote title', isSynced: true),
-          syncChat(id: 'remote-new', title: 'new', isSynced: true),
-        ]
-        ..messagesToServe = [
-          syncMessage(
-            id: 'rm1',
-            chatId: 'remote-new',
-            text: 'new',
-            isSynced: true,
-          ),
-        ];
-      final sync = syncWithFakeRemote(fake);
+        final fake = FakeSyncRemote()
+          ..chatsToServe = [
+            syncChat(id: 'local', title: 'remote title', isSynced: true),
+            syncChat(id: 'remote-new', title: 'new', isSynced: true),
+          ]
+          ..messagesToServe = [
+            syncMessage(
+              id: 'rm1',
+              chatId: 'remote-new',
+              text: 'new',
+              isSynced: true,
+            ),
+          ];
+        final sync = syncWithFakeRemote(fake);
 
-      await sync.refreshLocalCacheForTest();
+        await sync.refreshLocalCacheForTest();
 
-      expect(fake.getChatsPagedCalls, greaterThanOrEqualTo(1));
-      expect(fake.getAllMessagesPagedCalls, greaterThanOrEqualTo(1));
-      // Unsynced local edit wins over the served remote row (flush first).
-      expect((await chatDao.getById('local'))!.title, 'local edit');
-      expect(await chatDao.getById('remote-new'), isNotNull);
-      expect(
-        (await msgDao.getByChat('remote-new')).map((m) => m.id),
-        contains('rm1'),
-      );
-      sync.dispose();
-    });
+        expect(fake.getChatsPagedCalls, greaterThanOrEqualTo(1));
+        expect(fake.getAllMessagesPagedCalls, greaterThanOrEqualTo(1));
+        // Unsynced local edit wins over the served remote row (flush first).
+        expect((await chatDao.getById('local'))!.title, 'local edit');
+        expect(await chatDao.getById('remote-new'), isNotNull);
+        expect(
+          (await msgDao.getByChat('remote-new')).map((m) => m.id),
+          contains('rm1'),
+        );
+        sync.dispose();
+      },
+    );
 
-    test('(d) failed remote list never prunes (chatsFetched guard)',
-        () async {
+    test('(d) failed remote list never prunes (chatsFetched guard)', () async {
       await chatDao.insert(syncChat(id: 'ghost', isSynced: true));
 
       final fake = FakeSyncRemote()..failLists = true;
@@ -832,16 +833,14 @@ void main() {
       expect(await chatDao.getById('dead'), isNull);
       expect(await chatDao.getById('ghost'), isNull);
       expect(
-        await db.query('messages',
-            where: 'chat_id = ?', whereArgs: ['ghost']),
+        await db.query('messages', where: 'chat_id = ?', whereArgs: ['ghost']),
         isEmpty,
       );
       expect(await chatDao.getById('alive'), isNotNull);
       sync.dispose();
     });
 
-    test('(e) flush+refresh end to end: delete pushed, ghost pruned',
-        () async {
+    test('(e) flush+refresh end to end: delete pushed, ghost pruned', () async {
       await chatDao.insert(
         syncChat(id: 'dead', isSynced: false, isDeleted: true),
       );

@@ -236,10 +236,7 @@ void main() {
       expect(kept!.isDeleted, true);
       expect(kept.title, 't');
       // Tombstone is still listed for the upstream push.
-      expect(
-        (await dao.getTombstonedChats()).map((c) => c.id),
-        contains('c1'),
-      );
+      expect((await dao.getTombstonedChats()).map((c) => c.id), contains('c1'));
     });
 
     test('unsynced edit preserved (local title wins)', () async {
@@ -303,11 +300,13 @@ void main() {
       expect(rows.every((c) => c.isSynced), true);
     });
 
-    test('LocalMessageDao.migrateUserId is a safe no-op without user_id column',
-        () async {
-      // Must not throw "no such column: user_id" — messages are scoped by
-      // chat_id, so the parent chat migration already re-homes them.
-      await LocalMessageDao.instance.migrateUserId('old-uid', 'new-uid');
-    });
+    test(
+      'LocalMessageDao.migrateUserId is a safe no-op without user_id column',
+      () async {
+        // Must not throw "no such column: user_id" — messages are scoped by
+        // chat_id, so the parent chat migration already re-homes them.
+        await LocalMessageDao.instance.migrateUserId('old-uid', 'new-uid');
+      },
+    );
   });
 }

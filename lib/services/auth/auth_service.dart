@@ -41,8 +41,7 @@ class GoogleSignInFailure implements Exception {
   /// Returns null for null/empty/whitespace-only input (so the login
   /// "Show details" toggle's `?? '(none)'` fallback renders); longer
   /// input is cut to [max] chars plus a '...' suffix.
-  static String? truncateDetail(String? detail,
-      [int max = maxDetailLength]) {
+  static String? truncateDetail(String? detail, [int max = maxDetailLength]) {
     if (detail == null) return null;
     final trimmed = detail.trim();
     if (trimmed.isEmpty) return null;
@@ -108,7 +107,7 @@ class AuthService {
     final metaName = meta == null
         ? null
         : (meta['display_name'] ?? meta['full_name'] ?? meta['name'])
-            as String?;
+              as String?;
     return AppAuthCredential(
       uid: user.id,
       email: user.email,
@@ -130,13 +129,18 @@ class AuthService {
     } on StateError {
       rethrow;
     } catch (e, st) {
-      _log('[AuthService] login failed: $e | $st | retryable=${isRetryable(e)}');
+      _log(
+        '[AuthService] login failed: $e | $st | retryable=${isRetryable(e)}',
+      );
       rethrow;
     }
   }
 
   static Future<AppAuthCredential> register(
-      String email, String password, String name) async {
+    String email,
+    String password,
+    String name,
+  ) async {
     _guardBackendReady('register');
     try {
       final res = await _auth.signUp(
@@ -151,7 +155,9 @@ class AuthService {
     } on StateError {
       rethrow;
     } catch (e, st) {
-      _log('[AuthService] register failed: $e | $st | retryable=${isRetryable(e)}');
+      _log(
+        '[AuthService] register failed: $e | $st | retryable=${isRetryable(e)}',
+      );
       rethrow;
     }
   }
@@ -175,7 +181,9 @@ class AuthService {
   /// Called on logout and when env config changes (per reviewer finding #3).
   static void resetGoogleInit() {
     _googleInitialized = false;
-    _log('[AuthService] resetGoogleInit() — will re-initialize on next sign-in');
+    _log(
+      '[AuthService] resetGoogleInit() — will re-initialize on next sign-in',
+    );
   }
 
   static String? _validateGoogleId(String id) {
@@ -193,12 +201,16 @@ class AuthService {
 
   static Future<void> ensureGoogleInitialized() async {
     if (_googleInitialized) {
-      _log('[AuthService] ensureGoogleInitialized: already initialized, skipping');
+      _log(
+        '[AuthService] ensureGoogleInitialized: already initialized, skipping',
+      );
       return;
     }
     // No backend guard here — Google init is independent, but log backend state.
     if (!_backendReady) {
-      _log('[AuthService] ensureGoogleInitialized — backend not ready (proceeding, will guard at exchange)');
+      _log(
+        '[AuthService] ensureGoogleInitialized — backend not ready (proceeding, will guard at exchange)',
+      );
     }
     final serverId = AppConfig.googleServerClientId.trim();
 
@@ -206,7 +218,8 @@ class AuthService {
     final validationError = _validateGoogleId(serverId);
     if (validationError != null) {
       _log(
-          '[AuthService] ensureGoogleInitialized FAILED validation: $validationError | idSuffix: ${_idSuffix(serverId)}');
+        '[AuthService] ensureGoogleInitialized FAILED validation: $validationError | idSuffix: ${_idSuffix(serverId)}',
+      );
       throw GoogleSignInFailure(
         code: 'not_configured',
         detail: GoogleSignInFailure.truncateDetail(validationError),
@@ -217,7 +230,8 @@ class AuthService {
 
     final webId = serverId.isEmpty ? null : serverId;
     _log(
-        '[AuthService] ensureGoogleInitialized: initializing | serverClientId suffix: ...${_idSuffix(serverId)} | kIsWeb:$kIsWeb');
+      '[AuthService] ensureGoogleInitialized: initializing | serverClientId suffix: ...${_idSuffix(serverId)} | kIsWeb:$kIsWeb',
+    );
 
     try {
       await GoogleSignIn.instance.initialize(
@@ -226,10 +240,12 @@ class AuthService {
       );
       _googleInitialized = true;
       _log(
-          '[AuthService] GoogleSignIn initialized successfully | suffix: ...${_idSuffix(serverId)}');
+        '[AuthService] GoogleSignIn initialized successfully | suffix: ...${_idSuffix(serverId)}',
+      );
     } catch (e, stack) {
       _log(
-          '[AuthService] GoogleSignIn.initialize failed: $e | suffix: ...${_idSuffix(serverId)} | stack: $stack');
+        '[AuthService] GoogleSignIn.initialize failed: $e | suffix: ...${_idSuffix(serverId)} | stack: $stack',
+      );
       throw GoogleSignInFailure(
         code: 'init_failed',
         detail: GoogleSignInFailure.truncateDetail(e.toString()),
@@ -263,14 +279,19 @@ class AuthService {
     _log('[AuthService] authenticate() start');
     try {
       final account = await GoogleSignIn.instance.authenticate();
-      _log('[AuthService] authenticate() success | idToken present: ${account.authentication.idToken != null}');
+      _log(
+        '[AuthService] authenticate() success | idToken present: ${account.authentication.idToken != null}',
+      );
       return account;
     } on GoogleSignInException catch (e) {
       final codeName = e.code.name;
       final detail = e.description ?? codeName;
-      _log('[AuthService] authenticate() GoogleSignInException: code=$codeName detail=$detail');
+      _log(
+        '[AuthService] authenticate() GoogleSignInException: code=$codeName detail=$detail',
+      );
 
-      final isReauth = e.code == GoogleSignInExceptionCode.canceled &&
+      final isReauth =
+          e.code == GoogleSignInExceptionCode.canceled &&
           _isReauthFailure(detail);
 
       // Recovery: clear the cached Google credential state so the NEXT manual
@@ -280,18 +301,23 @@ class AuthService {
       // Manual retry after this signOut() is the documented workaround for
       // stale cached authorizations.
       if (isReauth) {
-        _log('[AuthService] reauth failure — clearing cached Google state for next manual attempt');
+        _log(
+          '[AuthService] reauth failure — clearing cached Google state for next manual attempt',
+        );
         try {
           await GoogleSignIn.instance.signOut();
         } catch (signOutError) {
-          _log('[AuthService] signOut after reauth failure failed (ignored): $signOutError');
+          _log(
+            '[AuthService] signOut after reauth failure failed (ignored): $signOutError',
+          );
         }
       }
 
       // Bounded copy for display: the raw `detail` stays in the kDebugMode
       // log above; the typed failure (detail + hint interpolations) renders
       // in the in-app "Show details" toggle, so it must stay bounded.
-      final displayDetail = GoogleSignInFailure.truncateDetail(detail) ?? codeName;
+      final displayDetail =
+          GoogleSignInFailure.truncateDetail(detail) ?? codeName;
 
       if (e.code == GoogleSignInExceptionCode.canceled) {
         throw GoogleSignInFailure(
@@ -299,12 +325,12 @@ class AuthService {
           detail: displayDetail,
           hint: isReauth
               ? 'Google rejected the saved sign-in (native: $displayDetail). This build\'s signing '
-                  'certificate is not authorized for Google Sign-In, or the cached authorization '
-                  'is stale. Fix: register the APK signing SHA-1 in Google Cloud Console as an '
-                  'ANDROID OAuth client for package com.agenta.AgentA (each CI build prints the '
-                  'exact fingerprint in its job summary; see docs/google-signin-setup.md), then '
-                  'retry. Also confirm GOOGLE_SERVER_CLIENT_ID is the Web client ID from the same '
-                  'project that Supabase Auth > Providers > Google uses.'
+                    'certificate is not authorized for Google Sign-In, or the cached authorization '
+                    'is stale. Fix: register the APK signing SHA-1 in Google Cloud Console as an '
+                    'ANDROID OAuth client for package com.agenta.AgentA (each CI build prints the '
+                    'exact fingerprint in its job summary; see docs/google-signin-setup.md), then '
+                    'retry. Also confirm GOOGLE_SERVER_CLIENT_ID is the Web client ID from the same '
+                    'project that Supabase Auth > Providers > Google uses.'
               : 'Google sign-in canceled ($displayDetail). If you did not cancel, this usually means SHA-1 / OAuth client or Supabase Google provider misconfiguration. Verify SHA-1 in Firebase/Google Cloud Console and that Supabase Dashboard > Auth > Providers > Google is enabled with correct Web Client ID/Secret.',
         );
       }
@@ -323,7 +349,9 @@ class AuthService {
   static String _requireIdToken(GoogleSignInAccount account) {
     final idToken = account.authentication.idToken;
     final present = idToken != null && idToken.isNotEmpty;
-    _log('[AuthService] idToken presence: $present (never logging token value)');
+    _log(
+      '[AuthService] idToken presence: $present (never logging token value)',
+    );
     if (idToken == null || idToken.isEmpty) {
       throw const GoogleSignInFailure(
         code: 'no_id_token',
@@ -335,34 +363,43 @@ class AuthService {
     return idToken;
   }
 
-  static Future<String?> _fetchAccessToken(
-      GoogleSignInAccount account) async {
+  static Future<String?> _fetchAccessToken(GoogleSignInAccount account) async {
     String? accessToken;
     try {
-      final authz = await account.authorizationClient
-          .authorizationForScopes(['email', 'profile']);
+      final authz = await account.authorizationClient.authorizationForScopes([
+        'email',
+        'profile',
+      ]);
       accessToken = authz?.accessToken;
       _log(
-          '[AuthService] authorizationForScopes result: ${accessToken != null ? "got token" : "no token (will try authorizeScopes)"}');
+        '[AuthService] authorizationForScopes result: ${accessToken != null ? "got token" : "no token (will try authorizeScopes)"}',
+      );
     } catch (e, stack) {
       _log(
-          '[AuthService] authorizationForScopes failed (will try authorizeScopes): $e | stack: $stack');
+        '[AuthService] authorizationForScopes failed (will try authorizeScopes): $e | stack: $stack',
+      );
     }
 
     if (accessToken == null) {
       try {
-        final authz2 = await account.authorizationClient
-            .authorizeScopes(['email', 'profile']);
+        final authz2 = await account.authorizationClient.authorizeScopes([
+          'email',
+          'profile',
+        ]);
         accessToken = authz2.accessToken;
         final got = accessToken.isNotEmpty;
-        _log('[AuthService] authorizeScopes result: ${got ? "got token" : "still no token"}');
+        _log(
+          '[AuthService] authorizeScopes result: ${got ? "got token" : "still no token"}',
+        );
       } catch (e, stack) {
         _log('[AuthService] authorizeScopes failed: $e | stack: $stack');
       }
     }
 
     if (accessToken == null) {
-      _log('[AuthService] accessToken unavailable — proceeding with idToken only');
+      _log(
+        '[AuthService] accessToken unavailable — proceeding with idToken only',
+      );
     } else {
       _log('[AuthService] accessToken present: true (never logging token)');
     }
@@ -374,7 +411,8 @@ class AuthService {
     String? accessToken,
   }) async {
     _log(
-        '[AuthService] signInWithIdToken start | idToken present: true | accessToken present: ${accessToken != null}');
+      '[AuthService] signInWithIdToken start | idToken present: true | accessToken present: ${accessToken != null}',
+    );
     try {
       final res = await _auth.signInWithIdToken(
         provider: OAuthProvider.google,
@@ -382,7 +420,8 @@ class AuthService {
         accessToken: accessToken,
       );
       _log(
-          '[AuthService] signInWithIdToken success | user: ${res.user?.id ?? "(null)"}');
+        '[AuthService] signInWithIdToken success | user: ${res.user?.id ?? "(null)"}',
+      );
       return res;
     } on AuthException catch (e) {
       _log('[AuthService] signInWithIdToken AuthException: ${e.message}');
@@ -396,7 +435,8 @@ class AuthService {
       );
     } catch (e, stack) {
       _log(
-          '[AuthService] signInWithIdToken unexpected error: $e | stack: $stack');
+        '[AuthService] signInWithIdToken unexpected error: $e | stack: $stack',
+      );
       rethrow;
     }
   }
@@ -409,15 +449,21 @@ class AuthService {
     final idToken = _requireIdToken(account);
     final accessToken = await _fetchAccessToken(account);
     final res = await _exchangeWithSupabase(
-        idToken: idToken, accessToken: accessToken);
+      idToken: idToken,
+      accessToken: accessToken,
+    );
 
     final user = res.user;
     if (user == null) {
-      _log('[AuthService] signInWithGoogle failed: Supabase user is null after exchange');
+      _log(
+        '[AuthService] signInWithGoogle failed: Supabase user is null after exchange',
+      );
       throw const GoogleSignInFailure(
         code: 'no_user',
-        detail: 'Google sign-in failed: Supabase user is null after token exchange',
-        hint: 'Supabase did not return a user. Check Supabase logs and Google provider config.',
+        detail:
+            'Google sign-in failed: Supabase user is null after token exchange',
+        hint:
+            'Supabase did not return a user. Check Supabase logs and Google provider config.',
       );
     }
     _log('[AuthService] signInWithGoogle success | uid: ${user.id}');
@@ -442,7 +488,9 @@ class AuthService {
         _log('[AuthService] Supabase signOut failed (offline?): $e | $st');
       }
     } else {
-      _log('[AuthService] logout — backend not ready, skipped Supabase signOut');
+      _log(
+        '[AuthService] logout — backend not ready, skipped Supabase signOut',
+      );
     }
     _log('[AuthService] logout complete');
   }
@@ -453,7 +501,8 @@ class AuthService {
       _log('[AuthService] Google signOutOnly success');
     } catch (e, stack) {
       _log(
-          '[AuthService] Google signOutOnly failed (ignored): $e | stack: $stack');
+        '[AuthService] Google signOutOnly failed (ignored): $e | stack: $stack',
+      );
     }
     resetGoogleInit();
     if (_backendReady) {
@@ -473,9 +522,7 @@ class AuthService {
 
   static Future<void> updateDisplayName(String displayName) async {
     _guardBackendReady('updateDisplayName');
-    await _auth.updateUser(
-      UserAttributes(data: {'display_name': displayName}),
-    );
+    await _auth.updateUser(UserAttributes(data: {'display_name': displayName}));
   }
 
   // ── Password reset via Gmail email OTP ─────────────────────────────
@@ -490,10 +537,7 @@ class AuthService {
   // The user completes the reset in-app via [resetPasswordWithOtp].
   static Future<void> sendOtpForReset(String email) async {
     _guardBackendReady('sendOtpForReset');
-    await _auth.signInWithOtp(
-      email: email.trim(),
-      shouldCreateUser: false,
-    );
+    await _auth.signInWithOtp(email: email.trim(), shouldCreateUser: false);
   }
 
   /// Verifies the emailed OTP, signs the user in, and sets the new password.
@@ -519,7 +563,9 @@ class AuthService {
   }
 
   static Future<AppAuthCredential> reauthenticate(
-      String email, String password) async {
+    String email,
+    String password,
+  ) async {
     _guardBackendReady('reauthenticate');
     return login(email, password);
   }

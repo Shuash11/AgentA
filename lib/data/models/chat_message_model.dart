@@ -35,7 +35,9 @@ class ChatMessageModel {
         chatId: map['chat_id'] as String? ?? '',
         text: map['text'] as String? ?? '',
         isUser: (map['is_user'] as int?) == 1,
-        timestamp: DateTime.fromMillisecondsSinceEpoch(map['timestamp'] as int? ?? 0),
+        timestamp: DateTime.fromMillisecondsSinceEpoch(
+          map['timestamp'] as int? ?? 0,
+        ),
         isSynced: map['is_synced'] == 1,
         isDeleted: map['is_deleted'] == 1,
       );
@@ -72,7 +74,10 @@ class ChatMessageModel {
           while (j < text.length && text[j] != ']' && text[j] != '\n') {
             j++;
           }
-          if (j < text.length && text[j] == ']' && j + 1 < text.length && text[j + 1] == '(') {
+          if (j < text.length &&
+              text[j] == ']' &&
+              j + 1 < text.length &&
+              text[j + 1] == '(') {
             return true;
           }
         }
@@ -92,7 +97,10 @@ class ChatMessageModel {
       }
       if (c == '`') {
         if (i + 1 < text.length && text[i + 1] == '`') return true;
-        if (i == 0 || text[i - 1] == '\n' || text[i - 1] == ' ' || text[i - 1] == '(') {
+        if (i == 0 ||
+            text[i - 1] == '\n' ||
+            text[i - 1] == ' ' ||
+            text[i - 1] == '(') {
           int j = i + 1;
           while (j < text.length && text[j] != '`' && text[j] != '\n') {
             j++;
@@ -112,7 +120,10 @@ class ChatMessageModel {
           return true;
         }
       }
-      if (c == '1' && i + 2 < text.length && text[i + 1] == '.' && text[i + 2] == ' ') {
+      if (c == '1' &&
+          i + 2 < text.length &&
+          text[i + 1] == '.' &&
+          text[i + 2] == ' ') {
         if (i == 0 || text[i - 1] == '\n') return true;
       }
       if (c == '>') {

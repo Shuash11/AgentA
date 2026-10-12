@@ -9,7 +9,10 @@ class SecurityService {
   static String generateRecoveryCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     final rng = Random.secure();
-    final code = List.generate(6, (_) => chars[rng.nextInt(chars.length)]).join();
+    final code = List.generate(
+      6,
+      (_) => chars[rng.nextInt(chars.length)],
+    ).join();
     return '${code.substring(0, 3)}-${code.substring(3)}';
   }
 

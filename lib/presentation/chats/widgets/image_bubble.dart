@@ -43,11 +43,13 @@ class _ImageBubbleContentState extends State<ImageBubbleContent> {
                 width: widget.width,
                 onFallbackRequested: widget.onFallbackRequested,
                 fallbackAvailable: widget.fallbackAvailable,
-                onImageLoaded: _isLoaded ? null : () {
-                  if (mounted) {
-                    setState(() => _isLoaded = true);
-                  }
-                },
+                onImageLoaded: _isLoaded
+                    ? null
+                    : () {
+                        if (mounted) {
+                          setState(() => _isLoaded = true);
+                        }
+                      },
               ),
             ),
           ),

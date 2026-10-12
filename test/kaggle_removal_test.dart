@@ -21,22 +21,29 @@ void main() {
 
       for (final relative in watched) {
         final file = File('${root.path}/$relative');
-        expect(file.existsSync(), isTrue,
-            reason: 'expected source file missing: $relative '
-                '(repo root resolved as ${root.path})');
+        expect(
+          file.existsSync(),
+          isTrue,
+          reason:
+              'expected source file missing: $relative '
+              '(repo root resolved as ${root.path})',
+        );
         final content = file.readAsStringSync();
-        expect(content.toLowerCase().contains('kaggle'), isFalse,
-            reason: '$relative mentions kaggle');
+        expect(
+          content.toLowerCase().contains('kaggle'),
+          isFalse,
+          reason: '$relative mentions kaggle',
+        );
       }
     });
 
     test('removed Kaggle API surface stays gone', () {
       final root = _findRepoRoot();
       final sources = [
-        File('${root.path}/lib/services/ai/model_download_service.dart')
-            .readAsStringSync(),
-        File('${root.path}/lib/core/config/app_config.dart')
-            .readAsStringSync(),
+        File(
+          '${root.path}/lib/services/ai/model_download_service.dart',
+        ).readAsStringSync(),
+        File('${root.path}/lib/core/config/app_config.dart').readAsStringSync(),
       ].join('\n');
 
       for (final token in [
@@ -44,8 +51,11 @@ void main() {
         'installModelFromKaggle',
         'KaggleDownloadService',
       ]) {
-        expect(sources.contains(token), isFalse,
-            reason: 'removed API resurfaced: $token');
+        expect(
+          sources.contains(token),
+          isFalse,
+          reason: 'removed API resurfaced: $token',
+        );
       }
     });
 

@@ -25,10 +25,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final user = AuthService.currentUser;
     if (user != null) {
       final meta = user.userMetadata;
-      final displayName = (meta == null
-              ? ''
-              : (meta['display_name'] ?? meta['full_name'] ?? meta['name'] ?? ''))
-          as String;
+      final displayName =
+          (meta == null
+                  ? ''
+                  : (meta['display_name'] ??
+                        meta['full_name'] ??
+                        meta['name'] ??
+                        ''))
+              as String;
       final parts = displayName.split(' ');
       _firstNameController.text = parts.isNotEmpty ? parts.first : '';
       _lastNameController.text = parts.length > 1 ? parts.last : '';
@@ -47,7 +51,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
     setState(() => _isSaving = true);
 
     try {
-      final newDisplayName = '${_firstNameController.text} ${_lastNameController.text}';
+      final newDisplayName =
+          '${_firstNameController.text} ${_lastNameController.text}';
       final uid = AuthService.currentUser?.id;
       if (uid == null) {
         throw Exception('No user logged in');
@@ -56,7 +61,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile saved'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: Text('Profile saved'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
@@ -65,7 +73,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save your profile. Please try again.'), backgroundColor: Colors.red),
+          const SnackBar(
+            content: Text('Could not save your profile. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -83,7 +94,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
         title: Text('Edit Profile', style: TextStyle(color: colors.text)),
         backgroundColor: colors.surface,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: colors.text, size: 20),
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: colors.text,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -100,7 +115,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   child: CircleAvatar(
                     radius: 50,
                     backgroundColor: colors.withOpacity(colors.amber, 0.2),
-                    child: Text(_firstNameController.text.isNotEmpty ? _firstNameController.text[0].toUpperCase() : 'U', style: TextStyle(fontSize: 36, color: colors.amber)),
+                    child: Text(
+                      _firstNameController.text.isNotEmpty
+                          ? _firstNameController.text[0].toUpperCase()
+                          : 'U',
+                      style: TextStyle(fontSize: 36, color: colors.amber),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -108,7 +128,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   controller: _firstNameController,
                   textCapitalization: TextCapitalization.words,
                   style: TextStyle(color: colors.text),
-                  decoration: InputDecoration(labelText: 'First Name', labelStyle: TextStyle(color: colors.subtext), prefixIcon: Icon(Icons.person, color: colors.amber), filled: true, fillColor: colors.input),
+                  decoration: InputDecoration(
+                    labelText: 'First Name',
+                    labelStyle: TextStyle(color: colors.subtext),
+                    prefixIcon: Icon(Icons.person, color: colors.amber),
+                    filled: true,
+                    fillColor: colors.input,
+                  ),
                   validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 16),
@@ -116,26 +142,37 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   controller: _lastNameController,
                   textCapitalization: TextCapitalization.words,
                   style: TextStyle(color: colors.text),
-                  decoration: InputDecoration(labelText: 'Last Name', labelStyle: TextStyle(color: colors.subtext), prefixIcon: Icon(Icons.person, color: colors.amber), filled: true, fillColor: colors.input),
+                  decoration: InputDecoration(
+                    labelText: 'Last Name',
+                    labelStyle: TextStyle(color: colors.subtext),
+                    prefixIcon: Icon(Icons.person, color: colors.amber),
+                    filled: true,
+                    fillColor: colors.input,
+                  ),
                   validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: colors.amber, foregroundColor: Colors.black),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colors.amber,
+                      foregroundColor: Colors.black,
+                    ),
                     onPressed: _isSaving ? null : _saveProfile,
                     child: SizedBox(
-                        height: 22,
-                        child: Center(
-                          child: _isSaving
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Text('Save'),
-                        ),
+                      height: 22,
+                      child: Center(
+                        child: _isSaving
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Save'),
+                      ),
                     ),
                   ),
                 ),

@@ -27,7 +27,10 @@ class UpdateAvailableDialog extends StatelessWidget {
   }
 
   Widget _buildDialog(
-      BuildContext context, UpdateState state, ThemeColors colors) {
+    BuildContext context,
+    UpdateState state,
+    ThemeColors colors,
+  ) {
     final remote = state.remote;
     final isForced = state.isForced;
     final current = state.currentVersion.isEmpty ? '—' : state.currentVersion;

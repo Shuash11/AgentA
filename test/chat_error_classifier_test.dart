@@ -11,9 +11,7 @@ void main() {
         isTrue,
       );
       expect(
-        ChatErrorClassifier.isOfflineNotReady(
-          'offline ai model is not ready',
-        ),
+        ChatErrorClassifier.isOfflineNotReady('offline ai model is not ready'),
         isTrue,
       );
       expect(
@@ -29,9 +27,7 @@ void main() {
         isTrue,
       );
       expect(
-        ChatErrorClassifier.isOfflineNotReady(
-          'offline model is not installed',
-        ),
+        ChatErrorClassifier.isOfflineNotReady('offline model is not installed'),
         isTrue,
       );
       expect(
@@ -44,9 +40,7 @@ void main() {
 
     test('matches case-insensitively', () {
       expect(
-        ChatErrorClassifier.isOfflineNotReady(
-          'OFFLINE MODEL IS NOT READY',
-        ),
+        ChatErrorClassifier.isOfflineNotReady('OFFLINE MODEL IS NOT READY'),
         isTrue,
       );
     });

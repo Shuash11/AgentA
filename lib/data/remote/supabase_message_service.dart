@@ -5,7 +5,10 @@ class SupabaseMessageService {
   static SupabaseClient get _db => Supabase.instance.client;
 
   static Future<void> saveMessage(
-      String userId, String chatId, ChatMessageModel msg) async {
+    String userId,
+    String chatId,
+    ChatMessageModel msg,
+  ) async {
     await _db.from('messages').upsert({
       'id': msg.id,
       'user_id': userId,
@@ -17,7 +20,9 @@ class SupabaseMessageService {
   }
 
   static Future<List<ChatMessageModel>> getMessages(
-      String userId, String chatId) async {
+    String userId,
+    String chatId,
+  ) async {
     final rows = await _db
         .from('messages')
         .select()
@@ -33,7 +38,7 @@ class SupabaseMessageService {
         isUser: data['is_user'] as bool? ?? false,
         timestamp:
             DateTime.tryParse(data['timestamp'] as String? ?? '') ??
-                DateTime.now(),
+            DateTime.now(),
         isSynced: true,
       );
     }).toList();
@@ -82,7 +87,7 @@ class SupabaseMessageService {
           isUser: data['is_user'] as bool? ?? false,
           timestamp:
               DateTime.tryParse(data['timestamp'] as String? ?? '') ??
-                  DateTime.now(),
+              DateTime.now(),
           isSynced: true,
         );
       }).toList();
@@ -127,7 +132,7 @@ class SupabaseMessageService {
           isUser: data['is_user'] as bool? ?? false,
           timestamp:
               DateTime.tryParse(data['timestamp'] as String? ?? '') ??
-                  DateTime.now(),
+              DateTime.now(),
           isSynced: true,
         );
       }).toList();

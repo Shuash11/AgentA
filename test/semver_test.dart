@@ -69,10 +69,7 @@ void main() {
 
   group('SemVer.compareTo (major → minor → patch)', () {
     test('equal versions compare 0', () {
-      expect(
-        SemVer.tryParse('1.1.0')!.compareTo(SemVer.tryParse('1.1.0')!),
-        0,
-      );
+      expect(SemVer.tryParse('1.1.0')!.compareTo(SemVer.tryParse('1.1.0')!), 0);
     });
 
     test('major dominates minor and patch', () {

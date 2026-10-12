@@ -56,7 +56,10 @@ class _RegisterPageState extends State<RegisterPage> {
   String _generateRecoveryCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     final rng = Random.secure();
-    final code = List.generate(6, (_) => chars[rng.nextInt(chars.length)]).join();
+    final code = List.generate(
+      6,
+      (_) => chars[rng.nextInt(chars.length)],
+    ).join();
     return '${code.substring(0, 3)}-${code.substring(3)}';
   }
 
@@ -104,7 +107,11 @@ class _RegisterPageState extends State<RegisterPage> {
         onlineUid = cred.uid;
         try {
           await UserRepository.createUserProfile(
-              cred.uid, email, displayName, recoveryCode);
+            cred.uid,
+            email,
+            displayName,
+            recoveryCode,
+          );
           isOnline = true;
         } catch (_) {
           // signUp succeeded — only the profile write failed.
@@ -136,7 +143,9 @@ class _RegisterPageState extends State<RegisterPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Online registration failed. Registering offline...'),
+              content: Text(
+                'Online registration failed. Registering offline...',
+              ),
               duration: Duration(seconds: 2),
             ),
           );
@@ -165,9 +174,11 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => _isLoading = false);
 
     if (mounted) {
-      await _showRecoveryCodeDialog(recoveryCode,
-          isOffline: !isOnline,
-          confirmEmail: emailConfirmationPending);
+      await _showRecoveryCodeDialog(
+        recoveryCode,
+        isOffline: !isOnline,
+        confirmEmail: emailConfirmationPending,
+      );
     }
   }
 
@@ -210,8 +221,11 @@ class _RegisterPageState extends State<RegisterPage> {
     });
   }
 
-  Future<void> _showRecoveryCodeDialog(String recoveryCode,
-      {bool isOffline = false, bool confirmEmail = false}) async {
+  Future<void> _showRecoveryCodeDialog(
+    String recoveryCode, {
+    bool isOffline = false,
+    bool confirmEmail = false,
+  }) async {
     await showDialog(
       context: context,
       barrierDismissible: false,
@@ -310,11 +324,7 @@ class _RegisterForm extends StatelessWidget {
                 color: colors.withOpacity(colors.amber, 0.12),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                Icons.bolt_rounded,
-                color: colors.amber,
-                size: 48,
-              ),
+              child: Icon(Icons.bolt_rounded, color: colors.amber, size: 48),
             ),
           ),
           const SizedBox(height: 28),
@@ -347,9 +357,8 @@ class _RegisterForm extends StatelessWidget {
                   hint: "First name",
                   icon: Icons.person_outline,
                   textCapitalization: TextCapitalization.words,
-                  validator: (v) => v == null || v.trim().isEmpty
-                      ? 'Required'
-                      : null,
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
               ),
               const SizedBox(width: 12),
@@ -359,9 +368,8 @@ class _RegisterForm extends StatelessWidget {
                   hint: "Last name",
                   icon: Icons.person_outline,
                   textCapitalization: TextCapitalization.words,
-                  validator: (v) => v == null || v.trim().isEmpty
-                      ? 'Required'
-                      : null,
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
               ),
             ],
@@ -409,7 +417,9 @@ class _RegisterForm extends StatelessWidget {
               decoration: BoxDecoration(
                 color: colors.withOpacity(colors.error, 0.1),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: colors.withOpacity(colors.error, 0.3)),
+                border: Border.all(
+                  color: colors.withOpacity(colors.error, 0.3),
+                ),
               ),
               child: Row(
                 children: [
@@ -453,7 +463,10 @@ class _RegisterForm extends StatelessWidget {
                         )
                       : const Text(
                           "Create Account",
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
                 ),
               ),
@@ -548,7 +561,10 @@ class _RegisterForm extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: colors.error, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
     );
   }
@@ -589,7 +605,10 @@ class _RegisterForm extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: colors.error, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         suffixIcon: IconButton(
           icon: Icon(
             show ? Icons.visibility_off_outlined : Icons.visibility_outlined,
@@ -620,9 +639,7 @@ class _RecoveryCodeDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: colors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Text(
         "Save Your Recovery Code",
         style: TextStyle(fontWeight: FontWeight.bold, color: colors.text),
@@ -663,7 +680,9 @@ class _RecoveryCodeDialog extends StatelessWidget {
               decoration: BoxDecoration(
                 color: colors.withOpacity(colors.warning, 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: colors.withOpacity(colors.warning, 0.4)),
+                border: Border.all(
+                  color: colors.withOpacity(colors.warning, 0.4),
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -673,10 +692,7 @@ class _RecoveryCodeDialog extends StatelessWidget {
                   Flexible(
                     child: Text(
                       'Account created offline. We\'ll sync when you\'re back online.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colors.warning,
-                      ),
+                      style: TextStyle(fontSize: 12, color: colors.warning),
                     ),
                   ),
                 ],
@@ -690,21 +706,23 @@ class _RecoveryCodeDialog extends StatelessWidget {
               decoration: BoxDecoration(
                 color: colors.withOpacity(colors.amber, 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: colors.withOpacity(colors.amber, 0.4)),
+                border: Border.all(
+                  color: colors.withOpacity(colors.amber, 0.4),
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.mark_email_read_outlined,
-                      color: colors.amber, size: 16),
+                  Icon(
+                    Icons.mark_email_read_outlined,
+                    color: colors.amber,
+                    size: 16,
+                  ),
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
                       'Check your email for a confirmation link, then sign in.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colors.amber,
-                      ),
+                      style: TextStyle(fontSize: 12, color: colors.amber),
                     ),
                   ),
                 ],
@@ -714,10 +732,7 @@ class _RecoveryCodeDialog extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             "This will only be shown once.",
-            style: TextStyle(
-              fontSize: 12,
-              color: colors.error,
-            ),
+            style: TextStyle(fontSize: 12, color: colors.error),
           ),
         ],
       ),
@@ -737,7 +752,9 @@ class _RecoveryCodeDialog extends StatelessWidget {
               Navigator.pop(context);
               Navigator.pushAndRemoveUntil(
                 context,
-                MaterialPageRoute(builder: (_) => AppShell(offlineMode: isOffline)),
+                MaterialPageRoute(
+                  builder: (_) => AppShell(offlineMode: isOffline),
+                ),
                 (route) => false,
               );
             },

@@ -103,8 +103,7 @@ class _AppLoaderState extends State<AppLoader> {
       setState(() {
         _initState = const InitState(
           status: AppInitStatus.error,
-          errorMessage:
-              'App configuration failed to load. Please try again.',
+          errorMessage: 'App configuration failed to load. Please try again.',
         );
       });
       return;
@@ -114,7 +113,8 @@ class _AppLoaderState extends State<AppLoader> {
       if (AppConfig.supabaseUrl.isEmpty ||
           AppConfig.supabasePublishableKey.isEmpty) {
         throw Exception(
-            'SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY missing from .env');
+          'SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY missing from .env',
+        );
       }
       await Supabase.initialize(
         url: AppConfig.supabaseUrl,
@@ -133,18 +133,21 @@ class _AppLoaderState extends State<AppLoader> {
           await AuthService.ensureGoogleInitialized();
           if (kDebugMode) {
             debugPrint(
-                '[Main] GoogleSignIn pre-initialized at startup | suffix: ...${AppConfig.googleIdSuffixForLog}');
+              '[Main] GoogleSignIn pre-initialized at startup | suffix: ...${AppConfig.googleIdSuffixForLog}',
+            );
           }
         } catch (e) {
           if (kDebugMode) {
             debugPrint(
-                '[Main] GoogleSignIn startup init failed (non-fatal, will retry on sign-in): $e | suffix: ...${AppConfig.googleIdSuffixForLog}');
+              '[Main] GoogleSignIn startup init failed (non-fatal, will retry on sign-in): $e | suffix: ...${AppConfig.googleIdSuffixForLog}',
+            );
           }
         }
       } else {
         if (kDebugMode) {
           debugPrint(
-              '[Main] GoogleSignIn not configured at startup | error: ${AppConfig.googleConfigError} | suffix: ...${AppConfig.googleIdSuffixForLog}');
+            '[Main] GoogleSignIn not configured at startup | error: ${AppConfig.googleConfigError} | suffix: ...${AppConfig.googleIdSuffixForLog}',
+          );
         }
       }
 
@@ -301,7 +304,11 @@ class _AppLoaderState extends State<AppLoader> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Colors.orange,
+            size: 18,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -362,17 +369,18 @@ class _AppLoaderState extends State<AppLoader> {
           children: [
             CircularProgressIndicator(color: Color(0xFFFFD700)),
             SizedBox(height: 16),
-            Text(
-              'Initializing...',
-              style: TextStyle(color: Colors.white70),
-            ),
+            Text('Initializing...', style: TextStyle(color: Colors.white70)),
           ],
         );
 
       case AppInitStatus.backendFailed:
         return Column(
           children: [
-            const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.orange,
+              size: 48,
+            ),
             const SizedBox(height: 16),
             Text(
               _initState.errorMessage ?? 'Backend connection failed',
@@ -431,10 +439,7 @@ class _AppLoaderState extends State<AppLoader> {
           children: [
             Icon(Icons.check_circle, color: Colors.green, size: 48),
             SizedBox(height: 16),
-            Text(
-              'Ready!',
-              style: TextStyle(color: Colors.green),
-            ),
+            Text('Ready!', style: TextStyle(color: Colors.green)),
           ],
         );
     }
@@ -459,9 +464,7 @@ class MyApp extends StatelessWidget {
       navigatorKey: UpdateDialogHost.navigatorKey,
       builder: (context, child) =>
           UpdateDialogHost(child: child ?? const SizedBox.shrink()),
-      home: const OfflineModelGate(
-        child: AuthGate(),
-      ),
+      home: const OfflineModelGate(child: AuthGate()),
     );
   }
 }
@@ -553,7 +556,11 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
                 const SizedBox(height: 16),
                 const Text(
                   'Failed to load offline model',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 const Text(
@@ -591,7 +598,9 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
               const CircularProgressIndicator(color: Color(0xFFFFC107)),
               const SizedBox(height: 20),
               Text(
-                _isChecking ? 'Checking model status...' : 'Loading offline model...',
+                _isChecking
+                    ? 'Checking model status...'
+                    : 'Loading offline model...',
                 style: const TextStyle(color: Colors.white70, fontSize: 14),
               ),
               if (!_isChecking) ...[
@@ -673,7 +682,9 @@ class _AuthGateState extends State<AuthGate> {
             try {
               client = Supabase.instance.client;
             } catch (e) {
-              if (kDebugMode) debugPrint('[AuthGate] Supabase client unavailable: $e');
+              if (kDebugMode) {
+                debugPrint('[AuthGate] Supabase client unavailable: $e');
+              }
               return const LoginPage();
             }
             final session = data?.session ?? client.auth.currentSession;

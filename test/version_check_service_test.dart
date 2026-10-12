@@ -67,13 +67,14 @@ class FakeConnectivity implements ConnectivityService {
 }
 
 RemoteRelease _release(String version, {String? minVersion}) => RemoteRelease(
-      version: version,
-      minVersion: minVersion,
-      releaseUrl: 'https://github.com/Shuash11/AgentA/releases/tag/v$version',
-      notes: 'notes',
-    );
+  version: version,
+  minVersion: minVersion,
+  releaseUrl: 'https://github.com/Shuash11/AgentA/releases/tag/v$version',
+  notes: 'notes',
+);
 
-Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 20));
+Future<void> _settle() =>
+    Future<void>.delayed(const Duration(milliseconds: 20));
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -121,8 +122,9 @@ void main() {
     });
 
     test('forced when current < minVersion', () async {
-      final source =
-          FakeVersionSource(release: _release('1.2.0', minVersion: '1.1.5'));
+      final source = FakeVersionSource(
+        release: _release('1.2.0', minVersion: '1.1.5'),
+      );
       final service = makeService(source: source);
       service.setCurrentVersionForTest(version: '1.1.0', build: '2');
 
@@ -166,8 +168,9 @@ void main() {
     });
 
     test('minVersion boundary: current == minVersion is not forced', () async {
-      final source =
-          FakeVersionSource(release: _release('1.2.0', minVersion: '1.1.5'));
+      final source = FakeVersionSource(
+        release: _release('1.2.0', minVersion: '1.1.5'),
+      );
       final service = makeService(source: source);
       service.setCurrentVersionForTest(version: '1.1.5', build: '3');
 
@@ -179,33 +182,39 @@ void main() {
   });
 
   group('VersionCheckService scheduling/throttle', () {
-    test('resumed re-check is throttled: min 5 min between network calls', () async {
-      final source = FakeVersionSource(release: _release('1.2.0'));
-      final service = makeService(source: source);
-      service.setCurrentVersionForTest(version: '1.1.0', build: '2');
+    test(
+      'resumed re-check is throttled: min 5 min between network calls',
+      () async {
+        final source = FakeVersionSource(release: _release('1.2.0'));
+        final service = makeService(source: source);
+        service.setCurrentVersionForTest(version: '1.1.0', build: '2');
 
-      await service.init();
-      await _settle();
-      expect(source.calls, 1);
+        await service.init();
+        await _settle();
+        expect(source.calls, 1);
 
-      service.didChangeAppLifecycleState(AppLifecycleState.resumed);
-      await _settle();
-      expect(source.calls, 1); // throttled — no network call
-    });
+        service.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        await _settle();
+        expect(source.calls, 1); // throttled — no network call
+      },
+    );
 
-    test('resumed re-check fires when the throttle window has passed', () async {
-      final source = FakeVersionSource(release: _release('1.2.0'));
-      final service = makeService(source: source, minInterval: Duration.zero);
-      service.setCurrentVersionForTest(version: '1.1.0', build: '2');
+    test(
+      'resumed re-check fires when the throttle window has passed',
+      () async {
+        final source = FakeVersionSource(release: _release('1.2.0'));
+        final service = makeService(source: source, minInterval: Duration.zero);
+        service.setCurrentVersionForTest(version: '1.1.0', build: '2');
 
-      await service.init();
-      await _settle();
-      expect(source.calls, 1);
+        await service.init();
+        await _settle();
+        expect(source.calls, 1);
 
-      service.didChangeAppLifecycleState(AppLifecycleState.resumed);
-      await _settle();
-      expect(source.calls, 2); // throttle window passed — re-check fired
-    });
+        service.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        await _settle();
+        expect(source.calls, 2); // throttle window passed — re-check fired
+      },
+    );
 
     test('connectivity-restored hook triggers a throttled check', () async {
       final connectivity = FakeConnectivity();
@@ -252,20 +261,23 @@ void main() {
       expect(service.lastResult, isNull);
     });
 
-    test('init() survives PackageInfo failure (test hook injects version)', () async {
-      // In the test environment PackageInfo.fromPlatform throws
-      // (unmocked platform channel) — init must swallow it and still work
-      // with the injected current version.
-      final source = FakeVersionSource(release: _release('1.2.0'));
-      final service = makeService(source: source);
-      service.setCurrentVersionForTest(version: '1.0.0', build: '1');
+    test(
+      'init() survives PackageInfo failure (test hook injects version)',
+      () async {
+        // In the test environment PackageInfo.fromPlatform throws
+        // (unmocked platform channel) — init must swallow it and still work
+        // with the injected current version.
+        final source = FakeVersionSource(release: _release('1.2.0'));
+        final service = makeService(source: source);
+        service.setCurrentVersionForTest(version: '1.0.0', build: '1');
 
-      await service.init();
-      await _settle();
+        await service.init();
+        await _settle();
 
-      expect(source.calls, 1);
-      expect(service.lastResult!.level, UpdateLevel.available);
-    });
+        expect(source.calls, 1);
+        expect(service.lastResult!.level, UpdateLevel.available);
+      },
+    );
 
     test('rate-limit backoff blocks service checks until it passes', () async {
       // Real GithubReleasesSource + MockClient returning 403 with a future
@@ -276,8 +288,11 @@ void main() {
       final source = GithubReleasesSource(
         client: MockClient((_) async {
           calls++;
-          return http.Response('{"message":"API rate limit exceeded"}', 403,
-              headers: {'x-ratelimit-reset': '$resetEpoch'});
+          return http.Response(
+            '{"message":"API rate limit exceeded"}',
+            403,
+            headers: {'x-ratelimit-reset': '$resetEpoch'},
+          );
         }),
       );
       final service = makeService(source: source);
@@ -342,23 +357,29 @@ void main() {
       expect(service.lastResult, isNull); // null is never "up to date"
     });
 
-    test('cache: success is cached; a failed check never emits or clears it', () async {
-      final source = FakeVersionSource(release: _release('1.2.0'));
-      final service = makeService(source: source);
-      service.setCurrentVersionForTest(version: '1.1.0', build: '2');
+    test(
+      'cache: success is cached; a failed check never emits or clears it',
+      () async {
+        final source = FakeVersionSource(release: _release('1.2.0'));
+        final service = makeService(source: source);
+        service.setCurrentVersionForTest(version: '1.1.0', build: '2');
 
-      await service.init();
-      await _settle();
-      expect(service.lastResult!.level, UpdateLevel.available);
-      expect(service.cachedRelease!.version, '1.2.0');
-      expect(service.lastSuccessfulCheckAt, isNotNull);
+        await service.init();
+        await _settle();
+        expect(service.lastResult!.level, UpdateLevel.available);
+        expect(service.cachedRelease!.version, '1.2.0');
+        expect(service.lastSuccessfulCheckAt, isNotNull);
 
-      // Simulate network failure — must never surface a dialog from stale data.
-      source.failAll = true;
-      final r = await service.checkNow(); // bypasses throttle
-      expect(r, isNull); // no emit from a failed check
-      expect(service.lastResult!.level, UpdateLevel.available); // state intact
-      expect(service.cachedRelease!.version, '1.2.0'); // cache untouched
-    });
+        // Simulate network failure — must never surface a dialog from stale data.
+        source.failAll = true;
+        final r = await service.checkNow(); // bypasses throttle
+        expect(r, isNull); // no emit from a failed check
+        expect(
+          service.lastResult!.level,
+          UpdateLevel.available,
+        ); // state intact
+        expect(service.cachedRelease!.version, '1.2.0'); // cache untouched
+      },
+    );
   });
 }

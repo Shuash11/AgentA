@@ -73,8 +73,9 @@ class ModelDownloadService extends ChangeNotifier {
   /// POST_NOTIFICATIONS request (no permission_handler dependency).
   /// Best-effort only: denial merely hides the foreground notification,
   /// the download itself still runs.
-  static const MethodChannel _notificationsChannel =
-      MethodChannel('com.agenta.agenta/notifications');
+  static const MethodChannel _notificationsChannel = MethodChannel(
+    'com.agenta.agenta/notifications',
+  );
 
   /// The effective download URL (env override wins). Shared by the install
   /// path and [ensureModelActive] so the plugin's idempotency key (derived
@@ -107,7 +108,9 @@ class ModelDownloadService extends ChangeNotifier {
       _lastProgressValue = _progress;
       _isSlowConnection = false;
     } else if (_lastProgressTime != null) {
-      final secondsSinceLastUpdate = now.difference(_lastProgressTime!).inSeconds;
+      final secondsSinceLastUpdate = now
+          .difference(_lastProgressTime!)
+          .inSeconds;
       if (secondsSinceLastUpdate > 60 && !_isSlowConnection) {
         _isSlowConnection = true;
         notifyListeners();
@@ -123,8 +126,10 @@ class ModelDownloadService extends ChangeNotifier {
   /// timer, if any, is cancelled first — at most one is ever pending.
   void _armStallWatchdog() {
     _cancelStallWatchdog();
-    _stallWatchdog =
-        Timer(stallTimeoutOverrideForTest ?? _stallTimeout, _onStallTimeout);
+    _stallWatchdog = Timer(
+      stallTimeoutOverrideForTest ?? _stallTimeout,
+      _onStallTimeout,
+    );
   }
 
   /// Cancels the stall watchdog without touching anything else. Safe to
@@ -143,8 +148,10 @@ class ModelDownloadService extends ChangeNotifier {
     if (_status != ModelStatus.installing) return;
     _stallFired = true;
     _activeCancelToken?.cancel('Download stalled');
-    _applyDownloadFailure(const DownloadStalledException(),
-        logTag: 'stallWatchdog');
+    _applyDownloadFailure(
+      const DownloadStalledException(),
+      logTag: 'stallWatchdog',
+    );
     notifyListeners();
   }
 
@@ -196,7 +203,9 @@ class ModelDownloadService extends ChangeNotifier {
   }
 
   Future<void> installModel() async {
-    if (_status == ModelStatus.installing || _status == ModelStatus.ready) return;
+    if (_status == ModelStatus.installing || _status == ModelStatus.ready) {
+      return;
+    }
 
     await checkModelExists();
     if (_status == ModelStatus.ready) return;
@@ -236,13 +245,16 @@ class ModelDownloadService extends ChangeNotifier {
       final installFuture = installOverrideForTest != null
           ? installOverrideForTest!(token)
           : FlutterGemma.installModel(modelType: ModelType.gemmaIt)
-              .fromNetwork(resolvedModelUrl,
-                  foreground: AppConfig.foregroundDownload)
-              .withProgress(_onDownloadProgress)
-              .withCancelToken(token)
-              .install();
-      await installFuture
-          .timeout(installTimeoutOverrideForTest ?? _installTimeout);
+                .fromNetwork(
+                  resolvedModelUrl,
+                  foreground: AppConfig.foregroundDownload,
+                )
+                .withProgress(_onDownloadProgress)
+                .withCancelToken(token)
+                .install();
+      await installFuture.timeout(
+        installTimeoutOverrideForTest ?? _installTimeout,
+      );
 
       _cancelStallWatchdog();
       _activeCancelToken = null;
@@ -271,7 +283,9 @@ class ModelDownloadService extends ChangeNotifier {
         await _dao.setModelReady(modelType: _modelType);
         _status = ModelStatus.ready;
         if (kDebugMode) {
-          debugPrint('[ModelDownload] install failed at 100% — treated as complete: $e');
+          debugPrint(
+            '[ModelDownload] install failed at 100% — treated as complete: $e',
+          );
         }
       } else {
         _applyDownloadFailure(e, logTag: 'installModel');
@@ -301,7 +315,9 @@ class ModelDownloadService extends ChangeNotifier {
         return granted ?? false;
       } catch (e) {
         if (kDebugMode) {
-          debugPrint('[ModelDownload] notification permission request failed: $e');
+          debugPrint(
+            '[ModelDownload] notification permission request failed: $e',
+          );
         }
         return false;
       }
@@ -314,7 +330,9 @@ class ModelDownloadService extends ChangeNotifier {
       return granted ?? false;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[ModelDownload] notification permission request failed: $e');
+        debugPrint(
+          '[ModelDownload] notification permission request failed: $e',
+        );
       }
       return false;
     }
@@ -338,8 +356,10 @@ class ModelDownloadService extends ChangeNotifier {
     }
     if (kDebugMode) {
       final retryable = error is DownloadException && error.error.isRetryable;
-      debugPrint('[ModelDownload] $logTag failed '
-          '(typed=${error is DownloadException}, retryable=$retryable): $error');
+      debugPrint(
+        '[ModelDownload] $logTag failed '
+        '(typed=${error is DownloadException}, retryable=$retryable): $error',
+      );
     }
   }
 
@@ -356,15 +376,13 @@ class ModelDownloadService extends ChangeNotifier {
       return switch (error.error) {
         NotFoundError() =>
           'The offline model file could not be found at its source. Check the download link.',
-        UnauthorizedError() || ForbiddenError() =>
-          'The model source rejected the download.',
-        RateLimitedError() =>
-          'Too many download attempts. Try again later.',
+        UnauthorizedError() ||
+        ForbiddenError() => 'The model source rejected the download.',
+        RateLimitedError() => 'Too many download attempts. Try again later.',
         NetworkError() =>
           'No internet connection. Download will resume when you are back online.',
         CanceledError() => null,
-        ServerError() || UnknownError() =>
-          'Download failed. Please try again.',
+        ServerError() || UnknownError() => 'Download failed. Please try again.',
       };
     }
     if (error is TimeoutException) {
@@ -451,13 +469,17 @@ class ModelDownloadService extends ChangeNotifier {
     if (FlutterGemma.hasActiveModel()) return true;
     try {
       await FlutterGemma.installModel(modelType: ModelType.gemmaIt)
-          .fromNetwork(resolvedModelUrl,
-              foreground: AppConfig.foregroundDownload)
+          .fromNetwork(
+            resolvedModelUrl,
+            foreground: AppConfig.foregroundDownload,
+          )
           .install()
           .timeout(const Duration(minutes: 30));
       return FlutterGemma.hasActiveModel();
     } catch (e) {
-      if (kDebugMode) debugPrint('[ModelDownload] ensureModelActive failed: $e');
+      if (kDebugMode) {
+        debugPrint('[ModelDownload] ensureModelActive failed: $e');
+      }
       return false;
     }
   }

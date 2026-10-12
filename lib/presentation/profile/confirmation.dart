@@ -63,7 +63,11 @@ class _RecoveryCodePageState extends State<RecoveryCodePage> {
         backgroundColor: colors.surface,
         title: Text('Recovery Code', style: TextStyle(color: colors.text)),
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: colors.text, size: 20),
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: colors.text,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -76,7 +80,14 @@ class _RecoveryCodePageState extends State<RecoveryCodePage> {
               const SizedBox(height: 40),
               Icon(Icons.key_rounded, color: colors.amber, size: 60),
               const SizedBox(height: 24),
-              Text('Enter Recovery Code', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: colors.text)),
+              Text(
+                'Enter Recovery Code',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: colors.text,
+                ),
+              ),
               const SizedBox(height: 32),
               SystemKeyboardTextFormField(
                 controller: _codeController,
@@ -93,26 +104,32 @@ class _RecoveryCodePageState extends State<RecoveryCodePage> {
               ),
               if (_errorMessage != null) ...[
                 const SizedBox(height: 16),
-                Text(_errorMessage!, style: const TextStyle(color: Colors.redAccent)),
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
               ],
               const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: colors.amber, foregroundColor: Colors.black),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colors.amber,
+                    foregroundColor: Colors.black,
+                  ),
                   onPressed: _isVerifying ? null : _verify,
                   child: SizedBox(
-                      height: 22,
-                      child: Center(
-                        child: _isVerifying
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Verify'),
-                      ),
+                    height: 22,
+                    child: Center(
+                      child: _isVerifying
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Verify'),
                     ),
+                  ),
                 ),
               ),
             ],

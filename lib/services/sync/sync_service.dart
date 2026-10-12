@@ -35,18 +35,18 @@ class SyncService {
   String? Function()? currentUserIdOverrideForTest;
   @visibleForTesting
   Future<void> Function(String uid, ChatSessionModel chat)?
-      saveChatOverrideForTest;
+  saveChatOverrideForTest;
   @visibleForTesting
   Future<void> Function(String uid, String chatId, ChatMessageModel msg)?
-      saveMessageOverrideForTest;
+  saveMessageOverrideForTest;
   @visibleForTesting
   Future<void> Function(String uid, String chatId)? deleteChatOverrideForTest;
   @visibleForTesting
   Future<List<ChatSessionModel>> Function(String uid)?
-      getChatsPagedOverrideForTest;
+  getChatsPagedOverrideForTest;
   @visibleForTesting
   Future<List<ChatMessageModel>> Function(String uid)?
-      getAllMessagesPagedOverrideForTest;
+  getAllMessagesPagedOverrideForTest;
 
   LocalChatDao get _chatDao => chatDaoOverrideForTest ?? LocalChatDao.instance;
   LocalMessageDao get _msgDao =>
@@ -58,11 +58,7 @@ class SyncService {
       saveChatOverrideForTest?.call(uid, chat) ??
       SupabaseChatService.saveChat(uid, chat);
 
-  Future<void> _saveMessage(
-    String uid,
-    String chatId,
-    ChatMessageModel msg,
-  ) =>
+  Future<void> _saveMessage(String uid, String chatId, ChatMessageModel msg) =>
       saveMessageOverrideForTest?.call(uid, chatId, msg) ??
       SupabaseMessageService.saveMessage(uid, chatId, msg);
 
@@ -129,7 +125,9 @@ class SyncService {
       final chatCount = (await _chatDao.getUnsynced()).length;
       final userCount = (await LocalUserDao().getPendingSignups()).length;
       final total = msgCount + chatCount + userCount;
-      _log('[Sync] pendingCount msg=$msgCount chat=$chatCount user=$userCount total=$total');
+      _log(
+        '[Sync] pendingCount msg=$msgCount chat=$chatCount user=$userCount total=$total',
+      );
       return total;
     } catch (e, st) {
       _log('[Sync] getPendingCount failed: $e | $st');
@@ -207,10 +205,7 @@ class SyncService {
     _log('[Sync] flushing ${unsyncedChats.length} unsynced chats');
     for (final chat in unsyncedChats) {
       try {
-        await _withBackoff(
-          () => _saveChat(uid, chat),
-          'saveChat ${chat.id}',
-        );
+        await _withBackoff(() => _saveChat(uid, chat), 'saveChat ${chat.id}');
         await localChatDao.update(chat.copyWith(isSynced: true));
         _log('[Sync] chat ${chat.id} synced');
       } catch (e, st) {
@@ -223,8 +218,9 @@ class SyncService {
     // H6: failure keeps the tombstone pending for the next pass.
     // M13: uses only the local uid snapshot above — never mutates session.
     final tombstonedChats = await localChatDao.getTombstonedChats();
-    final pendingDeletes =
-        tombstonedChats.where((chat) => !chat.isSynced).toList();
+    final pendingDeletes = tombstonedChats
+        .where((chat) => !chat.isSynced)
+        .toList();
     _log('[Sync] flushing ${pendingDeletes.length} tombstoned chats');
     for (final chat in pendingDeletes) {
       try {
@@ -271,7 +267,9 @@ class SyncService {
 
         if (session == null ||
             session.email.trim().toLowerCase() != email.trim().toLowerCase()) {
-          _log('[Sync] skip pending $localId — session mismatch (needs re-login)');
+          _log(
+            '[Sync] skip pending $localId — session mismatch (needs re-login)',
+          );
           continue;
         }
 
@@ -279,7 +277,9 @@ class SyncService {
         // Offline-created password accounts are queued for user re-entry or
         // Edge Function stub below. Clean legacy stashed key best-effort.
         await SessionManager.dropStashedPassword(localId);
-        _log('[Sync] pending $localId queued (needs password re-entry / Edge Function)');
+        _log(
+          '[Sync] pending $localId queued (needs password re-entry / Edge Function)',
+        );
         // Edge Function stub: when deployed, call Supabase Edge Function
         // `sync-offline-user` with {local_id, email} using service role,
         // instead of client-side register/login.
@@ -301,7 +301,9 @@ class SyncService {
   /// Until then, [getPendingCount] keeps reporting these rows and they stay
   /// queued (is_synced=0) for the next sync pass.
   Future<void> _queueForEdgeFunction(String localId, String email) async {
-    _log('[Sync] EdgeFunction queue stub localId=${localId.substring(0, localId.length > 6 ? 6 : localId.length)}*** emailLen=${email.length}');
+    _log(
+      '[Sync] EdgeFunction queue stub localId=${localId.substring(0, localId.length > 6 ? 6 : localId.length)}*** emailLen=${email.length}',
+    );
     // No-op until Edge Function deployed — pending row stays unsynced.
   }
 
@@ -328,8 +330,9 @@ class SyncService {
         () => _getChatsPaged(uid),
         'getChatsPaged',
       );
-      final syncedChats =
-          remoteChats.map((chat) => chat.copyWith(isSynced: true)).toList();
+      final syncedChats = remoteChats
+          .map((chat) => chat.copyWith(isSynced: true))
+          .toList();
       try {
         await localChatDao.replaceChatsPreservingUnsynced(syncedChats);
       } catch (e, st) {
@@ -337,7 +340,9 @@ class SyncService {
       }
       remoteChatIds = syncedChats.map((chat) => chat.id).toSet();
       chatsFetched = true;
-      _log('[Sync] refreshed ${syncedChats.length} chats from remote (paged, batched)');
+      _log(
+        '[Sync] refreshed ${syncedChats.length} chats from remote (paged, batched)',
+      );
     } catch (e, st) {
       _log('[Sync] getChatsPaged failed: $e | $st');
     }
@@ -347,14 +352,17 @@ class SyncService {
         () => _getAllMessagesPaged(uid),
         'getAllMessagesPaged',
       );
-      final syncedMessages =
-          remoteMessages.map((msg) => msg.copyWith(isSynced: true)).toList();
+      final syncedMessages = remoteMessages
+          .map((msg) => msg.copyWith(isSynced: true))
+          .toList();
       try {
         await localMsgDao.replaceMessagesPreservingUnsynced(syncedMessages);
       } catch (e, st) {
         _log('[Sync] replaceMessagesPreservingUnsynced failed: $e | $st');
       }
-      _log('[Sync] refreshed ${syncedMessages.length} messages from remote (paged, batched)');
+      _log(
+        '[Sync] refreshed ${syncedMessages.length} messages from remote (paged, batched)',
+      );
     } catch (e, st) {
       _log('[Sync] getAllMessagesPaged failed: $e | $st');
     }
@@ -395,15 +403,19 @@ class SyncService {
     // fetch failure. Skips chats holding unsynced messages, so pending
     // local work is never destroyed.
     try {
-      final ghostsPruned =
-          await localChatDao.pruneChatsGoneRemote(remoteChatIds);
+      final ghostsPruned = await localChatDao.pruneChatsGoneRemote(
+        remoteChatIds,
+      );
       _log('[Sync] pruned $ghostsPruned ghost chats (remote gone)');
     } catch (e, st) {
       _log('[Sync] ghost prune failed: $e | $st');
     }
   }
 
-  Future<void> migrateOfflineUserChats(String oldOfflineId, String newSupabaseId) async {
+  Future<void> migrateOfflineUserChats(
+    String oldOfflineId,
+    String newSupabaseId,
+  ) async {
     final localChatDao = _chatDao;
     final localMsgDao = _msgDao;
     try {

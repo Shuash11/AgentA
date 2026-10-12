@@ -30,9 +30,6 @@ class ChatActivityState {
   }
 
   @override
-  int get hashCode => Object.hash(
-        isTyping,
-        isInitializingModel,
-        isLoadingMessages,
-      );
+  int get hashCode =>
+      Object.hash(isTyping, isInitializingModel, isLoadingMessages);
 }

@@ -14,16 +14,16 @@ class ThemeState {
   });
 
   factory ThemeState.dark() => ThemeState(
-        isDarkMode: true,
-        themeData: AppTheme.darkTheme,
-        colors: const ThemeColors(true),
-      );
+    isDarkMode: true,
+    themeData: AppTheme.darkTheme,
+    colors: const ThemeColors(true),
+  );
 
   factory ThemeState.light() => ThemeState(
-        isDarkMode: false,
-        themeData: AppTheme.lightTheme,
-        colors: const ThemeColors(false),
-      );
+    isDarkMode: false,
+    themeData: AppTheme.lightTheme,
+    colors: const ThemeColors(false),
+  );
 
   ThemeState copyWith({
     bool? isDarkMode,

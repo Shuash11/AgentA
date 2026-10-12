@@ -67,7 +67,8 @@ class ChatTimelineView extends StatelessWidget {
                 }
 
                 final msg = messages[index];
-                final isStreamingMessage = activity.isTyping &&
+                final isStreamingMessage =
+                    activity.isTyping &&
                     index == messages.length - 1 &&
                     !msg.isUser;
 
@@ -127,10 +128,7 @@ class _EmptyChat extends StatelessWidget {
   final ThemeColors colors;
   final bool animate;
 
-  const _EmptyChat({
-    required this.colors,
-    required this.animate,
-  });
+  const _EmptyChat({required this.colors, required this.animate});
 
   @override
   Widget build(BuildContext context) {

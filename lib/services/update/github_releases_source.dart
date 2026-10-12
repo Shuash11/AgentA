@@ -89,14 +89,17 @@ class GithubReleasesSource implements VersionSource {
   void _applyRateLimitBackoff(Map<String, String> headers) {
     final now = DateTime.now();
     final retryAfter = int.tryParse(_header(headers, 'retry-after') ?? '');
-    final resetEpoch = int.tryParse(_header(headers, 'x-ratelimit-reset') ?? '');
+    final resetEpoch = int.tryParse(
+      _header(headers, 'x-ratelimit-reset') ?? '',
+    );
 
     if (retryAfter != null) {
       _backoffUntil = now.add(Duration(seconds: retryAfter));
     } else if (resetEpoch != null) {
-      _backoffUntil =
-          DateTime.fromMillisecondsSinceEpoch(resetEpoch * 1000, isUtc: true)
-              .toLocal();
+      _backoffUntil = DateTime.fromMillisecondsSinceEpoch(
+        resetEpoch * 1000,
+        isUtc: true,
+      ).toLocal();
     } else {
       // Header missing/unparseable — fall back to the documented hourly
       // quota window so we never hammer a rate-limited endpoint.
@@ -136,14 +139,18 @@ class GithubReleasesSource implements VersionSource {
     final tagName = json['tag_name'];
     final version = tagName is String ? SemVer.tryParseTag(tagName) : null;
     if (version == null) {
-      _log('[UpdateSource] tag_name "${tagName ?? ''}" is not strict semver — ignoring');
+      _log(
+        '[UpdateSource] tag_name "${tagName ?? ''}" is not strict semver — ignoring',
+      );
       return null;
     }
 
     final notes = (json['body'] as String?)?.trim();
     final releaseUrl = json['html_url'] as String?;
     final publishedRaw = json['published_at'];
-    final publishedAt = publishedRaw is String ? DateTime.tryParse(publishedRaw) : null;
+    final publishedAt = publishedRaw is String
+        ? DateTime.tryParse(publishedRaw)
+        : null;
 
     return RemoteRelease(
       version: version.toString(),
@@ -165,7 +172,9 @@ class GithubReleasesSource implements VersionSource {
       if (!trimmed.startsWith(marker)) continue;
       final value = trimmed.substring(marker.length).trim();
       if (SemVer.tryParse(value) != null) return value;
-      _log('[UpdateSource] malformed min-version marker "$value" — treating as none');
+      _log(
+        '[UpdateSource] malformed min-version marker "$value" — treating as none',
+      );
       return null;
     }
     return null;

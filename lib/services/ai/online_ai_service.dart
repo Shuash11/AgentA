@@ -19,14 +19,14 @@ class OnlineAIService extends ChangeNotifier {
   void setPreferredModel(AIModel model) {
     if (_preferredModel == model) return;
     _preferredModel = model;
-    
+
     notifyListeners();
   }
 
   void clearPreferredModel() {
     if (_preferredModel == AIModel.groq) return;
     _preferredModel = AIModel.groq;
-    
+
     notifyListeners();
   }
 
@@ -43,7 +43,9 @@ class OnlineAIService extends ChangeNotifier {
       case AIModel.groq:
         return _groq.sendMessage(history: history, newMessage: newMessage);
       case AIModel.gemma:
-        throw Exception('Agenta Offline AI is an offline model and cannot be used while online.');
+        throw Exception(
+          'Agenta Offline AI is an offline model and cannot be used while online.',
+        );
     }
   }
 
@@ -59,10 +61,15 @@ class OnlineAIService extends ChangeNotifier {
         yield await _pollinations.generateImage(prompt: newMessage);
         return;
       case AIModel.groq:
-        yield* _groq.sendMessageStream(history: history, newMessage: newMessage);
+        yield* _groq.sendMessageStream(
+          history: history,
+          newMessage: newMessage,
+        );
         return;
       case AIModel.gemma:
-        throw Exception('Agenta Offline AI is an offline model and cannot be used while online.');
+        throw Exception(
+          'Agenta Offline AI is an offline model and cannot be used while online.',
+        );
     }
   }
 

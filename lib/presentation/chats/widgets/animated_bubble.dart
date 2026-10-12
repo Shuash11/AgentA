@@ -113,7 +113,9 @@ class _AnimatedBubbleState extends State<AnimatedBubble>
         position: _slide,
         child: ScaleTransition(
           scale: _scale,
-          alignment: widget.isUser ? Alignment.centerRight : Alignment.centerLeft,
+          alignment: widget.isUser
+              ? Alignment.centerRight
+              : Alignment.centerLeft,
           child: RepaintBoundary(child: widget.child),
         ),
       ),

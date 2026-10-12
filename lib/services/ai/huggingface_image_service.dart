@@ -37,7 +37,8 @@ class HuggingFaceImageService {
     final token = AppConfig.hfToken.trim();
     if (!isConfigured) {
       throw Exception(
-          'HuggingFace API token not configured. Please set HF_TOKEN in .env file.');
+        'HuggingFace API token not configured. Please set HF_TOKEN in .env file.',
+      );
     }
     if (prompt.trim().isEmpty) {
       throw Exception('Prompt cannot be empty');
@@ -70,7 +71,8 @@ class HuggingFaceImageService {
         } on TimeoutException {
           if (attempt == 1) {
             throw Exception(
-                'HuggingFace request timed out. The model may be warming up, try again.');
+              'HuggingFace request timed out. The model may be warming up, try again.',
+            );
           }
           await Future.delayed(const Duration(seconds: 5));
           continue;
@@ -79,33 +81,39 @@ class HuggingFaceImageService {
           return await _saveBytes(response.bodyBytes);
         } else if (response.statusCode == 401 || response.statusCode == 403) {
           throw Exception(
-              'Invalid HuggingFace token. Please check your HF_TOKEN in .env file.');
+            'Invalid HuggingFace token. Please check your HF_TOKEN in .env file.',
+          );
         } else if (response.statusCode == 402) {
           throw Exception(
-              'HuggingFace free credits exhausted for this month. Try again later or use Pollinations.');
+            'HuggingFace free credits exhausted for this month. Try again later or use Pollinations.',
+          );
         } else if (response.statusCode == 429) {
           if (attempt == 1) {
             throw Exception(
-                'HuggingFace rate limit reached. Wait a moment and try again.');
+              'HuggingFace rate limit reached. Wait a moment and try again.',
+            );
           }
           await Future.delayed(const Duration(seconds: 8));
           continue;
         } else if (response.statusCode == 503) {
           if (attempt == 1) {
             throw Exception(
-                'HuggingFace model is warming up. Try again in a moment.');
+              'HuggingFace model is warming up. Try again in a moment.',
+            );
           }
           await Future.delayed(const Duration(seconds: 15));
           continue;
         } else {
           throw Exception(
-              'HuggingFace image error: ${response.statusCode} ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}');
+            'HuggingFace image error: ${response.statusCode} ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}',
+          );
         }
       }
     } on http.ClientException {
       if (_isCancelled) throw Exception('Image generation cancelled.');
       throw Exception(
-          'Cannot reach HuggingFace. Check your internet connection.');
+        'Cannot reach HuggingFace. Check your internet connection.',
+      );
     } finally {
       _activeClient?.close();
       _activeClient = null;
@@ -116,7 +124,8 @@ class HuggingFaceImageService {
   Future<String> _saveBytes(List<int> bytes) async {
     final dir = await getTemporaryDirectory();
     final file = File(
-        '${dir.path}/hf_${DateTime.now().millisecondsSinceEpoch}.png');
+      '${dir.path}/hf_${DateTime.now().millisecondsSinceEpoch}.png',
+    );
     await file.writeAsBytes(bytes, flush: true);
     return file.path;
   }

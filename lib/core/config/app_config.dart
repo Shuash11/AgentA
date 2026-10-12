@@ -19,8 +19,9 @@ class AppConfig {
   static const _dGroq = String.fromEnvironment('GROQ_API_KEY');
   static const _dHf = String.fromEnvironment('HF_TOKEN');
   static const _dGemmaUrl = String.fromEnvironment('GEMMA_MODEL_URL');
-  static const _dForegroundDownload =
-      String.fromEnvironment('FOREGROUND_DOWNLOAD');
+  static const _dForegroundDownload = String.fromEnvironment(
+    'FOREGROUND_DOWNLOAD',
+  );
   static const _dSupaUrl = String.fromEnvironment('SUPABASE_URL');
   static const _dSupaKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
   static const _dGoogleId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
@@ -36,7 +37,8 @@ class AppConfig {
   static String get groqApiKey => _withFallback(_dGroq, 'GROQ_API_KEY').trim();
   static String get hfToken => _withFallback(_dHf, 'HF_TOKEN').trim();
 
-  static const String groqEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
+  static const String groqEndpoint =
+      'https://api.groq.com/openai/v1/chat/completions';
   static const String hfImageModel =
       'stabilityai/stable-diffusion-3-medium-diffusers';
   static String get hfImageEndpoint =>
@@ -55,7 +57,8 @@ class AppConfig {
       'IMPORTANT: Always respond ONLY in English, regardless of the language '
       'the user writes in. Never reply in any other language.';
 
-  static String get gemmaModelUrl => _withFallback(_dGemmaUrl, 'GEMMA_MODEL_URL').trim();
+  static String get gemmaModelUrl =>
+      _withFallback(_dGemmaUrl, 'GEMMA_MODEL_URL').trim();
   static const String gemmaModelFilename = 'gemma-offline.task';
 
   /// Foreground-service experiment override for the offline model download.
@@ -65,8 +68,10 @@ class AppConfig {
   static bool get foregroundDownload {
     final test = _foregroundDownloadOverrideForTest;
     if (test != null) return test;
-    final raw =
-        _withFallback(_dForegroundDownload, 'FOREGROUND_DOWNLOAD').trim();
+    final raw = _withFallback(
+      _dForegroundDownload,
+      'FOREGROUND_DOWNLOAD',
+    ).trim();
     return _parseForegroundDownload(raw);
   }
 
@@ -93,7 +98,8 @@ class AppConfig {
   static bool parseForegroundDownloadForTest(String raw) =>
       _parseForegroundDownload(raw);
 
-  static String get supabaseUrl => _withFallback(_dSupaUrl, 'SUPABASE_URL').trim();
+  static String get supabaseUrl =>
+      _withFallback(_dSupaUrl, 'SUPABASE_URL').trim();
   static String get supabasePublishableKey =>
       _withFallback(_dSupaKey, 'SUPABASE_PUBLISHABLE_KEY').trim();
 
@@ -150,7 +156,8 @@ class AppConfig {
       _googleConfigError = err;
       if (kDebugMode) {
         debugPrint(
-            '[AppConfig] Google config INVALID: $err | idSuffix: ${_idSuffix(trimmed)}');
+          '[AppConfig] Google config INVALID: $err | idSuffix: ${_idSuffix(trimmed)}',
+        );
       }
       return false;
     }
@@ -158,7 +165,8 @@ class AppConfig {
     _googleConfigError = null;
     if (kDebugMode) {
       debugPrint(
-          '[AppConfig] Google config OK | idSuffix: ...${_idSuffix(trimmed)} | length:${trimmed.length}');
+        '[AppConfig] Google config OK | idSuffix: ...${_idSuffix(trimmed)} | length:${trimmed.length}',
+      );
     }
     return true;
   }
@@ -170,7 +178,8 @@ class AppConfig {
     if (err != null) {
       if (kDebugMode) {
         debugPrint(
-            '[AppConfig] validateGoogleIdOrThrow FAILED: $err | idSuffix: ${_idSuffix(trimmed)}');
+          '[AppConfig] validateGoogleIdOrThrow FAILED: $err | idSuffix: ${_idSuffix(trimmed)}',
+        );
       }
       throw FormatException(err);
     }
@@ -187,8 +196,8 @@ class AppConfig {
 
   /// Returns lengths map for badge/debug UI without exposing secrets.
   static Map<String, int> get envLengths => {
-        'SUPABASE_URL': supabaseUrl.length,
-        'SUPABASE_PUBLISHABLE_KEY': supabasePublishableKey.length,
-        'GOOGLE_SERVER_CLIENT_ID': googleServerClientId.length,
-      };
+    'SUPABASE_URL': supabaseUrl.length,
+    'SUPABASE_PUBLISHABLE_KEY': supabasePublishableKey.length,
+    'GOOGLE_SERVER_CLIENT_ID': googleServerClientId.length,
+  };
 }

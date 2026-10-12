@@ -24,15 +24,20 @@ class LocalChatDao {
       final session = await SessionManager.currentSession();
       if (session != null) return session.uid;
     } catch (e) {
-      if (kDebugMode) debugPrint('[LocalChatDao] local session read failed: $e');
+      if (kDebugMode) {
+        debugPrint('[LocalChatDao] local session read failed: $e');
+      }
     }
     return '';
   }
 
   Future<void> insert(ChatSessionModel chat) async {
     final db = await _dbHelper.database;
-    await db.insert('chat_sessions', chat.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+      'chat_sessions',
+      chat.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<List<ChatSessionModel>> getByUserId(String userId) async {
@@ -61,10 +66,7 @@ class LocalChatDao {
 
   Future<List<ChatSessionModel>> getDeletedChats() async {
     final db = await _dbHelper.database;
-    final rows = await db.query(
-      'chat_sessions',
-      where: 'is_deleted = 1',
-    );
+    final rows = await db.query('chat_sessions', where: 'is_deleted = 1');
     return rows.map(ChatSessionModel.fromMap).toList();
   }
 
@@ -205,8 +207,7 @@ class LocalChatDao {
         final id = row['id'] as String;
         final isSynced = (row['is_synced'] as int?) ?? 0;
         final isDeleted = (row['is_deleted'] as int?) ?? 0;
-        if (shouldPreserveLocalRow(
-            isSynced: isSynced, isDeleted: isDeleted)) {
+        if (shouldPreserveLocalRow(isSynced: isSynced, isDeleted: isDeleted)) {
           skipIds.add(id);
         } else {
           localUnread[id] = (row['unread'] as int?) ?? 0;
@@ -229,8 +230,11 @@ class LocalChatDao {
     await db.transaction((txn) async {
       final batch = txn.batch();
       for (final chat in toInsert) {
-        batch.insert('chat_sessions', chat.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace);
+        batch.insert(
+          'chat_sessions',
+          chat.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
       }
       await batch.commit(noResult: true);
     });

@@ -10,11 +10,7 @@ class AppShell extends StatefulWidget {
   final bool offlineMode;
   final int initialIndex;
 
-  const AppShell({
-    super.key,
-    this.offlineMode = false,
-    this.initialIndex = 0,
-  });
+  const AppShell({super.key, this.offlineMode = false, this.initialIndex = 0});
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -46,9 +42,7 @@ class _AppShellState extends State<AppShell> {
               showBottomNav: false,
               showBackButton: false,
             ),
-            const ProfilePage(
-              showBottomNav: false,
-            ),
+            const ProfilePage(showBottomNav: false),
           ],
         ),
       ),

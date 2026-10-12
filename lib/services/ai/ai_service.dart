@@ -49,7 +49,6 @@ class AIService {
     AIModel? model,
   }) async {
     if (isOnline) {
-      
       return _onlineAI.sendMessage(
         history: history,
         newMessage: newMessage,
@@ -59,7 +58,8 @@ class AIService {
       final offlineReady = await _offlineAI.ensureReady();
       if (!offlineReady) {
         throw Exception(
-            'No internet and offline model not ready. ${offlineModelProblem ?? 'Please download the offline model first.'}');
+          'No internet and offline model not ready. ${offlineModelProblem ?? 'Please download the offline model first.'}',
+        );
       }
 
       return _offlineAI.sendMessage(history: history, newMessage: newMessage);
@@ -72,7 +72,6 @@ class AIService {
     AIModel? model,
   }) async* {
     if (isOnline) {
-      
       yield* _onlineAI.sendMessageStream(
         history: history,
         newMessage: newMessage,
@@ -82,10 +81,14 @@ class AIService {
       final offlineReady = await _offlineAI.ensureReady();
       if (!offlineReady) {
         throw Exception(
-            'No internet and offline model not ready. ${offlineModelProblem ?? 'Please download the offline model first.'}');
+          'No internet and offline model not ready. ${offlineModelProblem ?? 'Please download the offline model first.'}',
+        );
       }
 
-      yield* _offlineAI.sendMessageStream(history: history, newMessage: newMessage);
+      yield* _offlineAI.sendMessageStream(
+        history: history,
+        newMessage: newMessage,
+      );
     }
   }
 

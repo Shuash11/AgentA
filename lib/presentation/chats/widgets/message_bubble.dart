@@ -60,55 +60,171 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  static final MarkdownStyleSheet _cachedMarkdownStyleSheetUser = MarkdownStyleSheet(
-    p: const TextStyle(color: Colors.black, fontSize: 14.5, height: 1.45),
-    code: const TextStyle(color: Colors.black, fontSize: 13.5, fontFamily: 'monospace'),
-    codeblockDecoration: BoxDecoration(color: const Color(0xFFE0E0E0), borderRadius: BorderRadius.circular(AppRadius.sm)),
-    blockquote: const TextStyle(color: Color(0xFF757575), fontSize: 14, fontStyle: FontStyle.italic),
-    blockquoteDecoration: const BoxDecoration(border: Border(left: BorderSide(color: Color(0xFFFFB300), width: 3))),
-    listBullet: const TextStyle(color: Colors.black),
-    h1: const TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.bold),
-    h2: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold),
-    h3: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
-    h4: const TextStyle(color: Colors.black, fontSize: 15, fontWeight: FontWeight.w600),
-    h5: const TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.w600),
-    h6: const TextStyle(color: Colors.black, fontSize: 13, fontWeight: FontWeight.w600),
-    a: const TextStyle(color: Colors.black87, decoration: TextDecoration.underline),
-    strong: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-    em: const TextStyle(color: Colors.black, fontStyle: FontStyle.italic),
-  );
+  static final MarkdownStyleSheet _cachedMarkdownStyleSheetUser =
+      MarkdownStyleSheet(
+        p: const TextStyle(color: Colors.black, fontSize: 14.5, height: 1.45),
+        code: const TextStyle(
+          color: Colors.black,
+          fontSize: 13.5,
+          fontFamily: 'monospace',
+        ),
+        codeblockDecoration: BoxDecoration(
+          color: const Color(0xFFE0E0E0),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+        blockquote: const TextStyle(
+          color: Color(0xFF757575),
+          fontSize: 14,
+          fontStyle: FontStyle.italic,
+        ),
+        blockquoteDecoration: const BoxDecoration(
+          border: Border(left: BorderSide(color: Color(0xFFFFB300), width: 3)),
+        ),
+        listBullet: const TextStyle(color: Colors.black),
+        h1: const TextStyle(
+          color: Colors.black,
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+        ),
+        h2: const TextStyle(
+          color: Colors.black,
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+        ),
+        h3: const TextStyle(
+          color: Colors.black,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+        h4: const TextStyle(
+          color: Colors.black,
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+        h5: const TextStyle(
+          color: Colors.black,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+        h6: const TextStyle(
+          color: Colors.black,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+        a: const TextStyle(
+          color: Colors.black87,
+          decoration: TextDecoration.underline,
+        ),
+        strong: const TextStyle(
+          color: Colors.black,
+          fontWeight: FontWeight.bold,
+        ),
+        em: const TextStyle(color: Colors.black, fontStyle: FontStyle.italic),
+      );
 
-  static final MarkdownStyleSheet _cachedMarkdownStyleSheetAssistant = MarkdownStyleSheet(
-    p: const TextStyle(color: Colors.black, fontSize: 14.5, height: 1.45),
-    code: const TextStyle(color: Colors.black, fontSize: 13.5, fontFamily: 'monospace'),
-    codeblockDecoration: BoxDecoration(color: const Color(0xFFE0E0E0), borderRadius: BorderRadius.circular(AppRadius.sm)),
-    blockquote: const TextStyle(color: Color(0xFF757575), fontSize: 14, fontStyle: FontStyle.italic),
-    blockquoteDecoration: const BoxDecoration(border: Border(left: BorderSide(color: Color(0xFFFFB300), width: 3))),
-    listBullet: const TextStyle(color: Colors.black),
-    h1: const TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.bold),
-    h2: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold),
-    h3: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
-    h4: const TextStyle(color: Colors.black, fontSize: 15, fontWeight: FontWeight.w600),
-    h5: const TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.w600),
-    h6: const TextStyle(color: Colors.black, fontSize: 13, fontWeight: FontWeight.w600),
-    a: const TextStyle(color: Colors.amber, decoration: TextDecoration.underline),
-    strong: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-    em: const TextStyle(color: Colors.black, fontStyle: FontStyle.italic),
-  );
+  static final MarkdownStyleSheet _cachedMarkdownStyleSheetAssistant =
+      MarkdownStyleSheet(
+        p: const TextStyle(color: Colors.black, fontSize: 14.5, height: 1.45),
+        code: const TextStyle(
+          color: Colors.black,
+          fontSize: 13.5,
+          fontFamily: 'monospace',
+        ),
+        codeblockDecoration: BoxDecoration(
+          color: const Color(0xFFE0E0E0),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+        blockquote: const TextStyle(
+          color: Color(0xFF757575),
+          fontSize: 14,
+          fontStyle: FontStyle.italic,
+        ),
+        blockquoteDecoration: const BoxDecoration(
+          border: Border(left: BorderSide(color: Color(0xFFFFB300), width: 3)),
+        ),
+        listBullet: const TextStyle(color: Colors.black),
+        h1: const TextStyle(
+          color: Colors.black,
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+        ),
+        h2: const TextStyle(
+          color: Colors.black,
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+        ),
+        h3: const TextStyle(
+          color: Colors.black,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+        h4: const TextStyle(
+          color: Colors.black,
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+        h5: const TextStyle(
+          color: Colors.black,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+        h6: const TextStyle(
+          color: Colors.black,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+        a: const TextStyle(
+          color: Colors.amber,
+          decoration: TextDecoration.underline,
+        ),
+        strong: const TextStyle(
+          color: Colors.black,
+          fontWeight: FontWeight.bold,
+        ),
+        em: const TextStyle(color: Colors.black, fontStyle: FontStyle.italic),
+      );
 
   MarkdownStyleSheet _getMarkdownStyleSheet(bool isUser) {
     if (isUser) return _cachedMarkdownStyleSheetUser;
 
     return _cachedMarkdownStyleSheetAssistant.copyWith(
       p: TextStyle(color: colors.text, fontSize: 14.5, height: 1.45),
-      code: TextStyle(color: colors.text, fontSize: 13.5, fontFamily: 'monospace'),
+      code: TextStyle(
+        color: colors.text,
+        fontSize: 13.5,
+        fontFamily: 'monospace',
+      ),
       listBullet: TextStyle(color: colors.text),
-      h1: TextStyle(color: colors.text, fontSize: 20, fontWeight: FontWeight.bold),
-      h2: TextStyle(color: colors.text, fontSize: 18, fontWeight: FontWeight.bold),
-      h3: TextStyle(color: colors.text, fontSize: 16, fontWeight: FontWeight.w600),
-      h4: TextStyle(color: colors.text, fontSize: 15, fontWeight: FontWeight.w600),
-      h5: TextStyle(color: colors.text, fontSize: 14, fontWeight: FontWeight.w600),
-      h6: TextStyle(color: colors.text, fontSize: 13, fontWeight: FontWeight.w600),
+      h1: TextStyle(
+        color: colors.text,
+        fontSize: 20,
+        fontWeight: FontWeight.bold,
+      ),
+      h2: TextStyle(
+        color: colors.text,
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+      ),
+      h3: TextStyle(
+        color: colors.text,
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+      ),
+      h4: TextStyle(
+        color: colors.text,
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+      ),
+      h5: TextStyle(
+        color: colors.text,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
+      h6: TextStyle(
+        color: colors.text,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
       a: TextStyle(color: colors.amber, decoration: TextDecoration.underline),
       strong: TextStyle(color: colors.text, fontWeight: FontWeight.bold),
       em: TextStyle(color: colors.text, fontStyle: FontStyle.italic),
@@ -190,10 +306,7 @@ class MessageBubble extends StatelessWidget {
   Widget _buildTextContent(bool isUser) {
     final text = message.text;
     if (isStreaming || !message.hasMarkdown) {
-      return Text(
-        text,
-        style: _getTextStyle(isUser),
-      );
+      return Text(text, style: _getTextStyle(isUser));
     }
     return MarkdownBody(
       data: text,

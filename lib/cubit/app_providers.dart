@@ -53,40 +53,31 @@ class AppProviders extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [
-        ..._serviceProviders,
-        ..._blocProviders,
-      ],
+      providers: [..._serviceProviders, ..._blocProviders],
       child: child,
     );
   }
 
-List<SingleChildWidget> get _serviceProviders => [
-        Provider.value(value: connectivity),
-        ChangeNotifierProvider.value(value: gemmaService),
-        Provider.value(value: groqService),
-        Provider.value(value: pollinationsService),
-        Provider.value(value: huggingFaceImageService),
-        Provider.value(value: offlineAIService),
-        ChangeNotifierProvider.value(value: onlineAIService),
-        ChangeNotifierProvider.value(value: modelDownloadService),
-        Provider(
-          create: (ctx) => aiService,
-        ),
-        Provider.value(value: chatRepository),
-        Provider.value(value: messageRepository),
-        Provider.value(value: syncService),
-      ];
+  List<SingleChildWidget> get _serviceProviders => [
+    Provider.value(value: connectivity),
+    ChangeNotifierProvider.value(value: gemmaService),
+    Provider.value(value: groqService),
+    Provider.value(value: pollinationsService),
+    Provider.value(value: huggingFaceImageService),
+    Provider.value(value: offlineAIService),
+    ChangeNotifierProvider.value(value: onlineAIService),
+    ChangeNotifierProvider.value(value: modelDownloadService),
+    Provider(create: (ctx) => aiService),
+    Provider.value(value: chatRepository),
+    Provider.value(value: messageRepository),
+    Provider.value(value: syncService),
+  ];
 
   List<SingleChildWidget> get _blocProviders => [
-        BlocProvider<ThemeCubit>(
-          create: (_) => ThemeCubit(),
-        ),
-        BlocProvider<ConnectivityCubit>(
-          create: (_) => ConnectivityCubit(connectivity),
-        ),
-        BlocProvider<UpdateCubit>(
-          create: (_) => UpdateCubit(),
-        ),
-      ];
+    BlocProvider<ThemeCubit>(create: (_) => ThemeCubit()),
+    BlocProvider<ConnectivityCubit>(
+      create: (_) => ConnectivityCubit(connectivity),
+    ),
+    BlocProvider<UpdateCubit>(create: (_) => UpdateCubit()),
+  ];
 }

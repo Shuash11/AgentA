@@ -47,23 +47,28 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       if (user.email == null) throw Exception('Email not available');
 
       await AuthService.reauthenticate(
-          user.email!, _currentPasswordController.text);
+        user.email!,
+        _currentPasswordController.text,
+      );
       await AuthService.updatePassword(_newPasswordController.text);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Password changed!'),
-              backgroundColor: Colors.amber),
+            content: Text('Password changed!'),
+            backgroundColor: Colors.amber,
+          ),
         );
         Navigator.popUntil(context, (route) => route.isFirst);
       }
     } catch (e) {
       String errorMsg;
       final errorString = e.toString().toLowerCase();
-      if (errorString.contains('wrong password') || errorString.contains('invalid-credential')) {
+      if (errorString.contains('wrong password') ||
+          errorString.contains('invalid-credential')) {
         errorMsg = 'Current password is incorrect';
-      } else if (errorString.contains('no user') || errorString.contains('not logged in')) {
+      } else if (errorString.contains('no user') ||
+          errorString.contains('not logged in')) {
         errorMsg = 'Session expired. Please log in again.';
       } else if (errorString.contains('network')) {
         errorMsg = 'Network error. Check your connection.';
@@ -86,8 +91,11 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
         backgroundColor: colors.surface,
         title: Text('Change Password', style: TextStyle(color: colors.text)),
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded,
-              color: colors.text, size: 20),
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: colors.text,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -101,9 +109,13 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Current Password',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold, color: colors.text)),
+                Text(
+                  'Current Password',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: colors.text,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 SystemKeyboardTextFormField(
                   controller: _currentPasswordController,
@@ -112,17 +124,22 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                   enableSuggestions: false,
                   style: TextStyle(color: colors.text),
                   decoration: InputDecoration(
-                      labelText: 'Current Password',
-                      labelStyle: TextStyle(color: colors.subtext),
-                      prefixIcon: Icon(Icons.lock, color: colors.amber),
-                      filled: true,
-                      fillColor: colors.input),
+                    labelText: 'Current Password',
+                    labelStyle: TextStyle(color: colors.subtext),
+                    prefixIcon: Icon(Icons.lock, color: colors.amber),
+                    filled: true,
+                    fillColor: colors.input,
+                  ),
                   validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 24),
-                Text('New Password',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold, color: colors.text)),
+                Text(
+                  'New Password',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: colors.text,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 SystemKeyboardTextFormField(
                   controller: _newPasswordController,
@@ -131,11 +148,12 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                   enableSuggestions: false,
                   style: TextStyle(color: colors.text),
                   decoration: InputDecoration(
-                      labelText: 'New Password',
-                      labelStyle: TextStyle(color: colors.subtext),
-                      prefixIcon: Icon(Icons.lock_outline, color: colors.amber),
-                      filled: true,
-                      fillColor: colors.input),
+                    labelText: 'New Password',
+                    labelStyle: TextStyle(color: colors.subtext),
+                    prefixIcon: Icon(Icons.lock_outline, color: colors.amber),
+                    filled: true,
+                    fillColor: colors.input,
+                  ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Required';
                     if (v.length < 6) return 'At least 6 characters';
@@ -144,16 +162,19 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                 ),
                 if (_errorMessage != null) ...[
                   const SizedBox(height: 16),
-                  Text(_errorMessage!,
-                      style: const TextStyle(color: Colors.redAccent)),
+                  Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
                 ],
                 const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.amber,
-                        foregroundColor: Colors.black),
+                      backgroundColor: Colors.amber,
+                      foregroundColor: Colors.black,
+                    ),
                     onPressed: _isSaving ? null : _submit,
                     child: SizedBox(
                       height: 22,
@@ -162,7 +183,9 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                             ? const SizedBox(
                                 width: 22,
                                 height: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Text('Change Password'),
                       ),

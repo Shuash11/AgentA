@@ -79,9 +79,7 @@ Future<void> pumpDashboard(WidgetTester tester, ChatRepository repo) async {
         ChangeNotifierProvider<ModelDownloadService>.value(value: modelService),
         ChangeNotifierProvider<OnlineAIService>.value(value: onlineService),
       ],
-      child: const MaterialApp(
-        home: Dashboard(showBackButton: false),
-      ),
+      child: const MaterialApp(home: Dashboard(showBackButton: false)),
     ),
   );
   // Let didChangeDependencies fire, the getUserId + repo futures complete,
@@ -111,58 +109,49 @@ void main() {
   setUpAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(secureStorage, (call) async {
-      switch (call.method) {
-        case 'read':
-          return null;
-        case 'readAll':
-          return <String, dynamic>{};
-        case 'containsKey':
-        case 'isProtectedDataAvailable':
-          return false;
-        default:
-          return null;
-      }
-    });
+          switch (call.method) {
+            case 'read':
+              return null;
+            case 'readAll':
+              return <String, dynamic>{};
+            case 'containsKey':
+            case 'isProtectedDataAvailable':
+              return false;
+            default:
+              return null;
+          }
+        });
   });
 
   group('Dashboard load states', () {
-    testWidgets('repo throws shows error state, never the empty state',
-        (tester) async {
+    testWidgets('repo throws shows error state, never the empty state', (
+      tester,
+    ) async {
       await pumpDashboard(
         tester,
         FakeChatRepository(const [], failuresRemaining: 99),
       );
 
-      expect(
-        find.text("Couldn't load your conversations."),
-        findsOneWidget,
-      );
+      expect(find.text("Couldn't load your conversations."), findsOneWidget);
       expect(find.text('Retry'), findsOneWidget);
       expect(find.byIcon(Icons.error_outline_rounded), findsOneWidget);
       expect(find.text('No conversations yet'), findsNothing);
     });
 
     testWidgets('throws then succeeds on retry shows the list', (tester) async {
-      final repo = FakeChatRepository(
-        [sampleChat('c1', 'Alpine trip')],
-        failuresRemaining: 1,
-      );
+      final repo = FakeChatRepository([
+        sampleChat('c1', 'Alpine trip'),
+      ], failuresRemaining: 1);
       await pumpDashboard(tester, repo);
 
       // Failure first.
-      expect(
-        find.text("Couldn't load your conversations."),
-        findsOneWidget,
-      );
+      expect(find.text("Couldn't load your conversations."), findsOneWidget);
 
       await tester.tap(find.text('Retry'));
       await settleRetry(tester);
 
       // Retry succeeded: error gone, chat listed.
-      expect(
-        find.text("Couldn't load your conversations."),
-        findsNothing,
-      );
+      expect(find.text("Couldn't load your conversations."), findsNothing);
       expect(find.text('Alpine trip'), findsOneWidget);
       expect(find.text('No conversations yet'), findsNothing);
     });
@@ -178,10 +167,7 @@ void main() {
 
       expect(find.text('Alpine trip'), findsOneWidget);
       expect(find.text('Weekly review'), findsOneWidget);
-      expect(
-        find.text("Couldn't load your conversations."),
-        findsNothing,
-      );
+      expect(find.text("Couldn't load your conversations."), findsNothing);
       expect(find.text('No conversations yet'), findsNothing);
     });
 
@@ -189,10 +175,7 @@ void main() {
       await pumpDashboard(tester, FakeChatRepository(const []));
 
       expect(find.text('No conversations yet'), findsOneWidget);
-      expect(
-        find.text("Couldn't load your conversations."),
-        findsNothing,
-      );
+      expect(find.text("Couldn't load your conversations."), findsNothing);
       expect(find.text('Retry'), findsNothing);
     });
   });

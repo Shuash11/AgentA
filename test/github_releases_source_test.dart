@@ -32,18 +32,23 @@ http.Response _releaseResponse({Map<String, dynamic>? overrides}) {
 void main() {
   group('GithubReleasesSource (GitHub API)', () {
     test('200 parses the JSON subset per contract', () async {
-      final source =
-          GithubReleasesSource(client: MockClient((_) async => _releaseResponse()));
+      final source = GithubReleasesSource(
+        client: MockClient((_) async => _releaseResponse()),
+      );
 
       final release = await source.fetchLatestRelease();
 
       expect(release, isNotNull);
       expect(release!.version, '1.2.0'); // 'v'-stripped, strict semver
       expect(release.minVersion, '1.0.0'); // from body marker line
-      expect(release.downloadUrl,
-          'https://github.com/Shuash11/AgentA/releases/download/v1.2.0/AgentA-v1.2.0.apk');
-      expect(release.releaseUrl,
-          'https://github.com/Shuash11/AgentA/releases/tag/v1.2.0');
+      expect(
+        release.downloadUrl,
+        'https://github.com/Shuash11/AgentA/releases/download/v1.2.0/AgentA-v1.2.0.apk',
+      );
+      expect(
+        release.releaseUrl,
+        'https://github.com/Shuash11/AgentA/releases/tag/v1.2.0',
+      );
       expect(release.notes, 'Release notes\nmin-version: 1.0.0');
       expect(release.publishedAt, isNotNull);
       expect(source.backoffUntil, isNull);
@@ -51,54 +56,73 @@ void main() {
 
     test('downloadUrl falls back to html_url when no *.apk asset', () async {
       final source = GithubReleasesSource(
-        client: MockClient((_) async => _releaseResponse(overrides: {
+        client: MockClient(
+          (_) async => _releaseResponse(
+            overrides: {
               'assets': [
                 {
                   'name': 'checksums.txt',
                   'browser_download_url': 'https://example.com/checksums.txt',
                 },
               ],
-            })),
+            },
+          ),
+        ),
       );
 
       final release = await source.fetchLatestRelease();
 
-      expect(release!.downloadUrl,
-          'https://github.com/Shuash11/AgentA/releases/tag/v1.2.0');
+      expect(
+        release!.downloadUrl,
+        'https://github.com/Shuash11/AgentA/releases/tag/v1.2.0',
+      );
     });
 
-    test('draft/prerelease releases are ignored (defensive re-check)', () async {
-      final draftSource = GithubReleasesSource(
-        client: MockClient((_) async => _releaseResponse(overrides: {'draft': true})),
-      );
-      final preSource = GithubReleasesSource(
-        client:
-            MockClient((_) async => _releaseResponse(overrides: {'prerelease': true})),
-      );
+    test(
+      'draft/prerelease releases are ignored (defensive re-check)',
+      () async {
+        final draftSource = GithubReleasesSource(
+          client: MockClient(
+            (_) async => _releaseResponse(overrides: {'draft': true}),
+          ),
+        );
+        final preSource = GithubReleasesSource(
+          client: MockClient(
+            (_) async => _releaseResponse(overrides: {'prerelease': true}),
+          ),
+        );
 
-      expect(await draftSource.fetchLatestRelease(), isNull);
-      expect(await preSource.fetchLatestRelease(), isNull);
-    });
+        expect(await draftSource.fetchLatestRelease(), isNull);
+        expect(await preSource.fetchLatestRelease(), isNull);
+      },
+    );
 
     test('non-semver tag_name → null', () async {
       final source = GithubReleasesSource(
-        client: MockClient((_) async => _releaseResponse(overrides: {'tag_name': 'latest'})),
+        client: MockClient(
+          (_) async => _releaseResponse(overrides: {'tag_name': 'latest'}),
+        ),
       );
 
       expect(await source.fetchLatestRelease(), isNull);
     });
 
-    test('malformed min-version marker → treated as no forced update', () async {
-      final source = GithubReleasesSource(
-        client: MockClient(
-            (_) async => _releaseResponse(overrides: {'body': 'min-version: banana\n'})),
-      );
+    test(
+      'malformed min-version marker → treated as no forced update',
+      () async {
+        final source = GithubReleasesSource(
+          client: MockClient(
+            (_) async =>
+                _releaseResponse(overrides: {'body': 'min-version: banana\n'}),
+          ),
+        );
 
-      final release = await source.fetchLatestRelease();
+        final release = await source.fetchLatestRelease();
 
-      expect(release, isNotNull);
-      expect(release!.minVersion, isNull);
-    });
+        expect(release, isNotNull);
+        expect(release!.minVersion, isNull);
+      },
+    );
 
     test('404 → null, no backoff', () async {
       final source = GithubReleasesSource(
@@ -109,34 +133,41 @@ void main() {
       expect(source.backoffUntil, isNull);
     });
 
-    test('403 → backoffUntil from x-ratelimit-reset; never retries until it passes',
-        () async {
-      var calls = 0;
-      final resetEpoch = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600;
-      final source = GithubReleasesSource(
-        client: MockClient((_) async {
-          calls++;
-          return http.Response('{"message":"API rate limit exceeded"}', 403,
-              headers: {'x-ratelimit-reset': '$resetEpoch'});
-        }),
-      );
+    test(
+      '403 → backoffUntil from x-ratelimit-reset; never retries until it passes',
+      () async {
+        var calls = 0;
+        final resetEpoch = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600;
+        final source = GithubReleasesSource(
+          client: MockClient((_) async {
+            calls++;
+            return http.Response(
+              '{"message":"API rate limit exceeded"}',
+              403,
+              headers: {'x-ratelimit-reset': '$resetEpoch'},
+            );
+          }),
+        );
 
-      expect(await source.fetchLatestRelease(), isNull);
-      expect(source.backoffUntil, isNotNull);
-      expect(source.backoffUntil!.isAfter(DateTime.now()), isTrue);
+        expect(await source.fetchLatestRelease(), isNull);
+        expect(source.backoffUntil, isNotNull);
+        expect(source.backoffUntil!.isAfter(DateTime.now()), isTrue);
 
-      // Second call refused by the source's own backoff gate.
-      expect(await source.fetchLatestRelease(), isNull);
-      expect(calls, 1);
-    });
+        // Second call refused by the source's own backoff gate.
+        expect(await source.fetchLatestRelease(), isNull);
+        expect(calls, 1);
+      },
+    );
 
     test('429 → backoffUntil from retry-after', () async {
       final source = GithubReleasesSource(
-        client: MockClient((_) async => http.Response(
-              '{"message":"Too Many Requests"}',
-              429,
-              headers: {'retry-after': '120'},
-            )),
+        client: MockClient(
+          (_) async => http.Response(
+            '{"message":"Too Many Requests"}',
+            429,
+            headers: {'retry-after': '120'},
+          ),
+        ),
       );
 
       expect(await source.fetchLatestRelease(), isNull);
@@ -145,10 +176,13 @@ void main() {
       // Skew-tolerant window — the source timestamps with its own clock read.
       final now = DateTime.now();
       expect(
-          source.backoffUntil!.isAfter(now.subtract(const Duration(seconds: 5))),
-          isTrue);
-      expect(source.backoffUntil!.isBefore(now.add(const Duration(seconds: 125))),
-          isTrue);
+        source.backoffUntil!.isAfter(now.subtract(const Duration(seconds: 5))),
+        isTrue,
+      );
+      expect(
+        source.backoffUntil!.isBefore(now.add(const Duration(seconds: 125))),
+        isTrue,
+      );
     });
 
     test('expired backoff allows retry and 200 clears the backoff', () async {

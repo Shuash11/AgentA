@@ -18,21 +18,28 @@ class LocalMessageDao {
     } catch (e) {
       // L20: supabase client may be unavailable offline — log and fall
       // through to the local-session fallback instead of silently dropping.
-      if (kDebugMode) debugPrint('[LocalMessageDao] supabase uid read failed: $e');
+      if (kDebugMode) {
+        debugPrint('[LocalMessageDao] supabase uid read failed: $e');
+      }
     }
     try {
       final session = await SessionManager.currentSession();
       if (session != null) return session.uid;
     } catch (e) {
-      if (kDebugMode) debugPrint('[LocalMessageDao] local session read failed: $e');
+      if (kDebugMode) {
+        debugPrint('[LocalMessageDao] local session read failed: $e');
+      }
     }
     return '';
   }
 
   Future<void> insert(ChatMessageModel msg) async {
     final db = await _dbHelper.database;
-    await db.insert('messages', msg.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+      'messages',
+      msg.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<List<ChatMessageModel>> getByChat(String chatId) async {
@@ -80,7 +87,9 @@ class LocalMessageDao {
     return rows.map(ChatMessageModel.fromMap).toList();
   }
 
-  Future<void> replaceMessagesPreservingUnsynced(List<ChatMessageModel> messages) async {
+  Future<void> replaceMessagesPreservingUnsynced(
+    List<ChatMessageModel> messages,
+  ) async {
     if (messages.isEmpty) return;
     final db = await _dbHelper.database;
 
@@ -89,7 +98,10 @@ class LocalMessageDao {
     final Set<String> unsyncedIds = {};
 
     for (int i = 0; i < ids.length; i += chunkSize) {
-      final chunk = ids.sublist(i, i + chunkSize > ids.length ? ids.length : i + chunkSize);
+      final chunk = ids.sublist(
+        i,
+        i + chunkSize > ids.length ? ids.length : i + chunkSize,
+      );
       final placeholders = List.filled(chunk.length, '?').join(',');
       final rows = await db.query(
         'messages',
@@ -104,13 +116,19 @@ class LocalMessageDao {
       }
     }
 
-    final toInsert = messages.where((m) => !unsyncedIds.contains(m.id)).toList();
+    final toInsert = messages
+        .where((m) => !unsyncedIds.contains(m.id))
+        .toList();
     if (toInsert.isEmpty) return;
 
     await db.transaction((txn) async {
       final batch = txn.batch();
       for (final msg in toInsert) {
-        batch.insert('messages', msg.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+        batch.insert(
+          'messages',
+          msg.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
       }
       await batch.commit(noResult: true);
     });
@@ -129,12 +147,13 @@ class LocalMessageDao {
     if (oldUserId == newUserId) return;
     final db = await _dbHelper.database;
     final cols = await db.rawQuery('PRAGMA table_info(messages)');
-    final hasUserId =
-        cols.any((c) => (c['name'] as String?) == 'user_id');
+    final hasUserId = cols.any((c) => (c['name'] as String?) == 'user_id');
     if (!hasUserId) {
       if (kDebugMode) {
-        debugPrint('[LocalMessageDao] migrateUserId no-op '
-            '(no user_id column; parent chat migration covers messages)');
+        debugPrint(
+          '[LocalMessageDao] migrateUserId no-op '
+          '(no user_id column; parent chat migration covers messages)',
+        );
       }
       return;
     }

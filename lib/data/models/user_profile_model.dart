@@ -25,14 +25,14 @@ class UserProfileModel {
   };
 
   factory UserProfileModel.fromMap(Map<String, dynamic> map, String uid) =>
-    UserProfileModel(
-      uid: uid,
-      displayName: map['displayName'] ?? map['display_name'] ?? '',
-      email: map['email'] ?? '',
-      photoUrl: map['photo_url'],
-      recoveryCode: map['recoveryCode'] ?? map['recovery_code'] ?? '',
-      createdAt: _parseCreatedAt(map['created_at']),
-    );
+      UserProfileModel(
+        uid: uid,
+        displayName: map['displayName'] ?? map['display_name'] ?? '',
+        email: map['email'] ?? '',
+        photoUrl: map['photo_url'],
+        recoveryCode: map['recoveryCode'] ?? map['recovery_code'] ?? '',
+        createdAt: _parseCreatedAt(map['created_at']),
+      );
 
   static DateTime? _parseCreatedAt(dynamic value) {
     if (value == null) return null;

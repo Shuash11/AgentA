@@ -1,12 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'database_helper.dart';
 
-enum ModelDbStatus {
-  notInstalled,
-  ready,
-  error,
-  skipped,
-}
+enum ModelDbStatus { notInstalled, ready, error, skipped }
 
 class OfflineModelDao {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
@@ -21,60 +16,48 @@ class OfflineModelDao {
     final db = await _dbHelper.database;
     final now = DateTime.now().millisecondsSinceEpoch;
 
-    await db.insert(
-      _tableName,
-      {
-        'id': _singleRowId,
-        'model_type': modelType,
-        'status': ModelDbStatus.ready.name,
-        'downloaded_at': now,
-        'file_path': filePath,
-        'version': version,
-        'created_at': now,
-        'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert(_tableName, {
+      'id': _singleRowId,
+      'model_type': modelType,
+      'status': ModelDbStatus.ready.name,
+      'downloaded_at': now,
+      'file_path': filePath,
+      'version': version,
+      'created_at': now,
+      'updated_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> setModelNotInstalled() async {
     final db = await _dbHelper.database;
     final now = DateTime.now().millisecondsSinceEpoch;
 
-    await db.insert(
-      _tableName,
-      {
-        'id': _singleRowId,
-        'model_type': 'gemma3-1b-it-int4',
-        'status': ModelDbStatus.notInstalled.name,
-        'downloaded_at': null,
-        'file_path': null,
-        'version': null,
-        'created_at': now,
-        'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert(_tableName, {
+      'id': _singleRowId,
+      'model_type': 'gemma3-1b-it-int4',
+      'status': ModelDbStatus.notInstalled.name,
+      'downloaded_at': null,
+      'file_path': null,
+      'version': null,
+      'created_at': now,
+      'updated_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> setModelError(String? errorMessage) async {
     final db = await _dbHelper.database;
     final now = DateTime.now().millisecondsSinceEpoch;
 
-    await db.insert(
-      _tableName,
-      {
-        'id': _singleRowId,
-        'model_type': 'gemma3-1b-it-int4',
-        'status': ModelDbStatus.error.name,
-        'downloaded_at': null,
-        'file_path': null,
-        'version': errorMessage,
-        'created_at': now,
-        'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert(_tableName, {
+      'id': _singleRowId,
+      'model_type': 'gemma3-1b-it-int4',
+      'status': ModelDbStatus.error.name,
+      'downloaded_at': null,
+      'file_path': null,
+      'version': errorMessage,
+      'created_at': now,
+      'updated_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<Map<String, dynamic>?> getModelStatus() async {
@@ -113,10 +96,6 @@ class OfflineModelDao {
 
   Future<void> clearModelStatus() async {
     final db = await _dbHelper.database;
-    await db.delete(
-      _tableName,
-      where: 'id = ?',
-      whereArgs: [_singleRowId],
-    );
+    await db.delete(_tableName, where: 'id = ?', whereArgs: [_singleRowId]);
   }
 }

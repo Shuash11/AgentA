@@ -11,8 +11,14 @@ class AppSpacing {
 
   static const EdgeInsets pagePadding = EdgeInsets.all(base);
   static const EdgeInsets cardPadding = EdgeInsets.all(base);
-  static const EdgeInsets inputPadding = EdgeInsets.symmetric(horizontal: 16, vertical: 12);
-  static const EdgeInsets listItemPadding = EdgeInsets.symmetric(horizontal: base, vertical: md);
+  static const EdgeInsets inputPadding = EdgeInsets.symmetric(
+    horizontal: 16,
+    vertical: 12,
+  );
+  static const EdgeInsets listItemPadding = EdgeInsets.symmetric(
+    horizontal: base,
+    vertical: md,
+  );
 }
 
 class AppRadius {
@@ -121,32 +127,24 @@ class AppTheme {
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.amber,
         foregroundColor: Colors.black,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.buttonRadius,
-        ),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: AppColors.amber,
         side: const BorderSide(color: AppColors.amber),
-        shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.buttonRadius,
-        ),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: AppColors.amber,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.buttonRadius,
-        ),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
-      style: IconButton.styleFrom(
-        foregroundColor: AppColors.textDark,
-      ),
+      style: IconButton.styleFrom(foregroundColor: AppColors.textDark),
     ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       backgroundColor: AppColors.amber,
@@ -160,13 +158,17 @@ class AppTheme {
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.darkCard,
       contentTextStyle: const TextStyle(color: AppColors.textDark),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
       behavior: SnackBarBehavior.floating,
     ),
     bottomSheetTheme: const BottomSheetThemeData(
       backgroundColor: AppColors.darkSurface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.xxl),
+        ),
       ),
     ),
     dialogTheme: DialogThemeData(
@@ -207,32 +209,24 @@ class AppTheme {
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.amber,
         foregroundColor: Colors.black,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.buttonRadius,
-        ),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: AppColors.amberDark,
         side: const BorderSide(color: AppColors.amber),
-        shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.buttonRadius,
-        ),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: AppColors.amberDark,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.buttonRadius,
-        ),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
-      style: IconButton.styleFrom(
-        foregroundColor: AppColors.textLight,
-      ),
+      style: IconButton.styleFrom(foregroundColor: AppColors.textLight),
     ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       backgroundColor: AppColors.amber,
@@ -246,13 +240,17 @@ class AppTheme {
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.lightCard,
       contentTextStyle: const TextStyle(color: AppColors.textLight),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
       behavior: SnackBarBehavior.floating,
     ),
     bottomSheetTheme: const BottomSheetThemeData(
       backgroundColor: AppColors.lightSurface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.xxl),
+        ),
       ),
     ),
     dialogTheme: DialogThemeData(

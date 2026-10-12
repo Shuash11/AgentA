@@ -36,13 +36,21 @@ class ChatSessionModel {
         userId: map['user_id'] as String? ?? '',
         title: map['title'] as String? ?? '',
         lastMessage: map['last_message'] as String? ?? '',
-        updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updated_at'] as int? ?? 0),
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(
+          map['updated_at'] as int? ?? 0,
+        ),
         unread: map['unread'] as int? ?? 0,
         isSynced: map['is_synced'] == 1,
         isDeleted: map['is_deleted'] == 1,
       );
 
-  ChatSessionModel copyWith({bool? isSynced, bool? isDeleted, String? lastMessage, String? title, DateTime? updatedAt}) {
+  ChatSessionModel copyWith({
+    bool? isSynced,
+    bool? isDeleted,
+    String? lastMessage,
+    String? title,
+    DateTime? updatedAt,
+  }) {
     return ChatSessionModel(
       id: id,
       userId: userId,

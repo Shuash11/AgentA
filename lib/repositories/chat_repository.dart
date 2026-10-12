@@ -28,8 +28,9 @@ class ChatRepository {
     // unsynced edits are never resurrected here either.
     try {
       final remoteChats = await SupabaseChatService.getChatsPaged(userId);
-      final syncedChats =
-          remoteChats.map((chat) => chat.copyWith(isSynced: true)).toList();
+      final syncedChats = remoteChats
+          .map((chat) => chat.copyWith(isSynced: true))
+          .toList();
       await _localChatDao.replaceChatsPreservingUnsynced(syncedChats);
       // Re-read: synced rows are now present, tombstones/unsynced locals
       // untouched (replace skips them, query filters tombstones out).
@@ -39,7 +40,11 @@ class ChatRepository {
       }
       return fresh;
     } catch (e, stack) {
-      if (kDebugMode) debugPrint('[ChatRepository] getChatsForUser remote failed: $e | $stack');
+      if (kDebugMode) {
+        debugPrint(
+          '[ChatRepository] getChatsForUser remote failed: $e | $stack',
+        );
+      }
     }
     return local;
   }
@@ -55,9 +60,15 @@ class ChatRepository {
       try {
         await SupabaseChatService.saveChat(uid, chat);
         await _localChatDao.update(chat.copyWith(isSynced: true));
-        if (kDebugMode) debugPrint('[ChatRepository] createChat ${chat.id} synced');
+        if (kDebugMode) {
+          debugPrint('[ChatRepository] createChat ${chat.id} synced');
+        }
       } catch (e, stack) {
-        if (kDebugMode) debugPrint('[ChatRepository] createChat ${chat.id} failed keeps is_synced=0: $e | $stack');
+        if (kDebugMode) {
+          debugPrint(
+            '[ChatRepository] createChat ${chat.id} failed keeps is_synced=0: $e | $stack',
+          );
+        }
       }
     }
   }
@@ -69,9 +80,15 @@ class ChatRepository {
       try {
         await SupabaseChatService.saveChat(uid, chat);
         await _localChatDao.update(chat.copyWith(isSynced: true));
-        if (kDebugMode) debugPrint('[ChatRepository] updateChat ${chat.id} synced');
+        if (kDebugMode) {
+          debugPrint('[ChatRepository] updateChat ${chat.id} synced');
+        }
       } catch (e, stack) {
-        if (kDebugMode) debugPrint('[ChatRepository] updateChat ${chat.id} failed: $e | $stack');
+        if (kDebugMode) {
+          debugPrint(
+            '[ChatRepository] updateChat ${chat.id} failed: $e | $stack',
+          );
+        }
       }
     }
   }
@@ -83,9 +100,13 @@ class ChatRepository {
       try {
         await SupabaseChatService.deleteChat(uid, chatId);
         await _localChatDao.hardDelete(chatId);
-        if (kDebugMode) debugPrint('[ChatRepository] deleteChat $chatId synced');
+        if (kDebugMode) {
+          debugPrint('[ChatRepository] deleteChat $chatId synced');
+        }
       } catch (e, stack) {
-        if (kDebugMode) debugPrint('[ChatRepository] deleteChat $chatId failed: $e | $stack');
+        if (kDebugMode) {
+          debugPrint('[ChatRepository] deleteChat $chatId failed: $e | $stack');
+        }
       }
     }
   }

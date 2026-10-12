@@ -24,7 +24,8 @@ class UpdateDialogHost extends StatefulWidget {
   /// builder), so its own context cannot resolve a Navigator — dialog routes
   /// are pushed through this key directly instead. Assign it to the app's
   /// `MaterialApp.navigatorKey` (see main.dart).
-  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
 
   const UpdateDialogHost({super.key, required this.child});
 
@@ -73,26 +74,26 @@ class _UpdateDialogHostState extends State<UpdateDialogHost> {
     final wasForced = state.isForced;
     navigator
         .push(
-      DialogRoute<void>(
-        context: navigator.context,
-        builder: (_) => const UpdateAvailableDialog(),
-        // Forced dialogs can never be tapped away; available ones can — any
-        // close path then counts as "Later".
-        barrierDismissible: !wasForced,
-        barrierColor: Colors.black54,
-        barrierLabel: 'Update dialog',
-      ),
-    )
+          DialogRoute<void>(
+            context: navigator.context,
+            builder: (_) => const UpdateAvailableDialog(),
+            // Forced dialogs can never be tapped away; available ones can — any
+            // close path then counts as "Later".
+            barrierDismissible: !wasForced,
+            barrierColor: Colors.black54,
+            barrierLabel: 'Update dialog',
+          ),
+        )
         .then((_) async {
-      _isShowing = false;
-      if (!wasForced) {
-        // Dismiss the shown version; a newer one re-triggers automatically.
-        // Awaited: _showIfDue must not run while the state is still
-        // "available" (pre-dismissal), or the dialog would instantly re-show.
-        await cubit.dismissUntilNextVersion();
-      }
-      // A newer release (or a state change while closed) re-evaluates.
-      _showIfDue();
-    });
+          _isShowing = false;
+          if (!wasForced) {
+            // Dismiss the shown version; a newer one re-triggers automatically.
+            // Awaited: _showIfDue must not run while the state is still
+            // "available" (pre-dismissal), or the dialog would instantly re-show.
+            await cubit.dismissUntilNextVersion();
+          }
+          // A newer release (or a state change while closed) re-evaluates.
+          _showIfDue();
+        });
   }
 }

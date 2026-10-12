@@ -25,7 +25,10 @@ void main() {
 
     test('supabase getters trim (M21)', () {
       expect(AppConfig.supabaseUrl, equals(AppConfig.supabaseUrl.trim()));
-      expect(AppConfig.supabasePublishableKey, equals(AppConfig.supabasePublishableKey.trim()));
+      expect(
+        AppConfig.supabasePublishableKey,
+        equals(AppConfig.supabasePublishableKey.trim()),
+      );
     });
 
     test('envLengths logs lengths-only (no secrets)', () {
@@ -56,8 +59,14 @@ void main() {
       expect(AuthService.validatePassword('12345'), isNotNull);
       // M12: minimum 8 chars + letters and digits.
       expect(AuthService.validatePassword('123456'), isNotNull); // too short
-      expect(AuthService.validatePassword('12345678'), isNotNull); // digits only
-      expect(AuthService.validatePassword('abcdefgh'), isNotNull); // letters only
+      expect(
+        AuthService.validatePassword('12345678'),
+        isNotNull,
+      ); // digits only
+      expect(
+        AuthService.validatePassword('abcdefgh'),
+        isNotNull,
+      ); // letters only
       expect(AuthService.validatePassword('abc12345'), isNull); // valid
     });
   });

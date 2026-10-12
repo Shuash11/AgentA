@@ -181,16 +181,13 @@ void main() {
       expect(pruned, 1);
       expect(await chatDao.getById('ghost'), isNull);
       expect(
-        await db.query('messages',
-            where: 'chat_id = ?', whereArgs: ['ghost']),
+        await db.query('messages', where: 'chat_id = ?', whereArgs: ['ghost']),
         isEmpty,
       );
     });
 
     test('unsynced row absent remotely is preserved', () async {
-      await chatDao.insert(
-        pruneChat(id: 'pending', isSynced: false),
-      );
+      await chatDao.insert(pruneChat(id: 'pending', isSynced: false));
 
       final pruned = await chatDao.pruneChatsGoneRemote({'other-chat'});
 
@@ -207,8 +204,7 @@ void main() {
       expect(pruned, 0);
       expect(await chatDao.getById('alive'), isNotNull);
       expect(
-        await db.query('messages',
-            where: 'chat_id = ?', whereArgs: ['alive']),
+        await db.query('messages', where: 'chat_id = ?', whereArgs: ['alive']),
         hasLength(1),
       );
     });
@@ -241,8 +237,11 @@ void main() {
       expect(pruned, 0);
       expect(await chatDao.getById('busy'), isNotNull);
       expect(
-        await db.query('messages',
-            where: 'chat_id = ? AND id = ?', whereArgs: ['busy', 'unsent-m']),
+        await db.query(
+          'messages',
+          where: 'chat_id = ? AND id = ?',
+          whereArgs: ['busy', 'unsent-m'],
+        ),
         hasLength(1),
       );
     });
@@ -251,9 +250,7 @@ void main() {
       await chatDao.insert(pruneChat(id: 'ghost'));
       await msgDao.insert(pruneMessage(id: 'm-ghost', chatId: 'ghost'));
       await chatDao.insert(pruneChat(id: 'alive'));
-      await chatDao.insert(
-        pruneChat(id: 'pending', isSynced: false),
-      );
+      await chatDao.insert(pruneChat(id: 'pending', isSynced: false));
       await chatDao.insert(
         pruneChat(id: 'tomb', isSynced: true, isDeleted: true),
       );

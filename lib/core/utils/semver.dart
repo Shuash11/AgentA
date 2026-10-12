@@ -23,7 +23,11 @@ class SemVer implements Comparable<SemVer> {
     final s = raw.trim();
     if (!_strictPattern.hasMatch(s)) return null;
     final parts = s.split('.');
-    return SemVer(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+    return SemVer(
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+      int.parse(parts[2]),
+    );
   }
 
   /// Parses a release tag name, stripping an optional leading `v`/`V`

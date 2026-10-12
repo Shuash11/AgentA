@@ -21,8 +21,9 @@ class ConnectivityService {
     _statusController.add(initialStatus);
 
     await _connectivitySubscription?.cancel();
-    _connectivitySubscription =
-        _connectivity.onConnectivityChanged.listen((result) async {
+    _connectivitySubscription = _connectivity.onConnectivityChanged.listen((
+      result,
+    ) async {
       final newStatus = await checkInternetStatus();
       if (newStatus != _lastStatus) {
         _lastStatus = newStatus;
@@ -69,8 +70,4 @@ class ConnectivityService {
   }
 }
 
-enum InternetStatus {
-  online,
-  offline,
-  limited,
-}
+enum InternetStatus { online, offline, limited }

@@ -75,8 +75,8 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
     if (isLocalImagePath(widget.imageUrl)) {
       return _buildLocalImage();
     }
-    final cacheWidth =
-        (widget.width * MediaQuery.devicePixelRatioOf(context)).round();
+    final cacheWidth = (widget.width * MediaQuery.devicePixelRatioOf(context))
+        .round();
 
     return Image.network(
       widget.imageUrl,
@@ -201,10 +201,7 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
           const SizedBox(height: 8),
           Text(
             progress != null ? 'Loading...' : 'Image',
-            style: TextStyle(
-              color: widget.colors.subtext,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: widget.colors.subtext, fontSize: 12),
           ),
         ],
       ),
@@ -220,8 +217,11 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.broken_image_outlined,
-              color: widget.colors.subtext, size: 32),
+          Icon(
+            Icons.broken_image_outlined,
+            color: widget.colors.subtext,
+            size: 32,
+          ),
           const SizedBox(height: 12),
           Text(
             'Image failed to load',
@@ -245,8 +245,11 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
                         color: widget.colors.amber,
                       ),
                     )
-                  : Icon(Icons.hd_outlined,
-                      color: widget.colors.amber, size: 18),
+                  : Icon(
+                      Icons.hd_outlined,
+                      color: widget.colors.amber,
+                      size: 18,
+                    ),
               label: Text(
                 _fallbackRunning ? 'Making HD...' : 'Try HD version',
                 style: TextStyle(color: widget.colors.amber),

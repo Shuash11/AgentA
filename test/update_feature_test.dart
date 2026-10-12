@@ -58,15 +58,17 @@ final List<VersionCheckService> createdServices = [];
 final List<UpdateCubit> createdCubits = [];
 late FakeUrlLauncher urlLauncherForTest;
 
-RemoteRelease makeRelease(String version,
-        {String? minVersion, String? downloadUrl}) =>
-    RemoteRelease(
-      version: version,
-      minVersion: minVersion,
-      downloadUrl: downloadUrl,
-      releaseUrl: 'https://github.com/Shuash11/AgentA/releases/tag/v$version',
-      notes: 'Bug fixes and improvements',
-    );
+RemoteRelease makeRelease(
+  String version, {
+  String? minVersion,
+  String? downloadUrl,
+}) => RemoteRelease(
+  version: version,
+  minVersion: minVersion,
+  downloadUrl: downloadUrl,
+  releaseUrl: 'https://github.com/Shuash11/AgentA/releases/tag/v$version',
+  notes: 'Bug fixes and improvements',
+);
 
 /// Lets the cubit's async dismissal load settle (in-memory prefs respond in
 /// microtasks; the service's fake fetch too).
@@ -108,7 +110,8 @@ Future<void> pumpApp(WidgetTester tester, UpdateCubit cubit) async {
 void main() {
   setUp(() {
     // Fresh in-memory prefs store + URL launcher fake per test.
-    SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
     urlLauncherForTest = FakeUrlLauncher();
     UrlLauncherPlatform.instance = urlLauncherForTest;
   });
@@ -125,21 +128,24 @@ void main() {
   });
 
   group('UpdateCubit state mapping (service levels → status)', () {
-    test('available maps to UpdateStatus.available with version info', () async {
-      final source = FakeVersionSource(release: makeRelease('1.2.0'));
-      final service = makeService(source);
-      service.setCurrentVersionForTest(version: '1.1.0', build: '2');
-      final cubit = makeCubit(service);
-      await settle();
+    test(
+      'available maps to UpdateStatus.available with version info',
+      () async {
+        final source = FakeVersionSource(release: makeRelease('1.2.0'));
+        final service = makeService(source);
+        service.setCurrentVersionForTest(version: '1.1.0', build: '2');
+        final cubit = makeCubit(service);
+        await settle();
 
-      await service.checkNow(); // fresh network result → cubit maps
-      await settle();
+        await service.checkNow(); // fresh network result → cubit maps
+        await settle();
 
-      expect(cubit.state.status, UpdateStatus.available);
-      expect(cubit.state.currentVersion, '1.1.0');
-      expect(cubit.state.currentBuild, 2);
-      expect(cubit.state.remote!.version, '1.2.0');
-    });
+        expect(cubit.state.status, UpdateStatus.available);
+        expect(cubit.state.currentVersion, '1.1.0');
+        expect(cubit.state.currentBuild, 2);
+        expect(cubit.state.remote!.version, '1.2.0');
+      },
+    );
 
     test('none maps to UpdateStatus.idle', () async {
       final source = FakeVersionSource(release: makeRelease('1.1.0'));
@@ -155,8 +161,9 @@ void main() {
     });
 
     test('forced maps to UpdateStatus.forced and cannot be dismissed', () async {
-      final source =
-          FakeVersionSource(release: makeRelease('1.2.0', minVersion: '1.1.5'));
+      final source = FakeVersionSource(
+        release: makeRelease('1.2.0', minVersion: '1.1.5'),
+      );
       final service = makeService(source);
       service.setCurrentVersionForTest(version: '1.1.0', build: '2');
       final cubit = makeCubit(service);
@@ -173,8 +180,9 @@ void main() {
       await settle();
       expect(cubit.state.status, UpdateStatus.forced);
       expect(cubit.dismissedVersion, isNull);
-      final persisted =
-          await SharedPreferencesAsync().getString(UpdateCubit.dismissedVersionKey);
+      final persisted = await SharedPreferencesAsync().getString(
+        UpdateCubit.dismissedVersionKey,
+      );
       expect(persisted, isNull);
     });
 
@@ -193,35 +201,37 @@ void main() {
   });
 
   group('UpdateCubit dismissal (SharedPreferencesAsync, show rules)', () {
-    test('dismissed version suppressed for the same version; newer re-triggers',
-        () async {
-      // Remote NEWER than current → dialog shows as available.
-      final source = FakeVersionSource(release: makeRelease('1.1.5'));
-      final service = makeService(source);
-      service.setCurrentVersionForTest(version: '1.1.0', build: '2');
-      final cubit = makeCubit(service);
-      await settle();
+    test(
+      'dismissed version suppressed for the same version; newer re-triggers',
+      () async {
+        // Remote NEWER than current → dialog shows as available.
+        final source = FakeVersionSource(release: makeRelease('1.1.5'));
+        final service = makeService(source);
+        service.setCurrentVersionForTest(version: '1.1.0', build: '2');
+        final cubit = makeCubit(service);
+        await settle();
 
-      await service.checkNow();
-      await settle();
-      expect(cubit.state.status, UpdateStatus.available);
+        await service.checkNow();
+        await settle();
+        expect(cubit.state.status, UpdateStatus.available);
 
-      await cubit.dismissUntilNextVersion();
-      await settle();
-      expect(cubit.state.status, UpdateStatus.idle);
-      expect(cubit.dismissedVersion, '1.1.5');
+        await cubit.dismissUntilNextVersion();
+        await settle();
+        expect(cubit.state.status, UpdateStatus.idle);
+        expect(cubit.dismissedVersion, '1.1.5');
 
-      // Same version again → stays suppressed.
-      await service.checkNow();
-      await settle();
-      expect(cubit.state.status, UpdateStatus.idle);
+        // Same version again → stays suppressed.
+        await service.checkNow();
+        await settle();
+        expect(cubit.state.status, UpdateStatus.idle);
 
-      // A newer release automatically re-triggers.
-      source.release = makeRelease('1.2.0');
-      await service.checkNow();
-      await settle();
-      expect(cubit.state.status, UpdateStatus.available);
-    });
+        // A newer release automatically re-triggers.
+        source.release = makeRelease('1.2.0');
+        await service.checkNow();
+        await settle();
+        expect(cubit.state.status, UpdateStatus.available);
+      },
+    );
 
     test('dismissal persists and a fresh cubit loads it (roundtrip)', () async {
       final source = FakeVersionSource(release: makeRelease('1.1.0'));
@@ -235,8 +245,9 @@ void main() {
       await cubit.dismissUntilNextVersion();
       await settle();
 
-      final persisted =
-          await SharedPreferencesAsync().getString(UpdateCubit.dismissedVersionKey);
+      final persisted = await SharedPreferencesAsync().getString(
+        UpdateCubit.dismissedVersionKey,
+      );
       expect(persisted, '1.1.0');
 
       // Fresh cubit (same store) loads the persisted dismissal and suppresses.
@@ -267,30 +278,34 @@ void main() {
       expect(find.text('AgentA'), findsOneWidget); // app still beneath
     });
 
-    testWidgets('not shown after dismissUntilNextVersion for the same version',
-        (tester) async {
-      // Remote NEWER than current → dialog shows as available.
-      final source = FakeVersionSource(release: makeRelease('1.2.0'));
-      final service = makeService(source);
-      service.setCurrentVersionForTest(version: '1.1.0', build: '2');
-      final cubit = makeCubit(service);
+    testWidgets(
+      'not shown after dismissUntilNextVersion for the same version',
+      (tester) async {
+        // Remote NEWER than current → dialog shows as available.
+        final source = FakeVersionSource(release: makeRelease('1.2.0'));
+        final service = makeService(source);
+        service.setCurrentVersionForTest(version: '1.1.0', build: '2');
+        final cubit = makeCubit(service);
 
-      await pumpApp(tester, cubit);
-      await service.checkNow();
-      await tester.pumpAndSettle();
-      expect(find.text('New version available'), findsOneWidget);
+        await pumpApp(tester, cubit);
+        await service.checkNow();
+        await tester.pumpAndSettle();
+        expect(find.text('New version available'), findsOneWidget);
 
-      await tester.tap(find.text('Later'));
-      await tester.pumpAndSettle(); // dialog closes + dismissal persisted
-      expect(find.text('New version available'), findsNothing);
+        await tester.tap(find.text('Later'));
+        await tester.pumpAndSettle(); // dialog closes + dismissal persisted
+        expect(find.text('New version available'), findsNothing);
 
-      // Same version again → no dialog.
-      await service.checkNow();
-      await tester.pumpAndSettle();
-      expect(find.text('New version available'), findsNothing);
-    });
+        // Same version again → no dialog.
+        await service.checkNow();
+        await tester.pumpAndSettle();
+        expect(find.text('New version available'), findsNothing);
+      },
+    );
 
-    testWidgets('shown again for a newer version after dismissal', (tester) async {
+    testWidgets('shown again for a newer version after dismissal', (
+      tester,
+    ) async {
       // Remote NEWER than current → dialog shows, then is dismissed.
       final source = FakeVersionSource(release: makeRelease('1.2.0'));
       final service = makeService(source);
@@ -313,8 +328,9 @@ void main() {
     });
 
     testWidgets('forced shows non-dismissible Update-only', (tester) async {
-      final source =
-          FakeVersionSource(release: makeRelease('1.2.0', minVersion: '1.1.5'));
+      final source = FakeVersionSource(
+        release: makeRelease('1.2.0', minVersion: '1.1.5'),
+      );
       final service = makeService(source);
       service.setCurrentVersionForTest(version: '1.1.0', build: '2');
       final cubit = makeCubit(service);
@@ -328,9 +344,12 @@ void main() {
       expect(find.text('Later'), findsNothing); // forced: no dismiss button
     });
 
-    testWidgets('Update tap attempts launch on the APK asset URL', (tester) async {
-      final source =
-          FakeVersionSource(release: makeRelease('1.2.0', downloadUrl: _apkUrl));
+    testWidgets('Update tap attempts launch on the APK asset URL', (
+      tester,
+    ) async {
+      final source = FakeVersionSource(
+        release: makeRelease('1.2.0', downloadUrl: _apkUrl),
+      );
       final service = makeService(source);
       service.setCurrentVersionForTest(version: '1.1.0', build: '2');
       final cubit = makeCubit(service);
@@ -348,30 +367,34 @@ void main() {
       expect(cubit.state.status, UpdateStatus.idle);
     });
 
-    testWidgets('launch failure shows snackbar fallback and keeps the dialog open',
-        (tester) async {
-      urlLauncherForTest.shouldLaunch = false;
-      final source =
-          FakeVersionSource(release: makeRelease('1.2.0', downloadUrl: _apkUrl));
-      final service = makeService(source);
-      service.setCurrentVersionForTest(version: '1.1.0', build: '2');
-      final cubit = makeCubit(service);
+    testWidgets(
+      'launch failure shows snackbar fallback and keeps the dialog open',
+      (tester) async {
+        urlLauncherForTest.shouldLaunch = false;
+        final source = FakeVersionSource(
+          release: makeRelease('1.2.0', downloadUrl: _apkUrl),
+        );
+        final service = makeService(source);
+        service.setCurrentVersionForTest(version: '1.1.0', build: '2');
+        final cubit = makeCubit(service);
 
-      await pumpApp(tester, cubit);
-      await service.checkNow();
-      await tester.pumpAndSettle();
+        await pumpApp(tester, cubit);
+        await service.checkNow();
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Update'));
-      await tester.pump(); // start snackbar entrance
-      await tester.pump(const Duration(milliseconds: 300)); // finish entrance
+        await tester.tap(find.text('Update'));
+        await tester.pump(); // start snackbar entrance
+        await tester.pump(const Duration(milliseconds: 300)); // finish entrance
 
-      expect(find.byType(SnackBar), findsOneWidget);
-      expect(find.text('Update'), findsOneWidget); // dialog stays open
-      expect(cubit.state.status, UpdateStatus.available); // not dismissed
-    });
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(find.text('Update'), findsOneWidget); // dialog stays open
+        expect(cubit.state.status, UpdateStatus.available); // not dismissed
+      },
+    );
 
-    testWidgets('no duplicate dialog while showing; content updates live',
-        (tester) async {
+    testWidgets('no duplicate dialog while showing; content updates live', (
+      tester,
+    ) async {
       final source = FakeVersionSource(release: makeRelease('1.2.0'));
       final service = makeService(source);
       service.setCurrentVersionForTest(version: '1.1.0', build: '2');

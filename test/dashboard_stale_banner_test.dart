@@ -93,9 +93,7 @@ Future<void> pumpDashboard(WidgetTester tester, ChatRepository repo) async {
         ChangeNotifierProvider<ModelDownloadService>.value(value: modelService),
         ChangeNotifierProvider<OnlineAIService>.value(value: onlineService),
       ],
-      child: const MaterialApp(
-        home: Dashboard(showBackButton: false),
-      ),
+      child: const MaterialApp(home: Dashboard(showBackButton: false)),
     ),
   );
   await tester.pump();
@@ -115,8 +113,9 @@ Future<void> settleRefresh(WidgetTester tester) async {
 /// vsync clock, so it must NOT be awaited before pumping (that deadlocks).
 /// Start it, pump to drive the animation + refresh future, then await it.
 Future<void> triggerReload(WidgetTester tester) async {
-  final state =
-      tester.state<RefreshIndicatorState>(find.byType(RefreshIndicator));
+  final state = tester.state<RefreshIndicatorState>(
+    find.byType(RefreshIndicator),
+  );
   final Future<void> showFuture = state.show();
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 100));
@@ -137,49 +136,51 @@ void main() {
   setUpAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(secureStorage, (call) async {
-      switch (call.method) {
-        case 'read':
-          return null;
-        case 'readAll':
-          return <String, dynamic>{};
-        case 'containsKey':
-        case 'isProtectedDataAvailable':
-          return false;
-        default:
-          return null;
-      }
-    });
+          switch (call.method) {
+            case 'read':
+              return null;
+            case 'readAll':
+              return <String, dynamic>{};
+            case 'containsKey':
+            case 'isProtectedDataAvailable':
+              return false;
+            default:
+              return null;
+          }
+        });
   });
 
   group('Dashboard stale banner', () {
     testWidgets(
-        'populated list + reload failure keeps list with banner, no full-screen error',
-        (tester) async {
-      final repo = SequenceFakeRepository(
-        [sampleChat('c1', 'Alpine trip')],
-        failOnCall: const {2},
-      );
-      await pumpDashboard(tester, repo);
+      'populated list + reload failure keeps list with banner, no full-screen error',
+      (tester) async {
+        final repo = SequenceFakeRepository(
+          [sampleChat('c1', 'Alpine trip')],
+          failOnCall: const {2},
+        );
+        await pumpDashboard(tester, repo);
 
-      // Initial success: list visible, no banner, no full-screen error.
-      expect(find.text('Alpine trip'), findsOneWidget);
-      expect(find.text(staleBannerText), findsNothing);
-      expect(find.text(fullScreenErrorText), findsNothing);
+        // Initial success: list visible, no banner, no full-screen error.
+        expect(find.text('Alpine trip'), findsOneWidget);
+        expect(find.text(staleBannerText), findsNothing);
+        expect(find.text(fullScreenErrorText), findsNothing);
 
-      // Reload fails: stale banner appears, list stays.
-      await triggerReload(tester);
+        // Reload fails: stale banner appears, list stays.
+        await triggerReload(tester);
 
-      expect(find.text('Alpine trip'), findsOneWidget);
-      expect(find.text(staleBannerText), findsOneWidget);
-      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
-      expect(find.text('Retry'), findsOneWidget);
-      expect(find.text(fullScreenErrorText), findsNothing);
-      expect(find.byIcon(Icons.error_outline_rounded), findsNothing);
-      expect(find.text('No conversations yet'), findsNothing);
-    });
+        expect(find.text('Alpine trip'), findsOneWidget);
+        expect(find.text(staleBannerText), findsOneWidget);
+        expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+        expect(find.text('Retry'), findsOneWidget);
+        expect(find.text(fullScreenErrorText), findsNothing);
+        expect(find.byIcon(Icons.error_outline_rounded), findsNothing);
+        expect(find.text('No conversations yet'), findsNothing);
+      },
+    );
 
-    testWidgets('empty + load failure shows full-screen error, no banner',
-        (tester) async {
+    testWidgets('empty + load failure shows full-screen error, no banner', (
+      tester,
+    ) async {
       await pumpDashboard(
         tester,
         FakeChatRepository(const [], failuresRemaining: 99),
@@ -193,8 +194,9 @@ void main() {
       expect(find.text('No conversations yet'), findsNothing);
     });
 
-    testWidgets('banner Retry triggers reload and clears banner on success',
-        (tester) async {
+    testWidgets('banner Retry triggers reload and clears banner on success', (
+      tester,
+    ) async {
       final repo = SequenceFakeRepository(
         [sampleChat('c1', 'Alpine trip')],
         failOnCall: const {2},

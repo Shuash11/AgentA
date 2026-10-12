@@ -68,15 +68,20 @@ class DatabaseHelper {
       ''');
     }
     if (oldVersion < 4) {
-      await db.execute('ALTER TABLE chat_sessions ADD COLUMN is_deleted INTEGER DEFAULT 0');
-      await db.execute('ALTER TABLE messages ADD COLUMN is_deleted INTEGER DEFAULT 0');
+      await db.execute(
+        'ALTER TABLE chat_sessions ADD COLUMN is_deleted INTEGER DEFAULT 0',
+      );
+      await db.execute(
+        'ALTER TABLE messages ADD COLUMN is_deleted INTEGER DEFAULT 0',
+      );
     }
     if (oldVersion < 5) {
       await _createIndexes(db);
     }
     if (oldVersion < 6) {
       await db.execute(
-          'ALTER TABLE pending_signups ADD COLUMN provider TEXT DEFAULT \'password\'');
+        'ALTER TABLE pending_signups ADD COLUMN provider TEXT DEFAULT \'password\'',
+      );
       // C2+C5 migration: never stash plaintext. Legacy unsalted/plaintext
       // rows are forced to re-enroll (password cleared) instead of being
       // copied into secure storage.
@@ -85,8 +90,12 @@ class DatabaseHelper {
         final localId = row['local_id'] as String;
         final stored = (row['password'] as String?) ?? '';
         if (stored.isEmpty) {
-          await db.update('pending_signups', {'provider': 'google'},
-              where: 'local_id = ?', whereArgs: [localId]);
+          await db.update(
+            'pending_signups',
+            {'provider': 'google'},
+            where: 'local_id = ?',
+            whereArgs: [localId],
+          );
           continue;
         }
         await SessionManager.dropStashedPassword(localId);
@@ -182,7 +191,8 @@ class DatabaseHelper {
     final names = cols.map((c) => c['name'] as String).toSet();
     if (!names.contains('password_salt')) {
       await db.execute(
-          'ALTER TABLE pending_signups ADD COLUMN password_salt TEXT DEFAULT \'\'');
+        'ALTER TABLE pending_signups ADD COLUMN password_salt TEXT DEFAULT \'\'',
+      );
     }
     final rows = await db.query('pending_signups');
     for (final row in rows) {
@@ -194,9 +204,12 @@ class DatabaseHelper {
       // original password — wipe and require re-entry.
       if (salt.isEmpty) {
         await SessionManager.dropStashedPassword(localId);
-        await db.update('pending_signups',
-            {'password': '', 'password_salt': ''},
-            where: 'local_id = ?', whereArgs: [localId]);
+        await db.update(
+          'pending_signups',
+          {'password': '', 'password_salt': ''},
+          where: 'local_id = ?',
+          whereArgs: [localId],
+        );
       }
     }
   }

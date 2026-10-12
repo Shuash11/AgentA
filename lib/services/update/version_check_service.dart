@@ -76,7 +76,8 @@ class VersionCheckService with WidgetsBindingObserver {
   AppLifecycleState? _lifecycleState;
 
   DateTime? _lastCheckAt; // last network call attempt — throttle gate
-  DateTime? _lastSuccessfulCheckAt; // last successful response — cache timestamp
+  DateTime?
+  _lastSuccessfulCheckAt; // last successful response — cache timestamp
   RemoteRelease? _cachedRelease; // last successful response — never drives UI
 
   String? _currentVersion;
@@ -100,10 +101,10 @@ class VersionCheckService with WidgetsBindingObserver {
     ConnectivityService? connectivity,
     bool? enabled,
     Duration? minCheckInterval,
-  })  : _source = source ?? GithubReleasesSource(),
-        _connectivity = connectivity ?? ConnectivityService.instance,
-        _enabled = enabled ?? kReleaseMode,
-        _minCheckIntervalOverride = minCheckInterval;
+  }) : _source = source ?? GithubReleasesSource(),
+       _connectivity = connectivity ?? ConnectivityService.instance,
+       _enabled = enabled ?? kReleaseMode,
+       _minCheckIntervalOverride = minCheckInterval;
 
   Duration get _minInterval => _minCheckIntervalOverride ?? _minCheckInterval;
 
@@ -197,8 +198,9 @@ class VersionCheckService with WidgetsBindingObserver {
 
     // Rate-limit backoff: never retry until the deadline passes.
     if (_isBackedOff) {
-      final until =
-          _source is GithubReleasesSource ? _source.backoffUntil : null;
+      final until = _source is GithubReleasesSource
+          ? _source.backoffUntil
+          : null;
       _log('[Update] skip — rate-limit backoff until $until');
       return null;
     }
@@ -207,7 +209,9 @@ class VersionCheckService with WidgetsBindingObserver {
     if (respectInterval && _lastCheckAt != null) {
       final since = DateTime.now().difference(_lastCheckAt!);
       if (since < _minInterval) {
-        _log('[Update] skip — throttled (min interval ${_minInterval.inMinutes}m)');
+        _log(
+          '[Update] skip — throttled (min interval ${_minInterval.inMinutes}m)',
+        );
         return null;
       }
     }
@@ -238,7 +242,9 @@ class VersionCheckService with WidgetsBindingObserver {
       final result = _decide(remote, current);
       _lastResult = result;
       _resultController.add(result);
-      _log('[Update] level=${result.level.name} current=$_currentVersion remote=v${remote.version}');
+      _log(
+        '[Update] level=${result.level.name} current=$_currentVersion remote=v${remote.version}',
+      );
       return result;
     } catch (e) {
       // Silent failure — debug log only.
@@ -264,8 +270,9 @@ class VersionCheckService with WidgetsBindingObserver {
   /// user-facing release bumps semver).
   UpdateCheckResult _decide(RemoteRelease remote, SemVer current) {
     final latest = SemVer.tryParse(remote.version);
-    final min =
-        remote.minVersion == null ? null : SemVer.tryParse(remote.minVersion!);
+    final min = remote.minVersion == null
+        ? null
+        : SemVer.tryParse(remote.minVersion!);
 
     var level = UpdateLevel.none;
     if (latest != null) {
@@ -285,7 +292,10 @@ class VersionCheckService with WidgetsBindingObserver {
 
   /// Test hook — injects the current version without the platform channel.
   @visibleForTesting
-  void setCurrentVersionForTest({required String version, required String build}) {
+  void setCurrentVersionForTest({
+    required String version,
+    required String build,
+  }) {
     _currentVersion = version;
     _currentBuild = build;
   }

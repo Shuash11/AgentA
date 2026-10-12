@@ -78,7 +78,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-                'Code sent again! Check your Gmail inbox (and spam folder).'),
+              'Code sent again! Check your Gmail inbox (and spam folder).',
+            ),
             duration: Duration(seconds: 2),
           ),
         );
@@ -86,7 +87,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = 'Failed to send the code. Please check the email and try again.';
+        _errorMessage =
+            'Failed to send the code. Please check the email and try again.';
         _isLoading = false;
       });
     }
@@ -131,8 +133,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
   }
 
-  void _togglePassword() =>
-      setState(() => _showPassword = !_showPassword);
+  void _togglePassword() => setState(() => _showPassword = !_showPassword);
 
   void _toggleConfirmPassword() =>
       setState(() => _showConfirmPassword = !_showConfirmPassword);
@@ -148,7 +149,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           backgroundColor: colors.background,
           elevation: 0,
           leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios_new_rounded, color: colors.text, size: 20),
+            icon: Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: colors.text,
+              size: 20,
+            ),
             onPressed: () => Navigator.pop(context),
           ),
         ),
@@ -167,26 +172,26 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     onSendOtp: _sendOtp,
                   )
                 : _stage == _ResetStage.otp
-                    ? _OtpStep(
-                        formKey: _otpFormKey,
-                        email: _email,
-                        otpController: _otpController,
-                        passwordController: _passwordController,
-                        confirmPasswordController: _confirmPasswordController,
-                        showPassword: _showPassword,
-                        showConfirmPassword: _showConfirmPassword,
-                        isLoading: _isLoading,
-                        errorMessage: _errorMessage,
-                        colors: colors,
-                        onTogglePassword: _togglePassword,
-                        onToggleConfirmPassword: _toggleConfirmPassword,
-                        onResendOtp: _sendOtp,
-                        onResetPassword: _resetPassword,
-                      )
-                    : _DoneStep(
-                        colors: colors,
-                        onBackToLogin: () => Navigator.pop(context),
-                      ),
+                ? _OtpStep(
+                    formKey: _otpFormKey,
+                    email: _email,
+                    otpController: _otpController,
+                    passwordController: _passwordController,
+                    confirmPasswordController: _confirmPasswordController,
+                    showPassword: _showPassword,
+                    showConfirmPassword: _showConfirmPassword,
+                    isLoading: _isLoading,
+                    errorMessage: _errorMessage,
+                    colors: colors,
+                    onTogglePassword: _togglePassword,
+                    onToggleConfirmPassword: _toggleConfirmPassword,
+                    onResendOtp: _sendOtp,
+                    onResetPassword: _resetPassword,
+                  )
+                : _DoneStep(
+                    colors: colors,
+                    onBackToLogin: () => Navigator.pop(context),
+                  ),
           ),
         ),
       ),
@@ -224,7 +229,10 @@ class _EmailStep extends StatelessWidget {
           const SizedBox(height: 44),
           Text(
             "Email",
-            style: TextStyle(fontWeight: FontWeight.w600, color: colors.subtext),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: colors.subtext,
+            ),
           ),
           const SizedBox(height: 8),
           SystemKeyboardTextFormField(
@@ -238,7 +246,10 @@ class _EmailStep extends StatelessWidget {
               prefixIcon: Icon(Icons.email_outlined, color: colors.amber),
               filled: true,
               fillColor: colors.input,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
+              ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide(color: colors.border),
@@ -250,7 +261,8 @@ class _EmailStep extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          if (errorMessage != null) _ErrorBox(message: errorMessage!, colors: colors),
+          if (errorMessage != null)
+            _ErrorBox(message: errorMessage!, colors: colors),
           const SizedBox(height: 32),
           SizedBox(
             width: double.infinity,
@@ -266,7 +278,13 @@ class _EmailStep extends StatelessWidget {
                         color: Colors.black,
                       ),
                     )
-                  : const Text("Send Code", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  : const Text(
+                      "Send Code",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
             ),
           ),
         ],
@@ -334,11 +352,17 @@ class _OtpStep extends StatelessWidget {
             decoration: BoxDecoration(
               color: const Color(0xFF00C853).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.3)),
+              border: Border.all(
+                color: const Color(0xFF00C853).withValues(alpha: 0.3),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.mark_email_read_outlined, color: Colors.green, size: 24),
+                const Icon(
+                  Icons.mark_email_read_outlined,
+                  color: Colors.green,
+                  size: 24,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -352,7 +376,10 @@ class _OtpStep extends StatelessWidget {
           const SizedBox(height: 24),
           Text(
             "Verification Code",
-            style: TextStyle(fontWeight: FontWeight.w600, color: colors.subtext),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: colors.subtext,
+            ),
           ),
           const SizedBox(height: 8),
           SystemKeyboardTextFormField(
@@ -375,7 +402,10 @@ class _OtpStep extends StatelessWidget {
               filled: true,
               fillColor: colors.input,
               counterText: "",
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
+              ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide(color: colors.border),
@@ -390,14 +420,19 @@ class _OtpStep extends StatelessWidget {
             alignment: Alignment.centerRight,
             child: TextButton(
               onPressed: isLoading ? null : onResendOtp,
-              child: Text("Didn't get it? Resend code",
-                  style: TextStyle(color: colors.amber, fontSize: 14)),
+              child: Text(
+                "Didn't get it? Resend code",
+                style: TextStyle(color: colors.amber, fontSize: 14),
+              ),
             ),
           ),
           const SizedBox(height: 12),
           Text(
             "New Password",
-            style: TextStyle(fontWeight: FontWeight.w600, color: colors.subtext),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: colors.subtext,
+            ),
           ),
           const SizedBox(height: 8),
           _PasswordField(
@@ -411,7 +446,10 @@ class _OtpStep extends StatelessWidget {
           const SizedBox(height: 20),
           Text(
             "Confirm New Password",
-            style: TextStyle(fontWeight: FontWeight.w600, color: colors.subtext),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: colors.subtext,
+            ),
           ),
           const SizedBox(height: 8),
           _PasswordField(
@@ -429,7 +467,8 @@ class _OtpStep extends StatelessWidget {
             },
           ),
           const SizedBox(height: 16),
-          if (errorMessage != null) _ErrorBox(message: errorMessage!, colors: colors),
+          if (errorMessage != null)
+            _ErrorBox(message: errorMessage!, colors: colors),
           const SizedBox(height: 32),
           SizedBox(
             width: double.infinity,
@@ -445,7 +484,13 @@ class _OtpStep extends StatelessWidget {
                         color: Colors.black,
                       ),
                     )
-                  : const Text("Reset Password", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  : const Text(
+                      "Reset Password",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
             ),
           ),
         ],
@@ -474,8 +519,11 @@ class _DoneStep extends StatelessWidget {
               color: const Color(0xFF00C853).withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.check_circle_outline_rounded,
-                color: Colors.green, size: 48),
+            child: const Icon(
+              Icons.check_circle_outline_rounded,
+              color: Colors.green,
+              size: 48,
+            ),
           ),
         ),
         const SizedBox(height: 32),
@@ -503,8 +551,10 @@ class _DoneStep extends StatelessWidget {
           height: 54,
           child: ElevatedButton(
             onPressed: onBackToLogin,
-            child: const Text("Back to Login",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            child: const Text(
+              "Back to Login",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
           ),
         ),
       ],
@@ -527,7 +577,11 @@ class _ResetHeader extends StatelessWidget {
               color: colors.amber.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.lock_reset_rounded, color: colors.amber, size: 48),
+            child: Icon(
+              Icons.lock_reset_rounded,
+              color: colors.amber,
+              size: 48,
+            ),
           ),
         ),
         const SizedBox(height: 32),
@@ -568,7 +622,9 @@ class _ErrorBox extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFE53935).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE53935).withValues(alpha: 0.25)),
+        border: Border.all(
+          color: const Color(0xFFE53935).withValues(alpha: 0.25),
+        ),
       ),
       child: Text(message, style: const TextStyle(color: Color(0xFFE53935))),
     );
@@ -608,7 +664,10 @@ class _PasswordField extends StatelessWidget {
         prefixIcon: Icon(Icons.lock_outline, color: colors.amber),
         filled: true,
         fillColor: colors.input,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: colors.border),

@@ -86,8 +86,8 @@ class UpdateCubit extends Cubit<UpdateState> {
   UpdateCheckResult? _pendingResult; // result seen before the dismissal loaded
 
   UpdateCubit({VersionCheckService? service})
-      : _service = service ?? VersionCheckService.instance,
-        super(const UpdateState()) {
+    : _service = service ?? VersionCheckService.instance,
+      super(const UpdateState()) {
     _init();
   }
 
@@ -110,8 +110,9 @@ class UpdateCubit extends Cubit<UpdateState> {
       // so construction is covered by the same defensive guard.
       final prefs = SharedPreferencesAsync();
       final dismissed = await prefs.getString(dismissedVersionKey);
-      _dismissedVersion =
-          (dismissed == null || dismissed.isEmpty) ? null : dismissed;
+      _dismissedVersion = (dismissed == null || dismissed.isEmpty)
+          ? null
+          : dismissed;
     } catch (e) {
       // Defensive: unreadable prefs must never block the feature.
       _dismissedVersion = null;

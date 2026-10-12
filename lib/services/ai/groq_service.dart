@@ -41,7 +41,9 @@ class GroqService {
         if (!diff.isNegative && diff.inSeconds <= 300) return diff;
       } catch (e) {
         if (kDebugMode) {
-          debugPrint('[GroqService] unparseable Retry-After "$retryAfter" — using backoff: $e');
+          debugPrint(
+            '[GroqService] unparseable Retry-After "$retryAfter" — using backoff: $e',
+          );
         }
       }
     }
@@ -51,11 +53,15 @@ class GroqService {
   void _noteMalformedChunk(String context, Object e, String raw) {
     _malformedChunks++;
     final preview = raw.length > 120 ? '${raw.substring(0, 120)}…' : raw;
-    debugPrint('[GroqService] malformed SSE chunk #$context '
-        '($_malformedChunks total): $e | raw: $preview');
+    debugPrint(
+      '[GroqService] malformed SSE chunk #$context '
+      '($_malformedChunks total): $e | raw: $preview',
+    );
     if (_malformedChunks == _malformedChunkWarnThreshold) {
-      debugPrint('[GroqService] WARNING: $_malformedChunkWarnThreshold+ '
-          'malformed chunks — response may be partial');
+      debugPrint(
+        '[GroqService] WARNING: $_malformedChunkWarnThreshold+ '
+        'malformed chunks — response may be partial',
+      );
     }
   }
 
@@ -95,7 +101,9 @@ class GroqService {
     resetCancel();
     final apiKey = AppConfig.groqApiKey.trim();
     if (apiKey.isEmpty || apiKey.contains('your_')) {
-      throw Exception('Groq API key not configured. Please set GROQ_API_KEY in .env file.');
+      throw Exception(
+        'Groq API key not configured. Please set GROQ_API_KEY in .env file.',
+      );
     }
 
     final recentHistory = _recentHistory(history, newMessage);
@@ -103,34 +111,35 @@ class GroqService {
       {'role': 'system', 'content': _systemPrompt},
       ...recentHistory
           .where((msg) => msg.text.isNotEmpty)
-          .map((msg) => {
-                'role': msg.isUser ? 'user' : 'assistant',
-                'content': msg.text,
-              }),
+          .map(
+            (msg) => {
+              'role': msg.isUser ? 'user' : 'assistant',
+              'content': msg.text,
+            },
+          ),
     ];
 
-    messages.add({
-      'role': 'user',
-      'content': newMessage,
-    });
+    messages.add({'role': 'user', 'content': newMessage});
 
     for (int attempt = 0; attempt < _maxRetries; attempt++) {
       if (_isCancelled) break;
       try {
-        final response = await http.post(
-          Uri.parse(AppConfig.groqEndpoint),
-          headers: {
-            'Authorization': 'Bearer $apiKey',
-            'Content-Type': 'application/json',
-            'User-Agent': _userAgent,
-          },
-          body: jsonEncode({
-            'model': _model,
-            'messages': messages,
-            'temperature': 0.7,
-            'max_tokens': 2048,
-          }),
-        ).timeout(_timeout);
+        final response = await http
+            .post(
+              Uri.parse(AppConfig.groqEndpoint),
+              headers: {
+                'Authorization': 'Bearer $apiKey',
+                'Content-Type': 'application/json',
+                'User-Agent': _userAgent,
+              },
+              body: jsonEncode({
+                'model': _model,
+                'messages': messages,
+                'temperature': 0.7,
+                'max_tokens': 2048,
+              }),
+            )
+            .timeout(_timeout);
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
@@ -144,7 +153,9 @@ class GroqService {
           }
           throw Exception('Invalid response from Groq API');
         } else if (response.statusCode == 401) {
-          throw Exception('Invalid Groq API key. Please check your GROQ_API_KEY in .env file.');
+          throw Exception(
+            'Invalid Groq API key. Please check your GROQ_API_KEY in .env file.',
+          );
         } else if (response.statusCode == 429) {
           // L19: honor the server's Retry-After hint when present,
           // fall back to exponential backoff.
@@ -159,18 +170,23 @@ class GroqService {
         }
       } on TimeoutException {
         if (attempt == _maxRetries - 1) {
-          throw Exception('Connection timed out. Check your internet connection.');
+          throw Exception(
+            'Connection timed out. Check your internet connection.',
+          );
         }
         final waitTime = Duration(seconds: 2 << attempt);
-        
+
         await Future.delayed(waitTime);
       } catch (e) {
-        if (e.toString().contains('SocketException') || e.toString().contains('HandshakeException')) {
+        if (e.toString().contains('SocketException') ||
+            e.toString().contains('HandshakeException')) {
           if (attempt == _maxRetries - 1) {
-            throw Exception('Cannot connect to Groq. Your network may be blocking external APIs.');
+            throw Exception(
+              'Cannot connect to Groq. Your network may be blocking external APIs.',
+            );
           }
           final waitTime = Duration(seconds: 2 << attempt);
-          
+
           await Future.delayed(waitTime);
           continue;
         }
@@ -178,7 +194,9 @@ class GroqService {
       }
     }
 
-    throw Exception('Groq rate limit exceeded. Please wait a moment and try again.');
+    throw Exception(
+      'Groq rate limit exceeded. Please wait a moment and try again.',
+    );
   }
 
   Stream<String> sendMessageStream({
@@ -188,7 +206,9 @@ class GroqService {
     resetCancel();
     final apiKey = AppConfig.groqApiKey.trim();
     if (apiKey.isEmpty || apiKey.contains('your_')) {
-      throw Exception('Groq API key not configured. Please set GROQ_API_KEY in .env file.');
+      throw Exception(
+        'Groq API key not configured. Please set GROQ_API_KEY in .env file.',
+      );
     }
 
     final recentHistory = _recentHistory(history, newMessage);
@@ -196,16 +216,15 @@ class GroqService {
       {'role': 'system', 'content': _systemPrompt},
       ...recentHistory
           .where((msg) => msg.text.isNotEmpty)
-          .map((msg) => {
-                'role': msg.isUser ? 'user' : 'assistant',
-                'content': msg.text,
-              }),
+          .map(
+            (msg) => {
+              'role': msg.isUser ? 'user' : 'assistant',
+              'content': msg.text,
+            },
+          ),
     ];
 
-    messages.add({
-      'role': 'user',
-      'content': newMessage,
-    });
+    messages.add({'role': 'user', 'content': newMessage});
 
     final client = http.Client();
     _activeClient = client;
@@ -225,17 +244,23 @@ class GroqService {
       final streamedResponse = await client.send(request).timeout(_timeout);
 
       if (streamedResponse.statusCode == 401) {
-        throw Exception('Invalid Groq API key. Please check your GROQ_API_KEY in .env file.');
+        throw Exception(
+          'Invalid Groq API key. Please check your GROQ_API_KEY in .env file.',
+        );
       }
       if (streamedResponse.statusCode == 429) {
-        throw Exception('Groq rate limit exceeded. Please wait a moment and try again.');
+        throw Exception(
+          'Groq rate limit exceeded. Please wait a moment and try again.',
+        );
       }
       if (streamedResponse.statusCode != 200) {
         throw Exception('Groq server error: ${streamedResponse.statusCode}');
       }
 
       String buffer = '';
-      await for (final chunk in streamedResponse.stream.transform(utf8.decoder)) {
+      await for (final chunk in streamedResponse.stream.transform(
+        utf8.decoder,
+      )) {
         if (_isCancelled) break;
         buffer += chunk;
         final lines = buffer.split('\n');
@@ -255,9 +280,9 @@ class GroqService {
                 if (content != null) yield content;
               }
             }
-          // L20: malformed SSE chunks are counted + logged via the shared
-          // helper (threshold warning after repeated failures) instead of
-          // being silently dropped.
+            // L20: malformed SSE chunks are counted + logged via the shared
+            // helper (threshold warning after repeated failures) instead of
+            // being silently dropped.
           } catch (e) {
             _noteMalformedChunk('stream', e, data);
           }
@@ -266,8 +291,11 @@ class GroqService {
     } on TimeoutException {
       throw Exception('Connection timed out. Check your internet connection.');
     } catch (e) {
-      if (e.toString().contains('SocketException') || e.toString().contains('HandshakeException')) {
-        throw Exception('Cannot connect to Groq. Your network may be blocking external APIs.');
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('HandshakeException')) {
+        throw Exception(
+          'Cannot connect to Groq. Your network may be blocking external APIs.',
+        );
       }
       throw Exception('Groq service error: $e');
     } finally {

@@ -1,5 +1,3 @@
-
-
 class PollinationsService {
   static const int _defaultWidth = 1024;
   static const int _defaultHeight = 1024;
@@ -22,7 +20,8 @@ class PollinationsService {
 
     final encodedPrompt = Uri.encodeComponent(prompt.trim());
     final seed = DateTime.now().millisecondsSinceEpoch % 1000000;
-    final imageUrl = 'https://image.pollinations.ai/prompt/$encodedPrompt?width=$w&height=$h&nologo=true&seed=$seed';
+    final imageUrl =
+        'https://image.pollinations.ai/prompt/$encodedPrompt?width=$w&height=$h&nologo=true&seed=$seed';
 
     return imageUrl;
   }
@@ -46,8 +45,10 @@ class PollinationsService {
     }
 
     final encodedPrompt = Uri.encodeComponent(prompt);
-    final effectiveSeed = seed ?? (DateTime.now().millisecondsSinceEpoch % 1000000).toString();
-    var url = 'https://image.pollinations.ai/prompt/$encodedPrompt?width=$w&height=$h&nologo=true&seed=$effectiveSeed';
+    final effectiveSeed =
+        seed ?? (DateTime.now().millisecondsSinceEpoch % 1000000).toString();
+    var url =
+        'https://image.pollinations.ai/prompt/$encodedPrompt?width=$w&height=$h&nologo=true&seed=$effectiveSeed';
 
     if (noShare == true) {
       url += '&noshare=true';

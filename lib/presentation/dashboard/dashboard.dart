@@ -15,6 +15,7 @@ import '../../data/models/chat_session_model.dart';
 import '../../data/local/local_chat_dao.dart';
 import '../../repositories/chat_repository.dart';
 import '../ai/download_prompt_screen.dart';
+
 class Dashboard extends StatefulWidget {
   final bool offlineMode;
   final bool showBottomNav;
@@ -121,7 +122,7 @@ class _DashboardState extends State<Dashboard> {
     }
   }
 
-void _newChat() async {
+  void _newChat() async {
     final newId = DateTime.now().millisecondsSinceEpoch.toString();
     await Navigator.push(
       context,
@@ -167,34 +168,37 @@ void _newChat() async {
   Future<bool> _showDeleteConfirmation(BuildContext context) async {
     final colors = context.read<ThemeCubit>().state.colors;
     return await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: colors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
-        title: Text('Delete Chat', style: TextStyle(color: colors.text)),
-        content: Text(
-          'Are you sure you want to delete this chat? This action cannot be undone.',
-          style: TextStyle(color: colors.subtext),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: TextStyle(color: colors.subtext)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colors.error,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: AppRadius.buttonRadius,
-              ),
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: colors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.lg),
             ),
-            child: const Text('Delete'),
+            title: Text('Delete Chat', style: TextStyle(color: colors.text)),
+            content: Text(
+              'Are you sure you want to delete this chat? This action cannot be undone.',
+              style: TextStyle(color: colors.subtext),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text('Cancel', style: TextStyle(color: colors.subtext)),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colors.error,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: AppRadius.buttonRadius,
+                  ),
+                ),
+                child: const Text('Delete'),
+              ),
+            ],
           ),
-        ],
-      ),
-    ) ?? false;
+        ) ??
+        false;
   }
 
   Future<void> _deleteChat(String chatId) async {
@@ -213,7 +217,8 @@ void _newChat() async {
         _chats = removedChats;
       });
     }
-  } 
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.select((ThemeCubit c) => c.state.colors);
@@ -267,106 +272,131 @@ void _newChat() async {
           OfflineModelBanner(onTap: () => _openDownloadScreen(context)),
           Expanded(
             child: _isLoading
-                ? Center(
-                    child: CircularProgressIndicator(color: colors.amber),
-                  )
+                ? Center(child: CircularProgressIndicator(color: colors.amber))
                 : _chats.isNotEmpty
-                    ? Column(
-                        children: [
-                          if (_loadError != null) _buildStaleBanner(colors),
-                          Expanded(
-                            child: RefreshIndicator(
-                              onRefresh: _loadChats,
-                              color: colors.amber,
-                              child: RepaintBoundary(
-                                child: ListView.builder(
-                                  padding: const EdgeInsets.fromLTRB(AppSpacing.base, AppSpacing.base, AppSpacing.base, 88),
-                                  itemExtent: 108,
-                                  itemCount: _chats.length,
-                                  itemBuilder: (context, index) {
-                                    final chat = _chats[index];
-                                    return RepaintBoundary(
-                                      child: Dismissible(
-                                      key: ValueKey(chat.id),
-                                      direction: DismissDirection.endToStart,
-                                      confirmDismiss: (direction) async {
-                                        return await _showDeleteConfirmation(context);
-                                      },
-                                      onDismissed: (direction) {
-                                        _deleteChat(chat.id);
-                                      },
-                                      background: _dismissBackground,
-                                      child: _buildChatTile(chat, colors),
-                                    ),
-                                    );
-                                  },
-                                ),
+                ? Column(
+                    children: [
+                      if (_loadError != null) _buildStaleBanner(colors),
+                      Expanded(
+                        child: RefreshIndicator(
+                          onRefresh: _loadChats,
+                          color: colors.amber,
+                          child: RepaintBoundary(
+                            child: ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(
+                                AppSpacing.base,
+                                AppSpacing.base,
+                                AppSpacing.base,
+                                88,
                               ),
+                              itemExtent: 108,
+                              itemCount: _chats.length,
+                              itemBuilder: (context, index) {
+                                final chat = _chats[index];
+                                return RepaintBoundary(
+                                  child: Dismissible(
+                                    key: ValueKey(chat.id),
+                                    direction: DismissDirection.endToStart,
+                                    confirmDismiss: (direction) async {
+                                      return await _showDeleteConfirmation(
+                                        context,
+                                      );
+                                    },
+                                    onDismissed: (direction) {
+                                      _deleteChat(chat.id);
+                                    },
+                                    background: _dismissBackground,
+                                    child: _buildChatTile(chat, colors),
+                                  ),
+                                );
+                              },
                             ),
                           ),
-                        ],
-                      )
-                    : _loadError != null
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(24),
-                              decoration: BoxDecoration(
-                                color: colors.amber.withValues(alpha: 0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(Icons.error_outline_rounded,
-                                  color: colors.amber, size: 48),
-                            ),
-                            const SizedBox(height: AppSpacing.xl),
-                            Text(_loadError!,
-                                style: TextStyle(
-                                    fontSize: 20, fontWeight: FontWeight.w600, color: colors.text)),
-                            const SizedBox(height: AppSpacing.md),
-                            Text('Please try again.',
-                                style: TextStyle(color: colors.subtext, fontSize: 14)),
-                            const SizedBox(height: AppSpacing.base),
-                            ElevatedButton(
-                              onPressed: _loadChats,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: colors.amber,
-                                foregroundColor: Colors.black,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: AppRadius.buttonRadius,
-                                ),
-                              ),
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      )
-                : Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(24),
-                              decoration: BoxDecoration(
-                                color: colors.amber.withValues(alpha: 0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(Icons.chat_bubble_outline_rounded,
-                                  color: colors.amber, size: 48),
-                            ),
-                            const SizedBox(height: AppSpacing.lg),
-                            Text('No conversations yet',
-                                style: TextStyle(
-                                    fontSize: 20, fontWeight: FontWeight.w600, color: colors.text)),
-                            const SizedBox(height: AppSpacing.sm),
-                            Text('Tap "New Chat" to start coaching',
-                                style: TextStyle(color: colors.subtext, fontSize: 14)),
-                          ],
                         ),
                       ),
-            ),
-          ],
+                    ],
+                  )
+                : _loadError != null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: colors.amber.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.error_outline_rounded,
+                            color: colors.amber,
+                            size: 48,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        Text(
+                          _loadError!,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: colors.text,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Text(
+                          'Please try again.',
+                          style: TextStyle(color: colors.subtext, fontSize: 14),
+                        ),
+                        const SizedBox(height: AppSpacing.base),
+                        ElevatedButton(
+                          onPressed: _loadChats,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: colors.amber,
+                            foregroundColor: Colors.black,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: AppRadius.buttonRadius,
+                            ),
+                          ),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
+                : Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: colors.amber.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            color: colors.amber,
+                            size: 48,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        Text(
+                          'No conversations yet',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: colors.text,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          'Tap "New Chat" to start coaching',
+                          style: TextStyle(color: colors.subtext, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _newChat,
@@ -383,8 +413,9 @@ void _newChat() async {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      bottomNavigationBar:
-          widget.showBottomNav ? const BottomNav1(selectedIndex: 0) : null,
+      bottomNavigationBar: widget.showBottomNav
+          ? const BottomNav1(selectedIndex: 0)
+          : null,
     );
   }
 
@@ -399,9 +430,7 @@ void _newChat() async {
       ),
       decoration: BoxDecoration(
         color: colors.amber.withValues(alpha: 0.15),
-        border: Border(
-          left: BorderSide(color: colors.amber, width: 3),
-        ),
+        border: Border(left: BorderSide(color: colors.amber, width: 3)),
       ),
       child: Row(
         children: [
@@ -460,7 +489,11 @@ void _newChat() async {
                   color: colors.amber.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
-                child: Icon(Icons.chat_bubble_rounded, color: colors.amber, size: 24),
+                child: Icon(
+                  Icons.chat_bubble_rounded,
+                  color: colors.amber,
+                  size: 24,
+                ),
               ),
               const SizedBox(width: AppSpacing.md + 4),
               Expanded(
@@ -479,7 +512,9 @@ void _newChat() async {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      chat.lastMessage.isEmpty ? 'New conversation' : chat.lastMessage,
+                      chat.lastMessage.isEmpty
+                          ? 'New conversation'
+                          : chat.lastMessage,
                       style: TextStyle(color: colors.subtext, fontSize: 13),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

@@ -50,7 +50,8 @@ class SupabaseChatService {
           userId: userId,
           title: data['title'] as String? ?? '',
           lastMessage: data['last_message'] as String? ?? '',
-          updatedAt: DateTime.tryParse(data['updated_at'] as String? ?? '') ??
+          updatedAt:
+              DateTime.tryParse(data['updated_at'] as String? ?? '') ??
               DateTime.now(),
         );
       }).toList();

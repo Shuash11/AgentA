@@ -9,7 +9,7 @@ class _NavItem {
   final String label;
 
   const _NavItem({
-    required this.icon, 
+    required this.icon,
     required this.activeIcon,
     required this.label,
   });
@@ -103,15 +103,13 @@ class BottomNav1 extends StatelessWidget {
     final colors = context.select((ThemeCubit c) => c.state.colors);
     return SafeArea(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: AppSpacing.sm + 4),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: AppSpacing.sm + 4,
+        ),
         decoration: BoxDecoration(
           color: colors.surface,
-          border: Border(
-            top: BorderSide(
-              color: colors.border,
-              width: 1,
-            ),
-          ),
+          border: Border(top: BorderSide(color: colors.border, width: 1)),
           boxShadow: [
             BoxShadow(
               color: colors.text.withValues(alpha: 0.08),

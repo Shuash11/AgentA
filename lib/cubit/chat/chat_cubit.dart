@@ -33,9 +33,12 @@ class ChatState {
     return ChatState(
       messages: messages ?? this.messages,
       isTyping: isTyping ?? this.isTyping,
-      partialAiMsgId: clearPartialAiMsgId ? null : (partialAiMsgId ?? this.partialAiMsgId),
+      partialAiMsgId: clearPartialAiMsgId
+          ? null
+          : (partialAiMsgId ?? this.partialAiMsgId),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-      isGenerationCancelled: isGenerationCancelled ?? this.isGenerationCancelled,
+      isGenerationCancelled:
+          isGenerationCancelled ?? this.isGenerationCancelled,
       activeGenerationId: activeGenerationId ?? this.activeGenerationId,
     );
   }
@@ -56,28 +59,30 @@ class ChatCubit extends Cubit<ChatState> {
   }
 
   void addUserMessage(ChatMessageModel message) {
-    emit(state.copyWith(
-      messages: [...state.messages, message],
-      isTyping: true,
-      isGenerationCancelled: false,
-      activeGenerationId: state.activeGenerationId + 1,
-    ));
+    emit(
+      state.copyWith(
+        messages: [...state.messages, message],
+        isTyping: true,
+        isGenerationCancelled: false,
+        activeGenerationId: state.activeGenerationId + 1,
+      ),
+    );
   }
 
   void startAiMessage(String msgId) {
     final messages = List<ChatMessageModel>.from(state.messages);
-    messages.add(ChatMessageModel(
-      id: msgId,
-      chatId: '',
-      text: '',
-      isUser: false,
-      timestamp: DateTime.now(),
-    ));
-    emit(state.copyWith(
-      messages: messages,
-      partialAiMsgId: msgId,
-      isTyping: true,
-    ));
+    messages.add(
+      ChatMessageModel(
+        id: msgId,
+        chatId: '',
+        text: '',
+        isUser: false,
+        timestamp: DateTime.now(),
+      ),
+    );
+    emit(
+      state.copyWith(messages: messages, partialAiMsgId: msgId, isTyping: true),
+    );
   }
 
   void updateAiMessageChunk(String msgId, String chunk) {
@@ -115,30 +120,31 @@ class ChatCubit extends Cubit<ChatState> {
         timestamp: messages[index].timestamp,
       );
     }
-    emit(state.copyWith(
-      messages: messages,
-      isTyping: false,
-      clearPartialAiMsgId: true,
-    ));
+    emit(
+      state.copyWith(
+        messages: messages,
+        isTyping: false,
+        clearPartialAiMsgId: true,
+      ),
+    );
   }
 
   void removePartialMessage(String msgId) {
     final messages = state.messages.where((m) => m.id != msgId).toList();
-    emit(state.copyWith(
-      messages: messages,
-      clearPartialAiMsgId: true,
-    ));
+    emit(state.copyWith(messages: messages, clearPartialAiMsgId: true));
   }
 
   void stopGeneration() {
     _debounceTimer?.cancel();
     final newGenerationId = state.activeGenerationId + 1;
-    emit(state.copyWith(
-      isGenerationCancelled: true,
-      isTyping: false,
-      activeGenerationId: newGenerationId,
-      clearPartialAiMsgId: true,
-    ));
+    emit(
+      state.copyWith(
+        isGenerationCancelled: true,
+        isTyping: false,
+        activeGenerationId: newGenerationId,
+        clearPartialAiMsgId: true,
+      ),
+    );
   }
 
   void setError(String errorText, {String? partialToRemove}) {
@@ -147,18 +153,22 @@ class ChatCubit extends Cubit<ChatState> {
     if (partialToRemove != null) {
       messages = messages.where((m) => m.id != partialToRemove).toList();
     }
-    messages.add(ChatMessageModel(
-      id: const Uuid().v4(),
-      chatId: '',
-      text: errorText,
-      isUser: false,
-      timestamp: DateTime.now(),
-    ));
-    emit(state.copyWith(
-      messages: messages,
-      isTyping: false,
-      clearPartialAiMsgId: true,
-    ));
+    messages.add(
+      ChatMessageModel(
+        id: const Uuid().v4(),
+        chatId: '',
+        text: errorText,
+        isUser: false,
+        timestamp: DateTime.now(),
+      ),
+    );
+    emit(
+      state.copyWith(
+        messages: messages,
+        isTyping: false,
+        clearPartialAiMsgId: true,
+      ),
+    );
   }
 
   void clearError() {

@@ -39,7 +39,10 @@ class LocalUserDao {
 
   /// Existing recovery-code hash for this account, preferring the row with
   /// the same [localId]; null when no row holds a non-empty hash.
-  Future<String?> _existingRecoveryCodeHash(String localId, String email) async {
+  Future<String?> _existingRecoveryCodeHash(
+    String localId,
+    String email,
+  ) async {
     final db = await _dbHelper.database;
     final rows = await db.query(
       'pending_signups',
@@ -58,15 +61,22 @@ class LocalUserDao {
 
   Future<List<Map<String, dynamic>>> getPendingSignups() async {
     final db = await _dbHelper.database;
-    return await db.query('pending_signups',
-        where: 'is_synced = 0',
-        orderBy: 'created_at ASC');
+    return await db.query(
+      'pending_signups',
+      where: 'is_synced = 0',
+      orderBy: 'created_at ASC',
+    );
   }
 
-  Future<Map<String, dynamic>?> getPendingSignupByLocalId(String localId) async {
+  Future<Map<String, dynamic>?> getPendingSignupByLocalId(
+    String localId,
+  ) async {
     final db = await _dbHelper.database;
-    final rows = await db.query('pending_signups',
-        where: 'local_id = ?', whereArgs: [localId]);
+    final rows = await db.query(
+      'pending_signups',
+      where: 'local_id = ?',
+      whereArgs: [localId],
+    );
     if (rows.isEmpty) return null;
     return rows.first;
   }
@@ -83,25 +93,33 @@ class LocalUserDao {
 
   Future<void> delete(String localId) async {
     final db = await _dbHelper.database;
-    await db.delete('pending_signups',
-        where: 'local_id = ?', whereArgs: [localId]);
+    await db.delete(
+      'pending_signups',
+      where: 'local_id = ?',
+      whereArgs: [localId],
+    );
   }
 
   Future<Map<String, dynamic>?> getPendingSignupByEmail(String email) async {
     final db = await _dbHelper.database;
     // Emails are compared case-insensitively: Supabase lowercases addresses,
     // but a device may hold rows written with the user's original casing.
-    final rows = await db.query('pending_signups',
-        where: 'email = ? COLLATE NOCASE AND is_synced = 0',
-        whereArgs: [email]);
+    final rows = await db.query(
+      'pending_signups',
+      where: 'email = ? COLLATE NOCASE AND is_synced = 0',
+      whereArgs: [email],
+    );
     if (rows.isEmpty) return null;
     return rows.first;
   }
 
   Future<Map<String, dynamic>?> getUserByEmail(String email) async {
     final db = await _dbHelper.database;
-    final rows = await db.query('pending_signups',
-        where: 'email = ? COLLATE NOCASE', whereArgs: [email]);
+    final rows = await db.query(
+      'pending_signups',
+      where: 'email = ? COLLATE NOCASE',
+      whereArgs: [email],
+    );
     if (rows.isEmpty) return null;
     return rows.first;
   }

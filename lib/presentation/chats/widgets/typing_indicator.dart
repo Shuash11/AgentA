@@ -50,8 +50,7 @@ class _TypingIndicatorState extends State<TypingIndicator>
   }
 
   void _syncController() {
-    if ((widget.isInitializing && !widget.isThinking) ||
-        _disableAnimations) {
+    if ((widget.isInitializing && !widget.isThinking) || _disableAnimations) {
       if (_controller.isAnimating) {
         _controller.stop();
       }
@@ -113,9 +112,8 @@ class _TypingIndicatorState extends State<TypingIndicator>
                 const SizedBox(width: 8),
                 ListenableBuilder(
                   listenable: _controller,
-                  builder: (context, _) => _BouncingDotRow(
-                    controllerValue: _controller.value,
-                  ),
+                  builder: (context, _) =>
+                      _BouncingDotRow(controllerValue: _controller.value),
                 ),
               ] else if (widget.isInitializing) ...[
                 SizedBox(
@@ -219,10 +217,7 @@ class _DotWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final opacity = calculateOpacity(controllerValue, dotIndex);
-    return Opacity(
-      opacity: 0.4 + 0.6 * opacity,
-      child: const _DotShape(),
-    );
+    return Opacity(opacity: 0.4 + 0.6 * opacity, child: const _DotShape());
   }
 }
 

@@ -11,8 +11,7 @@ class BiometricAuthService {
 
   static Future<bool> isSupported() async {
     try {
-      return await _auth.isDeviceSupported() &&
-          await _auth.canCheckBiometrics;
+      return await _auth.isDeviceSupported() && await _auth.canCheckBiometrics;
     } catch (e, stack) {
       if (kDebugMode) debugPrint('[Biometric] isSupported failed: $e | $stack');
       return false;
@@ -43,7 +42,9 @@ class BiometricAuthService {
       if (!ok) return false;
       await _storage.write(key: _enabledKey, value: '1');
       await _storage.write(key: _uidKey, value: uid);
-      if (kDebugMode) debugPrint('[Biometric] enroll success uidLen=${uid.length}');
+      if (kDebugMode) {
+        debugPrint('[Biometric] enroll success uidLen=${uid.length}');
+      }
       return true;
     } on LocalAuthException catch (e) {
       // M17: no biometrics enrolled / no credentials set is a normal state,

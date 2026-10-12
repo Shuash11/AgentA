@@ -96,11 +96,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
         ),
         decoration: BoxDecoration(
           color: colors.surface,
-          border: Border(
-            top: BorderSide(
-              color: colors.border,
-            ),
-          ),
+          border: Border(top: BorderSide(color: colors.border)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -115,15 +111,9 @@ class _ChatInputBarState extends State<ChatInputBar> {
                   keyboardType: TextInputType.multiline,
                   textInputAction: TextInputAction.newline,
                   textCapitalization: TextCapitalization.sentences,
-                  style: TextStyle(
-                    color: colors.text,
-                    fontSize: 14.5,
-                  ),
+                  style: TextStyle(color: colors.text, fontSize: 14.5),
                   decoration: _inputDecoration.copyWith(
-                    hintStyle: TextStyle(
-                      color: colors.subtext,
-                      fontSize: 14.5,
-                    ),
+                    hintStyle: TextStyle(color: colors.subtext, fontSize: 14.5),
                     fillColor: colors.input,
                   ),
                 ),
@@ -170,8 +160,8 @@ class _SendButton extends StatelessWidget {
     final color = isTyping
         ? colors.error
         : shouldShow
-            ? colors.amber
-            : colors.input;
+        ? colors.amber
+        : colors.input;
     final iconColor = shouldShow ? Colors.black : colors.subtext;
 
     return SizedBox(
