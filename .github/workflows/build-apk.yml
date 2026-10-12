@@ -179,6 +179,8 @@ jobs:
           fi
 
       - run: flutter pub get
+      - name: Enforce dart format
+        run: dart format --output=none --set-exit-if-changed lib test
       - name: Validate Google auth config
         run: |
           # H9: fail on main if GOOGLE_SERVER_CLIENT_ID missing/invalid (no nogoogle artifact on main)
