@@ -165,7 +165,7 @@ class VersionCheckService with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
 
     // Connectivity-restored hook (existing ConnectivityService).
-    _connectivitySubscription?.cancel();
+    unawaited(_connectivitySubscription?.cancel());
     _connectivitySubscription = _connectivity.statusStream.listen((status) {
       if (status == InternetStatus.online) {
         _log('[Update] connectivity restored — checking (throttled)');
@@ -302,9 +302,9 @@ class VersionCheckService with WidgetsBindingObserver {
 
   void dispose() {
     _periodicTimer?.cancel();
-    _connectivitySubscription?.cancel();
+    unawaited(_connectivitySubscription?.cancel());
     WidgetsBinding.instance.removeObserver(this);
-    _resultController.close();
+    unawaited(_resultController.close());
   }
 
   void _log(String msg) {

@@ -77,16 +77,16 @@ class _DashboardState extends State<Dashboard> {
     _connectivitySubscription = connectivity.statusStream.listen((status) {
       final isNowOnline = status == InternetStatus.online;
       if (!_wasOnline && isNowOnline && mounted) {
-        _loadChats();
+        unawaited(_loadChats());
       }
       _wasOnline = isNowOnline;
     });
-    _loadChats();
+    unawaited(_loadChats());
   }
 
   @override
   void dispose() {
-    _connectivitySubscription?.cancel();
+    unawaited(_connectivitySubscription?.cancel());
     super.dispose();
   }
 
@@ -135,7 +135,7 @@ class _DashboardState extends State<Dashboard> {
         ),
       ),
     );
-    if (mounted) _loadChats();
+    if (mounted) unawaited(_loadChats());
   }
 
   void _openChat(ChatSessionModel chat) async {
@@ -150,7 +150,7 @@ class _DashboardState extends State<Dashboard> {
         ),
       ),
     );
-    if (mounted) _loadChats();
+    if (mounted) unawaited(_loadChats());
   }
 
   void _openDownloadScreen(BuildContext context) {
@@ -303,7 +303,7 @@ class _DashboardState extends State<Dashboard> {
                                       );
                                     },
                                     onDismissed: (direction) {
-                                      _deleteChat(chat.id);
+                                      unawaited(_deleteChat(chat.id));
                                     },
                                     background: _dismissBackground,
                                     child: _buildChatTile(chat, colors),

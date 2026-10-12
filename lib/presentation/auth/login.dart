@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -160,7 +162,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
-    _checkBiometric();
+    unawaited(_checkBiometric());
   }
 
   Future<void> _checkBiometric() async {
@@ -766,7 +768,7 @@ class _LoginPageState extends State<LoginPage> {
     );
     if (enable == true && mounted) {
       await BiometricAuthService.enroll(uid);
-      _checkBiometric();
+      unawaited(_checkBiometric());
     }
   }
 

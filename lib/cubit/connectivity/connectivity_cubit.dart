@@ -84,7 +84,7 @@ class ConnectivityCubit extends Cubit<ConnectivityState> {
 
   @override
   Future<void> close() {
-    _subscription?.cancel();
+    unawaited(_subscription?.cancel());
     return super.close();
   }
 }

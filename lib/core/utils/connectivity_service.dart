@@ -33,8 +33,8 @@ class ConnectivityService {
   }
 
   void dispose() {
-    _connectivitySubscription?.cancel();
-    _statusController.close();
+    unawaited(_connectivitySubscription?.cancel());
+    unawaited(_statusController.close());
   }
 
   Future<bool> isOnline() async {

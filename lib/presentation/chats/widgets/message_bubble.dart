@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter/services.dart';
@@ -290,7 +292,7 @@ class MessageBubble extends StatelessWidget {
 
   Future<void> _copyMessage(BuildContext context) async {
     await Clipboard.setData(ClipboardData(text: message.text));
-    HapticFeedback.lightImpact();
+    unawaited(HapticFeedback.lightImpact());
     if (!context.mounted) return;
 
     ScaffoldMessenger.of(context).hideCurrentSnackBar();

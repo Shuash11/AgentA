@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -34,7 +36,7 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _startAutoDownload();
+      unawaited(_startAutoDownload());
       _setupCompletionListener();
     });
   }

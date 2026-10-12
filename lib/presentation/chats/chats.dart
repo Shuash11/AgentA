@@ -125,7 +125,7 @@ class _ChatScreenState extends State<Chats> {
       _wasOnline = isNowOnline;
     });
 
-    _initializeChat();
+    unawaited(_initializeChat());
   }
 
   Future<void> _initializeChat() async {
@@ -182,7 +182,7 @@ class _ChatScreenState extends State<Chats> {
         }
       }
 
-      _refreshRemoteInBackground();
+      unawaited(_refreshRemoteInBackground());
     });
   }
 
@@ -260,8 +260,8 @@ class _ChatScreenState extends State<Chats> {
 
   @override
   void dispose() {
-    _generationSubscription?.cancel();
-    _connectivitySubscription?.cancel();
+    unawaited(_generationSubscription?.cancel());
+    unawaited(_connectivitySubscription?.cancel());
     _streamingTimer?.cancel();
     _messagesNotifier.dispose();
     _activityNotifier.dispose();
@@ -272,7 +272,7 @@ class _ChatScreenState extends State<Chats> {
 
   void _handleConnectivityLost() {
     if (!mounted || !_isTyping) return;
-    _generationSubscription?.cancel();
+    unawaited(_generationSubscription?.cancel());
     _generationSubscription = null;
     _aiService.cancelActiveGeneration();
 
@@ -420,7 +420,7 @@ class _ChatScreenState extends State<Chats> {
             _setMessages(messages);
             _scrollToBottom(animated: false);
           }
-          _completeGeneration(generationId);
+          unawaited(_completeGeneration(generationId));
         },
         onError: (error) {
           if (!mounted ||
@@ -428,12 +428,12 @@ class _ChatScreenState extends State<Chats> {
               generationId != _activeGenerationId) {
             return;
           }
-          _handleGenerationError(error);
+          unawaited(_handleGenerationError(error));
         },
         cancelOnError: true,
       );
     } catch (e) {
-      _handleGenerationError(e);
+      unawaited(_handleGenerationError(e));
     }
   }
 

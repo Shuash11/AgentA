@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -81,7 +83,7 @@ class _AppLoaderState extends State<AppLoader> {
   @override
   void initState() {
     super.initState();
-    _initializeApp();
+    unawaited(_initializeApp());
   }
 
   Future<void> _initializeApp() async {
@@ -216,7 +218,7 @@ class _AppLoaderState extends State<AppLoader> {
 
   void _startMainApp() {
     final connectivity = ConnectivityService.instance;
-    connectivity.init();
+    unawaited(connectivity.init());
     final syncService = SyncService(connectivity);
 
     final groqService = GroqService();
@@ -244,7 +246,7 @@ class _AppLoaderState extends State<AppLoader> {
     // then, so the first check can already reach the UI over any screen.
     // Fire-and-forget — never blocks boot.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      VersionCheckService.instance.init();
+      unawaited(VersionCheckService.instance.init());
     });
 
     runApp(
@@ -487,7 +489,7 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
   @override
   void initState() {
     super.initState();
-    _checkModelStatus();
+    unawaited(_checkModelStatus());
   }
 
   Future<void> _checkModelStatus() async {
@@ -573,7 +575,7 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
                   onPressed: () => setState(() {
                     _loadingError = null;
                     _isChecking = true;
-                    _checkModelStatus();
+                    unawaited(_checkModelStatus());
                   }),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFFD700),

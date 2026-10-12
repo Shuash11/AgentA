@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../cubit/theme/theme_cubit.dart';
@@ -14,29 +16,31 @@ class SecurityPage extends StatelessWidget {
     // stored, so there is nothing to "view" afterwards.
     if (!context.mounted) return;
 
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: colors.card,
-        title: Text("Recovery Code", style: TextStyle(color: colors.text)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.key_off, color: colors.subtext, size: 40),
-            const SizedBox(height: 16),
-            Text(
-              'For your security, the raw code was shown once at sign-up and only its hash is stored. Use it on the recovery screen — it cannot be displayed again.',
-              style: TextStyle(color: colors.subtext),
-              textAlign: TextAlign.center,
+    unawaited(
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: colors.card,
+          title: Text("Recovery Code", style: TextStyle(color: colors.text)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.key_off, color: colors.subtext, size: 40),
+              const SizedBox(height: 16),
+              Text(
+                'For your security, the raw code was shown once at sign-up and only its hash is stored. Use it on the recovery screen — it cannot be displayed again.',
+                style: TextStyle(color: colors.subtext),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Close', style: TextStyle(color: colors.subtext)),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Close', style: TextStyle(color: colors.subtext)),
-          ),
-        ],
       ),
     );
   }

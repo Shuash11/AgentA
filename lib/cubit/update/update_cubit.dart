@@ -100,7 +100,7 @@ class UpdateCubit extends Cubit<UpdateState> {
     // ran before this cubit was created).
     final last = _service.lastResult;
     if (last != null) _onResult(last);
-    _loadDismissal();
+    unawaited(_loadDismissal());
   }
 
   Future<void> _loadDismissal() async {
@@ -199,7 +199,7 @@ class UpdateCubit extends Cubit<UpdateState> {
 
   @override
   Future<void> close() {
-    _subscription?.cancel();
+    unawaited(_subscription?.cancel());
     return super.close();
   }
 

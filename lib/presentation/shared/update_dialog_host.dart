@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -72,28 +74,30 @@ class _UpdateDialogHostState extends State<UpdateDialogHost> {
 
     _isShowing = true;
     final wasForced = state.isForced;
-    navigator
-        .push(
-          DialogRoute<void>(
-            context: navigator.context,
-            builder: (_) => const UpdateAvailableDialog(),
-            // Forced dialogs can never be tapped away; available ones can — any
-            // close path then counts as "Later".
-            barrierDismissible: !wasForced,
-            barrierColor: Colors.black54,
-            barrierLabel: 'Update dialog',
-          ),
-        )
-        .then((_) async {
-          _isShowing = false;
-          if (!wasForced) {
-            // Dismiss the shown version; a newer one re-triggers automatically.
-            // Awaited: _showIfDue must not run while the state is still
-            // "available" (pre-dismissal), or the dialog would instantly re-show.
-            await cubit.dismissUntilNextVersion();
-          }
-          // A newer release (or a state change while closed) re-evaluates.
-          _showIfDue();
-        });
+    unawaited(
+      navigator
+          .push(
+            DialogRoute<void>(
+              context: navigator.context,
+              builder: (_) => const UpdateAvailableDialog(),
+              // Forced dialogs can never be tapped away; available ones can — any
+              // close path then counts as "Later".
+              barrierDismissible: !wasForced,
+              barrierColor: Colors.black54,
+              barrierLabel: 'Update dialog',
+            ),
+          )
+          .then((_) async {
+            _isShowing = false;
+            if (!wasForced) {
+              // Dismiss the shown version; a newer one re-triggers automatically.
+              // Awaited: _showIfDue must not run while the state is still
+              // "available" (pre-dismissal), or the dialog would instantly re-show.
+              await cubit.dismissUntilNextVersion();
+            }
+            // A newer release (or a state change while closed) re-evaluates.
+            _showIfDue();
+          }),
+    );
   }
 }

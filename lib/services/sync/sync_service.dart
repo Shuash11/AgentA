@@ -85,7 +85,7 @@ class SyncService {
   }
 
   void init() {
-    _statusSubscription?.cancel();
+    unawaited(_statusSubscription?.cancel());
     _statusSubscription = _connectivity.statusStream.listen((status) async {
       if (status == InternetStatus.online && !_isSyncing) {
         _isSyncing = true;
@@ -104,7 +104,7 @@ class SyncService {
   }
 
   void dispose() {
-    _statusSubscription?.cancel();
+    unawaited(_statusSubscription?.cancel());
   }
 
   Future<void> flushPending() async {
