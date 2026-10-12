@@ -78,7 +78,7 @@ class BiometricAuthService {
         persistAcrossBackgrounding: true,
       );
       if (!ok) return null;
-      return _storage.read(key: _uidKey);
+      return await _storage.read(key: _uidKey);
     } on LocalAuthException catch (e) {
       const unavailableCodes = <LocalAuthExceptionCode>{
         LocalAuthExceptionCode.noBiometricsEnrolled,

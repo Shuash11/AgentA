@@ -75,12 +75,8 @@ class HuggingFaceImageService {
           await Future.delayed(const Duration(seconds: 5));
           continue;
         }
-        if (response.statusCode == 200 &&
-            response.headers['content-type']?.contains('image') == true) {
-          return _saveBytes(response.bodyBytes);
-        }
         if (response.statusCode == 200) {
-          return _saveBytes(response.bodyBytes);
+          return await _saveBytes(response.bodyBytes);
         } else if (response.statusCode == 401 || response.statusCode == 403) {
           throw Exception(
               'Invalid HuggingFace token. Please check your HF_TOKEN in .env file.');
