@@ -71,7 +71,7 @@ Releases are cut from `main`. The GitHub **"Build APK"** workflow
    next scheduled check (see §3) and show the update dialog — including fresh
    installs of an older APK (pre-login, over the login screen).
 
-Existing tags: `v1.0.0`, `v1.1.0`. Current version: `1.1.0+2`.
+Existing tags: `v1.0.0`, `v1.1.0`, `v1.2.0`, `v1.2.1`, `v1.2.2`, `v1.2.3`. Current version: `1.2.3+6`.
 
 ---
 
