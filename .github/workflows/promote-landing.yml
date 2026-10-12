@@ -256,7 +256,7 @@ jobs:
 
       - name: Checkout landing repo
         if: steps.guard.outputs.skip != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: Shuash11/AgentA-landing
           token: ${{ secrets.LANDING_RELEASE_PAT }}
