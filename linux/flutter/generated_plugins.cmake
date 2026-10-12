@@ -4,7 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links_linux
-  flutter_gemma
+  flutter_edge_ai
   flutter_secure_storage_linux
   url_launcher_linux
 )
