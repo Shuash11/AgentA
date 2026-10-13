@@ -44,10 +44,15 @@
 
 ## Env / signing rotation (C1 + C4)
 
-- Secrets reach the app via `--dart-define` (CI) with `.env` as a local-dev
-  fallback only. `.env` is git-ignored and never a Flutter asset.
+- Secrets reach the app via `--dart-define` only — CI passes the GitHub
+  Actions secrets to the APK build; local dev passes the same keys on the
+  `flutter run` command line (see `.env.example` for the key reference).
+  There is no `.env` fallback: the removed fallback could only read Flutter
+  assets, and `.env` is never bundled (C1). `.env` remains git-ignored; no
+  `.env` asset is declared, so the CI guard still passes.
 - Rotation: update the GitHub Actions secret value → next `main` push
-  rebuilds the APK. No code change needed. Local dev: edit `.env`, restart.
+  rebuilds the APK. No code change needed. Local dev: pass the updated
+  value via `--dart-define`, restart.
 - Release keystore: stored as CI secrets (`ANDROID_KEYSTORE_BASE64`,
   `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`)
   restored to `android/key.properties` at build time. Rotate by generating a

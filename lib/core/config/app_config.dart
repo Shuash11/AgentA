@@ -1,21 +1,16 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AppConfig {
-  // C1: build-time --dart-define is the source of truth in release;
-  // `.env` (dotenv) is a local-dev fallback only and is never bundled
-  // as a Flutter asset (see pubspec.yaml) nor committed (see .gitignore).
-  static String _withFallback(String defined, String key) {
-    if (defined.isNotEmpty) return defined;
-    try {
-      return dotenv.env[key] ?? '';
-    } catch (_) {
-      return '';
-    }
-  }
+  // C1: build-time --dart-define is the ONLY config source — release and
+  // local dev alike (see .env.example for the key reference). The former
+  // `.env` fallback was dead code: the removed package loaded Flutter
+  // assets only (never a root `.env`), and no `.env` asset is declared
+  // (the CI guard forbids bundling one), so it always threw and was
+  // swallowed. Removed in cycle 15. `.env` stays git-ignored; never read.
+  static String _withFallback(String defined) => defined.trim();
 
   // NOTE: String.fromEnvironment requires a literal key (compile-time),
-  // so each secret gets its own const + dotenv fallback (dev only).
+  // so each secret gets its own const.
   static const _dGroq = String.fromEnvironment('GROQ_API_KEY');
   static const _dHf = String.fromEnvironment('HF_TOKEN');
   static const _dGemmaUrl = String.fromEnvironment('GEMMA_MODEL_URL');
@@ -26,16 +21,8 @@ class AppConfig {
   static const _dSupaKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
   static const _dGoogleId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
 
-  static Future<void> init() async {
-    try {
-      await dotenv.load(fileName: '.env');
-    } catch (_) {
-      // Missing .env in release/CI is expected — dart-define covers it.
-    }
-  }
-
-  static String get groqApiKey => _withFallback(_dGroq, 'GROQ_API_KEY').trim();
-  static String get hfToken => _withFallback(_dHf, 'HF_TOKEN').trim();
+  static String get groqApiKey => _withFallback(_dGroq);
+  static String get hfToken => _withFallback(_dHf);
 
   static const String groqEndpoint =
       'https://api.groq.com/openai/v1/chat/completions';
@@ -57,21 +44,17 @@ class AppConfig {
       'IMPORTANT: Always respond ONLY in English, regardless of the language '
       'the user writes in. Never reply in any other language.';
 
-  static String get gemmaModelUrl =>
-      _withFallback(_dGemmaUrl, 'GEMMA_MODEL_URL').trim();
+  static String get gemmaModelUrl => _withFallback(_dGemmaUrl);
   static const String gemmaModelFilename = 'gemma-offline.task';
 
   /// Foreground-service experiment override for the offline model download.
   /// Env `FOREGROUND_DOWNLOAD`, default true when unset or unrecognised.
-  /// Flip to 'false' (via --dart-define or .env, no code change) as an
+  /// Flip to 'false' (via --dart-define, no code change) as an
   /// immediate workaround if the foreground path fails on a device.
   static bool get foregroundDownload {
     final test = _foregroundDownloadOverrideForTest;
     if (test != null) return test;
-    final raw = _withFallback(
-      _dForegroundDownload,
-      'FOREGROUND_DOWNLOAD',
-    ).trim();
+    final raw = _withFallback(_dForegroundDownload);
     return _parseForegroundDownload(raw);
   }
 
@@ -98,14 +81,11 @@ class AppConfig {
   static bool parseForegroundDownloadForTest(String raw) =>
       _parseForegroundDownload(raw);
 
-  static String get supabaseUrl =>
-      _withFallback(_dSupaUrl, 'SUPABASE_URL').trim();
-  static String get supabasePublishableKey =>
-      _withFallback(_dSupaKey, 'SUPABASE_PUBLISHABLE_KEY').trim();
+  static String get supabaseUrl => _withFallback(_dSupaUrl);
+  static String get supabasePublishableKey => _withFallback(_dSupaKey);
 
   /// Trimmed Web Client ID — whitespace / newline stripped per reviewer finding #1.
-  static String get googleServerClientId =>
-      _withFallback(_dGoogleId, 'GOOGLE_SERVER_CLIENT_ID').trim();
+  static String get googleServerClientId => _withFallback(_dGoogleId);
 
   static const String _googleSuffix = '.apps.googleusercontent.com';
 
@@ -131,7 +111,7 @@ class AppConfig {
 
   static String? _validateGoogleId(String trimmed) {
     if (trimmed.isEmpty) {
-      return 'GOOGLE_SERVER_CLIENT_ID is missing or empty in .env. '
+      return 'GOOGLE_SERVER_CLIENT_ID is missing or empty (pass it via --dart-define). '
           'Add your Web Client ID from Google Cloud Console > Credentials > OAuth 2.0 Client IDs > Web application. '
           'It must end with $_googleSuffix';
     }

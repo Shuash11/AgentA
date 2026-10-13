@@ -95,27 +95,10 @@ class _AppLoaderState extends State<AppLoader> {
     });
 
     try {
-      await AppConfig.init();
-      if (!mounted) return;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[Main] AppConfig.init failed: $e');
-      }
-      if (!mounted) return;
-      setState(() {
-        _initState = const InitState(
-          status: AppInitStatus.error,
-          errorMessage: 'App configuration failed to load. Please try again.',
-        );
-      });
-      return;
-    }
-
-    try {
       if (AppConfig.supabaseUrl.isEmpty ||
           AppConfig.supabasePublishableKey.isEmpty) {
         throw Exception(
-          'SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY missing from .env',
+          'SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY missing (pass via --dart-define)',
         );
       }
       await Supabase.initialize(
