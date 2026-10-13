@@ -6,7 +6,7 @@
 -keep class io.flutter.**  { *; }
 -keep class io.flutter.plugins.**  { *; }
 
-# MediaPipe (flutter_gemma)
+# MediaPipe (flutter_edge_ai engine)
 -dontwarn com.google.mediapipe.proto.CalculatorProfileProto$CalculatorProfile
 -dontwarn com.google.mediapipe.proto.GraphTemplateProto$CalculatorGraphTemplate
 
