@@ -1,6 +1,6 @@
 {
-    "name": "aiproject",
-    "short_name": "aiproject",
+    "name": "AgentA",
+    "short_name": "AgentA",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
