@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'password_hasher.dart';
 
 class LocalSession {
   final String uid;
@@ -23,12 +22,6 @@ class SessionManager {
   static const String _biometricUidKey = 'biometric_uid';
 
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
-
-  /// Salted hash (C5). Prefer [PasswordHasher.hashWithSalt] for new code.
-  static String hashPassword(String password, {String salt = ''}) {
-    if (salt.isEmpty) return PasswordHasher.hashWithSalt(password, '');
-    return PasswordHasher.hashWithSalt(password, salt);
-  }
 
   static Future<void> saveSession({
     required String uid,

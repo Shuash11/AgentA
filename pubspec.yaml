@@ -40,6 +40,11 @@ dependencies:
 
   crypto: ^3.0.6
 
+  # Argon2id password hashing (F6/C5). Pure Dart, resolves at the same 4.0.0
+  # already in the lockfile via dart_jsonwebtoken (supabase chain) — promoted
+  # to a direct dependency so the version is under our control.
+  pointycastle: ^4.0.0
+
   json_annotation: ^4.9.0
 
   cupertino_icons: ^1.0.8

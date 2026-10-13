@@ -28,9 +28,19 @@
   shared-external permissions). Upgrade path to SQLCipher:
   add `sqflite_sqlcipher`, generate a random 256-bit key in
   `flutter_secure_storage` (keystore-backed), open the DB with
-  `password: <key>`. Until then, passwords are salted
-  `SHA256(salt + pw)` with a per-user `password_salt`, and legacy unsalted
-  rows are wiped (force re-enroll) on migrate to v7.
+  `password: <key>`.
+- Password hashing (F6): offline passwords are **Argon2id**
+  (`m=19456` KiB, `t=2`, `p=1`, v=19, 32-byte tag, 16-byte salt) via the
+  pure-Dart `pointycastle` package, stored as a self-describing PHC string
+  in `pending_signups.password`
+  (`$argon2id$v=19$m=19456,t=2,p=1$<b64 salt>$<b64 tag>`; `password_salt`
+  stays empty for new rows). Rows written before F6 (salted
+  `SHA256(salt + pw)` hex + `password_salt`) keep verifying **forever**;
+  after a successful legacy login the row is transparently re-hashed with
+  Argon2id (verify-then-upgrade, best-effort — an upgrade failure never
+  blocks the login; a prefixed hash never falls back to the legacy
+  scheme). No schema change: the DB version stays 7, and the v7
+  force-re-enroll applies only to pre-salt rows.
 
 ## Env / signing rotation (C1 + C4)
 

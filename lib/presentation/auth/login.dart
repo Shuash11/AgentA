@@ -227,16 +227,14 @@ class _LoginPageState extends State<LoginPage> {
           }
         }
         final dao = LocalUserDao();
-        final loginSalt = PasswordHasher.generateSalt();
         await dao.savePendingSignup(
           localId: cred.uid,
           email: email,
-          password: PasswordHasher.hashWithSalt(password, loginSalt),
+          password: PasswordHasher.hashPassword(password),
           displayName: cred.displayName ?? 'User',
           recoveryCode: '',
           isSynced: true,
           provider: 'password',
-          passwordSalt: loginSalt,
         );
         await SessionManager.saveSession(
           uid: cred.uid,
@@ -350,10 +348,23 @@ class _LoginPageState extends State<LoginPage> {
         }
         final storedHash = localUser['password'] as String;
         final storedSalt = (localUser['password_salt'] as String?) ?? '';
-        if (storedHash.isNotEmpty &&
-            storedSalt.isNotEmpty &&
-            PasswordHasher.verify(password, storedSalt, storedHash)) {
+        final verification = PasswordHasher.verifyPassword(
+          password,
+          storedHash: storedHash,
+          storedSalt: storedSalt,
+        );
+        if (verification.matched) {
           OfflineLoginGuard.clearFailures(email);
+          if (verification.needsUpgrade) {
+            // Verify-then-upgrade: the user is already authenticated, so a
+            // failed re-hash must never block the login (best-effort; the
+            // legacy row stays verifiable and the upgrade retries next time).
+            await dao.tryUpgradePasswordHash(
+              localId: localUser['local_id'] as String,
+              expectedHash: storedHash,
+              newHash: PasswordHasher.hashPassword(password),
+            );
+          }
           await SessionManager.saveSession(
             uid: localUser['local_id'] as String,
             email: email,
@@ -412,9 +423,12 @@ class _LoginPageState extends State<LoginPage> {
 
       final storedHash = (localUser['password'] as String?) ?? '';
       final storedSalt = (localUser['password_salt'] as String?) ?? '';
-      if (storedHash.isEmpty ||
-          storedSalt.isEmpty ||
-          !PasswordHasher.verify(password, storedSalt, storedHash)) {
+      final verification = PasswordHasher.verifyPassword(
+        password,
+        storedHash: storedHash,
+        storedSalt: storedSalt,
+      );
+      if (!verification.matched) {
         if (kDebugMode) {
           debugPrint('[Login] claim skipped — local proof failed');
         }
@@ -434,6 +448,15 @@ class _LoginPageState extends State<LoginPage> {
         if (kDebugMode) {
           debugPrint(
             '[Login] offline — plain offline sign-in (no online re-register)',
+          );
+        }
+        if (verification.needsUpgrade) {
+          // Same verify-then-upgrade contract as the offline login path:
+          // post-proof, best-effort, never blocks the sign-in.
+          await dao.tryUpgradePasswordHash(
+            localId: localId,
+            expectedHash: storedHash,
+            newHash: PasswordHasher.hashPassword(password),
           );
         }
         await SessionManager.saveSession(
@@ -470,16 +493,14 @@ class _LoginPageState extends State<LoginPage> {
         if (kDebugMode) debugPrint('[Login] claim local migrate failed: $e');
       }
 
-      final salt = PasswordHasher.generateSalt();
       await dao.savePendingSignup(
         localId: cred.uid,
         email: email,
-        password: PasswordHasher.hashWithSalt(password, salt),
+        password: PasswordHasher.hashPassword(password),
         displayName: name,
         recoveryCode: recoveryHash,
         isSynced: true,
         provider: 'password',
-        passwordSalt: salt,
       );
       await SessionManager.saveSession(
         uid: cred.uid,

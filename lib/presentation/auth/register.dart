@@ -154,16 +154,14 @@ class _RegisterPageState extends State<RegisterPage> {
     }
 
     final localId = onlineUid ?? const Uuid().v4();
-    final pwdSalt = PasswordHasher.generateSalt();
     await localUserDao.savePendingSignup(
       localId: localId,
       email: email,
-      password: PasswordHasher.hashWithSalt(password, pwdSalt),
+      password: PasswordHasher.hashPassword(password),
       displayName: displayName,
       recoveryCode: RecoveryCodeHasher.hash(recoveryCode),
       isSynced: isOnline,
       provider: 'password',
-      passwordSalt: pwdSalt,
     );
     await SessionManager.saveSession(
       uid: localId,

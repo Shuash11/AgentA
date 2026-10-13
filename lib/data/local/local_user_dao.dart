@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'database_helper.dart';
 
@@ -57,6 +58,52 @@ class LocalUserDao {
       fallback ??= code;
     }
     return fallback;
+  }
+
+  /// Replaces the stored password hash for [localId] from [expectedHash] to
+  /// [newHash] (compare-and-swap in a single atomic UPDATE). The CAS guard
+  /// means a row that changed since the caller fetched it is left untouched.
+  /// Returns the number of rows updated (0 when the row is absent or its
+  /// hash no longer equals [expectedHash]).
+  ///
+  /// [newHash] is a self-describing PHC string, so the legacy
+  /// `password_salt` column is cleared.
+  Future<int> upgradePasswordHash({
+    required String localId,
+    required String expectedHash,
+    required String newHash,
+  }) async {
+    final db = await _dbHelper.database;
+    return db.update(
+      'pending_signups',
+      {'password': newHash, 'password_salt': ''},
+      where: 'local_id = ? AND password = ?',
+      whereArgs: [localId, expectedHash],
+    );
+  }
+
+  /// Best-effort wrapper for [upgradePasswordHash]: never throws, so a failed
+  /// hash upgrade can never block an already-successful login. Returns true
+  /// when the row was upgraded. Migration-style failure handling per
+  /// docs/error-hygiene.md (debug log only).
+  Future<bool> tryUpgradePasswordHash({
+    required String localId,
+    required String expectedHash,
+    required String newHash,
+  }) async {
+    try {
+      final updated = await upgradePasswordHash(
+        localId: localId,
+        expectedHash: expectedHash,
+        newHash: newHash,
+      );
+      return updated > 0;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[LocalUserDao] password-hash upgrade failed: $e');
+      }
+      return false;
+    }
   }
 
   Future<List<Map<String, dynamic>>> getPendingSignups() async {
