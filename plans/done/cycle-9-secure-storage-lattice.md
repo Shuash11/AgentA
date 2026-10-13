@@ -1,6 +1,6 @@
 # Cycle 9 — Secure-Storage Lattice (F11 part 2 / F21) — Data-Safe Migration
 
-**status:** active
+**status:** done (closed 2026-10-13 — P1+P2 PASS + e2e, push executed, both workflows green; lattice landed data-safely, F21 resolved)
 **created:** 2026-10-13
 **created by:** Adviser (self-improvement cycle 9 audit)
 **repo:** C:\projects\aiproject (AgentA) — branch main @ 52d96b8
