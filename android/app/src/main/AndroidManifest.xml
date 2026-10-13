@@ -2,7 +2,7 @@
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    <!-- Foreground download (background_downloader 9.5.9 doc/CONFIG.md:39-46):
+    <!-- Foreground download (background_downloader 9.6.4 doc/CONFIG.md:39-46):
          the offline model install runs as a foreground service with
          dataSync type so Android cannot kill it in the background. On
          Android 14+ (SDK 35 target) the DATA_SYNC type needs BOTH the
@@ -49,7 +49,7 @@
             </intent-filter>
         </activity>
         <!-- WorkManager foreground-service declaration required by
-             background_downloader 9.5.9 (doc/CONFIG.md:39-46): without
+             background_downloader 9.6.4 (doc/CONFIG.md:39-46): without
              android:foregroundServiceType="dataSync" here, the download's
              setForeground() call fails on Android 14+ and kills the app. -->
         <service
