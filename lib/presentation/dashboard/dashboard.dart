@@ -389,7 +389,7 @@ class _DashboardState extends State<Dashboard> {
                         ),
                         const SizedBox(height: AppSpacing.sm),
                         Text(
-                          'Tap "New Chat" to start coaching',
+                          'Tap "New Chat" to start chatting with AgentA',
                           style: TextStyle(color: colors.subtext, fontSize: 14),
                         ),
                       ],

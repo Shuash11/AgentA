@@ -8,7 +8,7 @@ class ChatErrorClassifier {
   const ChatErrorClassifier._();
 
   static const String offlineNotReadyMessage =
-      'Agenta Offline AI is still getting ready. Try again in a moment.';
+      'AgentA Offline AI is still getting ready. Try again in a moment.';
 
   /// True when the raw error text signals the offline model isn't usable yet.
   static bool isOfflineNotReady(String rawError) {

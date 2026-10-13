@@ -29,7 +29,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   static const _borderRadius = BorderRadius.all(Radius.circular(20));
   static const _inputDecoration = InputDecoration(
-    hintText: 'Ask your coach...',
+    hintText: 'Ask AgentA...',
     filled: true,
     contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
     border: OutlineInputBorder(

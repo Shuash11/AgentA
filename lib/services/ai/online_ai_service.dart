@@ -44,7 +44,7 @@ class OnlineAIService extends ChangeNotifier {
         return _groq.sendMessage(history: history, newMessage: newMessage);
       case AIModel.gemma:
         throw Exception(
-          'Agenta Offline AI is an offline model and cannot be used while online.',
+          'AgentA Offline AI is an offline model and cannot be used while online.',
         );
     }
   }
@@ -68,7 +68,7 @@ class OnlineAIService extends ChangeNotifier {
         return;
       case AIModel.gemma:
         throw Exception(
-          'Agenta Offline AI is an offline model and cannot be used while online.',
+          'AgentA Offline AI is an offline model and cannot be used while online.',
         );
     }
   }

@@ -91,7 +91,7 @@ class OfflineModelBanner extends StatelessWidget {
         colors.amber.withValues(alpha: 0.15),
         colors.amber,
         Icons.cloud_queue_rounded,
-        'Limited - Agenta Offline AI',
+        'Limited - AgentA Offline AI',
         _offlineDisclaimer,
       );
     }
@@ -100,7 +100,7 @@ class OfflineModelBanner extends StatelessWidget {
         colors.amber.withValues(alpha: 0.12),
         colors.amber,
         Icons.memory_rounded,
-        'Offline - Agenta Offline AI',
+        'Offline - AgentA Offline AI',
         _offlineDisclaimer,
       );
     }

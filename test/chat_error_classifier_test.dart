@@ -22,7 +22,7 @@ void main() {
       );
       expect(
         ChatErrorClassifier.isOfflineNotReady(
-          'Agenta Offline AI is still getting ready',
+          'AgentA Offline AI is still getting ready',
         ),
         isTrue,
       );
@@ -68,7 +68,7 @@ void main() {
       );
       expect(
         ChatErrorClassifier.offlineNotReadyMessage,
-        'Agenta Offline AI is still getting ready. Try again in a moment.',
+        'AgentA Offline AI is still getting ready. Try again in a moment.',
       );
     });
 

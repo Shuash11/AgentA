@@ -31,8 +31,8 @@ class AIService {
     if (isOnline) {
       return _onlineAI.preferredModel.displayName;
     }
-    if (!isOfflineModelReady) return 'Agenta Offline AI not ready';
-    return 'Agenta Offline AI';
+    if (!isOfflineModelReady) return 'AgentA Offline AI not ready';
+    return 'AgentA Offline AI';
   }
 
   void setPreferredModel(AIModel model) {
