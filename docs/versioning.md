@@ -33,10 +33,12 @@ names are exact.
 | Rebuild of the same SemVer (never re-tag an already-released version — bump instead, see edge cases) | build number only | `1.1.0+2 → 1.1.0+3` |
 
 > Rule of thumb: **every tag you ever push bumps `x.y.z`**. Re-using a SemVer
-> for a second tag must be avoided as a **process rule** — CI does NOT catch
-> it (the tag guard only compares tag == pubspec, with no history/bump check),
-> so a duplicate-version release would silently publish: installed apps would
-> see the same version and never show the update dialog.
+> for a second tag is forbidden, and CI now catches the duplicate-**release**
+> path: the tag guard's duplicate-semver check fails a fresh run when a
+> published release already exists for that version (or when the tag no longer
+> points at the run's commit). Legitimate re-runs of the publishing run still
+> pass. Residual process rule: a force-pushed tag for a version that was
+> **never released** has no release record to compare against.
 
 ---
 
@@ -192,7 +194,7 @@ class RemoteRelease {
 | **Rate-limited (403/429)** | `backoffUntil` from `retry-after` / `x-ratelimit-reset` (fallback: 1-hour window if headers are missing). No request retried until it passes — at source and service level. |
 | **404 (no releases yet)** | `fetchLatestRelease` → null → nothing emitted; not an error, no backoff. |
 | **Non-semver tag (e.g. `latest`, `v1.2`, prerelease)** | Engine: `SemVer.tryParseTag` → null → release ignored. CI: the tag guard fails the build with `::error::`. |
-| **Rebuild the same SemVer (re-tag `v1.1.0` on a new commit, pubspec unchanged)** | **NOT caught by CI** — the tag guard only compares tag == pubspec (no history/bump check), so this PASSES the guard and silently publishes a duplicate-version release installed apps can never detect. Process rule: never re-tag an already-released version — bump the SemVer instead. |
+| **Rebuild the same SemVer (re-tag `v1.1.0` on a new commit, pubspec unchanged)** | **Caught by CI — duplicate-release path**: when a published release already exists for that version, the tag guard fails a fresh run (attempt 1 — i.e. the tag ref was re-pushed/re-created, or the workflow was dispatched on the tag) with `::error::` + non-zero exit before the release step; it also fails if the tag no longer points at the run's commit. Re-runs of the publishing run (attempt ≥ 2) pass — the duplicate-release path no longer publishes silently. Residual process rule: a force-pushed tag for a version that was **never released** has no release record to compare against. |
 | **Tag without matching pubspec version** | CI guard fails with `::error::` + non-zero exit before any build. |
 | **Fresh install of an older APK** | Startup check fires post-first-frame → dialog shows pre-login (over login screen), soft or forced per the marker. |
 | **Debug builds (`kDebugMode`)** | All checks skipped (`kReleaseMode` gate) — no network calls, no dialogs, no dev noise. Tests exercise the engine with a fake `VersionSource`. |

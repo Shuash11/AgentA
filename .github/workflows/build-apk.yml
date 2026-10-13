@@ -70,8 +70,26 @@ jobs:
       # GitHub release tags against the running version, so a mismatched tag
       # would ship a release the app can never detect. Build number (+N) is
       # not compared (convention: every user-facing release bumps semver).
+      #
+      # F15 duplicate-semver guard (same step): a version that already has a
+      # published release must not be republished — installed apps would never
+      # detect the duplicate (docs/versioning.md §6). Fails when a published
+      # release exists for this version AND either the tag ref no longer
+      # points at the commit this run builds (tag moved mid-run), or this is a
+      # fresh run (attempt 1) — which can only happen when the tag ref was
+      # re-pushed/re-created or the workflow was manually dispatched on the
+      # tag (a push of an unchanged tag triggers no run). Legitimate re-runs
+      # of the publishing run (attempt >= 2) pass — idempotent.
+      # Honest caveat: this detects the duplicate-RELEASE path only (a release
+      # record exists to compare against). A force-pushed tag for a version
+      # that was NEVER released has no record and remains covered only by the
+      # process rule. GITHUB_SHA on a tag push is the tag's PEELED commit
+      # (verified against this repo's tag runs); refs may be annotated tag
+      # objects (object.type == "tag") or lightweight refs — both handled.
       - name: Assert v* tag matches pubspec version
         if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
           SEMVER="${TAG#v}"
@@ -89,6 +107,39 @@ jobs:
             exit 1
           fi
           echo "Tag guard OK: ${TAG} == pubspec version ${PUBSPEC_VERSION}"
+
+          # --- Duplicate-semver guard (F15, docs/versioning.md §6) ------------
+          # A published release for this version must not be republished.
+          # (1) resolve the tag ref's CURRENT commit, peeling annotated tags:
+          #     the tag must still point at the commit this run builds.
+          # (2) a fresh run (attempt 1) with a release already present can only
+          #     come from a re-pushed/re-created tag ref or a manual dispatch —
+          #     a push of an unchanged tag triggers no run. Re-runs of the
+          #     publishing run (attempt >= 2) are the legitimate path.
+          if REL_DRAFT="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' 2>/dev/null)"; then
+            if [ "$REL_DRAFT" = "true" ]; then
+              echo "Duplicate-semver guard OK: a draft release exists for ${TAG} — drafts are invisible to the update check; publishing is allowed."
+            else
+              REF_TYPE="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.type')"
+              REF_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha')"
+              if [ "$REF_TYPE" = "tag" ]; then
+                TAG_COMMIT="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${REF_SHA}" --jq '.object.sha')"
+              else
+                TAG_COMMIT="$REF_SHA"
+              fi
+              if [ "$TAG_COMMIT" != "$GITHUB_SHA" ]; then
+                echo "::error::Tag '${TAG}' now points at ${TAG_COMMIT}, but this build is for ${GITHUB_SHA} — the tag was moved after its release. Re-tagging an already-released version is forbidden (docs/versioning.md §6): installed apps can never detect the duplicate. Bump the SemVer and tag the new version."
+                exit 1
+              fi
+              if [ "${GITHUB_RUN_ATTEMPT:-1}" -le 1 ]; then
+                echo "::error::Release '${TAG}' already exists and this is a fresh run (attempt 1). Re-pushing/re-creating the tag or dispatching on an already-released version would publish a duplicate installed apps can never detect. Forbidden (docs/versioning.md §6): bump the SemVer and tag the new version, or re-run the original publishing run instead."
+                exit 1
+              fi
+              echo "Duplicate-semver guard OK: release '${TAG}' already exists at ${TAG_COMMIT}; this is re-run attempt ${GITHUB_RUN_ATTEMPT} of the publishing run (idempotent)."
+            fi
+          else
+            echo "Duplicate-semver guard OK: no release exists for ${TAG} — first release for this version."
+          fi
 
       - name: Validate secrets (no .env file written)
         env:
