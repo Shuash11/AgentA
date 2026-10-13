@@ -22,7 +22,7 @@ dependencies:
   flutter_edge_ai_mediapipe: ^1.0.8
   path_provider: ^2.1.4
 
-  connectivity_plus: ^6.0.3
+  connectivity_plus: ^7.3.2
 
   # Update-check engine (post-first-frame init, see plus_plugins #309).
   # 10.x requires win32 ^6.0.1; satisfied via fss 10.3.4 -> fss_windows 4.2.x (win32 ^6).
