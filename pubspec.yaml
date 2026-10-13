@@ -25,9 +25,8 @@ dependencies:
   connectivity_plus: ^6.0.3
 
   # Update-check engine (post-first-frame init, see plus_plugins #309).
-  # 9.x pinned: >=10.1.0 needs win32 ^6.0.1 which conflicts with
-  # flutter_secure_storage 9.x -> flutter_secure_storage_windows 3.1.2 (win32 ^5).
-  package_info_plus: ^9.0.1
+  # 10.x requires win32 ^6.0.1; satisfied via fss 10.3.4 -> fss_windows 4.2.x (win32 ^6).
+  package_info_plus: ^10.2.2
 
   # Update dialog: dismissal persistence (SharedPreferencesAsync) + browser launch.
   shared_preferences: ^2.5.5
@@ -35,7 +34,9 @@ dependencies:
 
   uuid: ^4.4.0
 
-  flutter_secure_storage: ^9.2.2
+  # Staged 9->10 (auto-migration on first access; zero-loss). 10->11 deferred:
+  # direct 9->11 is documented data-loss (fss 11.0.0 changelog) — see plans/cycle-9.
+  flutter_secure_storage: ^10.3.4
 
   crypto: ^3.0.6
 
