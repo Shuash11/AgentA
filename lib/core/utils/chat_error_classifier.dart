@@ -3,7 +3,9 @@
 /// Moved verbatim out of `_ChatScreenState` (`lib/presentation/chats/chats.dart`)
 /// so the string→string mapping is unit-testable without widgets.
 /// No behavior change: every message string here is byte-identical to the
-/// pre-move text. Brand copy is frozen — do not reword.
+/// pre-move text. Brand copy was normalized to "AgentA" in F23 — display-only
+/// strings; if you reword them, keep the normalized brand and update the
+/// `test/chat_error_classifier_test.dart` assertions.
 class ChatErrorClassifier {
   const ChatErrorClassifier._();
 
