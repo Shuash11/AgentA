@@ -165,7 +165,7 @@ class AppConfig {
     }
   }
 
-  /// Called when env file changes or on logout to allow re-init.
+  /// Called on logout to allow re-init (dart-define config is compile-time; there is no env file to change).
   static void notifyGoogleConfigChanged() {
     _googleConfigured = false;
     _googleConfigError = null;

@@ -124,7 +124,7 @@ Then tap Google sign-in once and read the burst:
 | `ApiException: 10` (`DEVELOPER_ERROR`) | SHA-1 + package not registered, or wrong GCP project. Recheck Sections 2-3. |
 | `ApiException: [16]` / `CANCELED` right after `reauth` or `CredentialManager` request | Config-cancel. First check the **APK signing key**: a debug-fallback CI build has a different random SHA-1 every run, so no OAuth Android client can match it (see Section 7). Otherwise nonce / serverClientId / Supabase provider mismatch — check Web vs Android client confusion and Skip-nonce setting. |
 | `redirect_uri_mismatch` or `invalid_client` | Supabase has the wrong Web ID/secret. Recheck Section 4. |
-| Nothing at all in logcat | Button never fired (missing `GOOGLE_SERVER_CLIENT_ID` at build time — app reports "not configured"). Check CI secret and `.env`. |
+| Nothing at all in logcat | Button never fired (missing `GOOGLE_SERVER_CLIENT_ID` at build time — app reports "not configured"). Check the CI secret (dart-define). |
 
 ## 6. Test device requirements
 
