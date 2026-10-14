@@ -41,7 +41,7 @@ Add `flutter_launcher_icons` to your `dev_dependencies` in `pubspec.yaml`:
 
 ```yaml
 dev_dependencies:
-  flutter_launcher_icons: ^0.13.1
+  flutter_launcher_icons: ^0.14.4
 ```
 
 ### Step C: Configure Icon Generation
@@ -59,7 +59,7 @@ flutter_launcher_icons:
 Execute the following command in the terminal to generate all icon sizes for Android and iOS:
 
 ```bash
-flutter pub run flutter_launcher_icons:main
+dart run flutter_launcher_icons
 ```
 
 ---
@@ -82,9 +82,11 @@ logcat diagnosis, signing debt note): [docs/google-signin-setup.md](docs/google-
 
 ## 5. Backend, secrets & release checks
 
-- Secrets: `--dart-define` at build time (CI), `.env` local-dev fallback
-  only — never bundled, never committed. Rotation: update the Actions
-  secret, rebuild. Details: [docs/backend-rls.md](docs/backend-rls.md).
+- Secrets: `--dart-define` only — CI passes the Actions secrets at build
+  time; local dev passes the same keys on the `flutter run` command line
+  (see `.env.example` for the key reference; there is no `.env` runtime
+  fallback). Rotation: update the Actions secret, rebuild. Details:
+  [docs/backend-rls.md](docs/backend-rls.md).
 - RLS: `supabase/migrations/0001_rls.sql` (`auth.uid()` policies).
 - Release signing: `android/key.properties` from CI secrets (see
   `android/key.properties.example`).

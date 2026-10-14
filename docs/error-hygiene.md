@@ -8,7 +8,7 @@ logs and to a bounded in-app diagnostics toggle.
 
 | Site | UI shows | Raw detail goes to |
 | --- | --- | --- |
-| `lib/main.dart` app-config load failure | `App configuration failed to load. Please try again.` | `debugPrint('[Main] AppConfig.init failed: $e')` |
+| `lib/main.dart` backend init failure (`_initializeApp`) | `Backend connection failed. You can continue in offline mode.` | `debugPrint('[Main] Supabase init failed: $e')` |
 | `lib/main.dart` database init failure | `App data failed to initialize. Please try again.` | `kDebugMode` log at the throw site |
 | `lib/presentation/profile/editprofile.dart` save failure | `Could not save your profile. Please try again.` (SnackBar) | `debugPrint('[EditProfile] save failed: $e')` |
 | `lib/presentation/auth/login.dart` `_mapGoogleError` | `Google sign-in failed (<code>).` / `Google sign-in failed. Please try again.` / `... Check your connection.` | `debugPrint('[Login] Google sign-in failed: $e | $stack')` + typed `GoogleSignInFailure` |

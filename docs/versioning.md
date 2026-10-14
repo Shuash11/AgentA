@@ -15,9 +15,10 @@ names are exact.
 - Every **user-facing release bumps the SemVer** (`x.y.z`). By convention the
   build number `+b` is **metadata only — never compared** (the update engine
   records it but ignores it in the decision rule).
-- Releases are tagged with **annotated tags `vX.Y.Z`** (e.g. `v1.1.0`) and
-  pushed explicitly. The tag must equal the pubspec SemVer — enforced by CI
-  (see the release checklist).
+- Releases are tagged `vX.Y.Z` (e.g. `v1.1.0`) and pushed explicitly; the
+  convention is an annotated tag (`git tag -a`), and the CI tag guard
+  accepts annotated and lightweight tags alike. The tag must equal the
+  pubspec SemVer — enforced by CI (see the release checklist).
 - Parsing is strict: `lib/core/utils/semver.dart` → `SemVer.tryParse` accepts
   only `^\d+\.\d+\.\d+$` (rejects `latest`, prereleases like `1.2.0-rc1`,
   build metadata, junk); `SemVer.tryParseTag` strips a leading `v`/`V` from tag

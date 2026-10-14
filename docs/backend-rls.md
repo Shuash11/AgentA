@@ -6,8 +6,9 @@
   (chats) / `auth.uid() = id` (profiles) on all CRUD policies. Messages are
   gated through parent-chat ownership. Never trust a client-supplied `userId`.
 - Apply: `supabase db push` (or run the file in the Supabase SQL editor).
-- CI check (`build-apk.yml` → "Assert backend RLS + guards") fails the build
-  if the migration is missing or lacks `auth.uid()` policies.
+- CI check (`build-apk.yml` → "Assert no .env asset + backend RLS
+  guards") fails the build if the migration is missing or lacks
+  `auth.uid()` policies.
 - Direct table access in `SupabaseChatService` / `UserRepository` /
   `SecurityService` is safe only behind these policies.
 
