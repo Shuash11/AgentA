@@ -359,11 +359,17 @@ class _LoginPageState extends State<LoginPage> {
             // Verify-then-upgrade: the user is already authenticated, so a
             // failed re-hash must never block the login (best-effort; the
             // legacy row stays verifiable and the upgrade retries next time).
-            await dao.tryUpgradePasswordHash(
-              localId: localUser['local_id'] as String,
-              expectedHash: storedHash,
-              newHash: PasswordHasher.hashPassword(password),
-            );
+            try {
+              await dao.tryUpgradePasswordHash(
+                localId: localUser['local_id'] as String,
+                expectedHash: storedHash,
+                newHash: PasswordHasher.hashPassword(password),
+              );
+            } catch (e) {
+              if (kDebugMode) {
+                debugPrint('[Login] upgrade skipped: $e');
+              }
+            }
           }
           await SessionManager.saveSession(
             uid: localUser['local_id'] as String,
@@ -453,11 +459,17 @@ class _LoginPageState extends State<LoginPage> {
         if (verification.needsUpgrade) {
           // Same verify-then-upgrade contract as the offline login path:
           // post-proof, best-effort, never blocks the sign-in.
-          await dao.tryUpgradePasswordHash(
-            localId: localId,
-            expectedHash: storedHash,
-            newHash: PasswordHasher.hashPassword(password),
-          );
+          try {
+            await dao.tryUpgradePasswordHash(
+              localId: localId,
+              expectedHash: storedHash,
+              newHash: PasswordHasher.hashPassword(password),
+            );
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('[Login] upgrade skipped: $e');
+            }
+          }
         }
         await SessionManager.saveSession(
           uid: localId,
