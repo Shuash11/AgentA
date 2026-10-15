@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../core/utils/ai_output_guard.dart';
 import '../../core/utils/connectivity_service.dart';
 import '../../data/models/chat_message_model.dart';
 import 'ai_model.dart';
@@ -48,8 +49,9 @@ class AIService {
     required String newMessage,
     AIModel? model,
   }) async {
+    final String response;
     if (isOnline) {
-      return _onlineAI.sendMessage(
+      response = await _onlineAI.sendMessage(
         history: history,
         newMessage: newMessage,
         model: model,
@@ -62,8 +64,15 @@ class AIService {
         );
       }
 
-      return _offlineAI.sendMessage(history: history, newMessage: newMessage);
+      response = await _offlineAI.sendMessage(
+        history: history,
+        newMessage: newMessage,
+      );
     }
+
+    // F29: strip trailing prompt-meta artifacts before the response can be
+    // displayed or persisted.
+    return AiOutputGuard.stripPromptArtifacts(response);
   }
 
   Stream<String> sendMessageStream({
@@ -71,11 +80,15 @@ class AIService {
     required String newMessage,
     AIModel? model,
   }) async* {
+    // F29: the guard withholds a potential trailing artifact until the
+    // stream completes, so the artifact is never emitted to the UI.
     if (isOnline) {
-      yield* _onlineAI.sendMessageStream(
-        history: history,
-        newMessage: newMessage,
-        model: model,
+      yield* AiOutputGuard.guardStream(
+        _onlineAI.sendMessageStream(
+          history: history,
+          newMessage: newMessage,
+          model: model,
+        ),
       );
     } else {
       final offlineReady = await _offlineAI.ensureReady();
@@ -85,9 +98,8 @@ class AIService {
         );
       }
 
-      yield* _offlineAI.sendMessageStream(
-        history: history,
-        newMessage: newMessage,
+      yield* AiOutputGuard.guardStream(
+        _offlineAI.sendMessageStream(history: history, newMessage: newMessage),
       );
     }
   }
