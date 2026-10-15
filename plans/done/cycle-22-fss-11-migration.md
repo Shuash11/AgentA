@@ -1,6 +1,6 @@
 # Cycle 22 — fss 10→11 Migration + checkUpgradeStatus() Integration (F11 part 4) — Data-Safe, Map-First
 
-**status:** active
+**status:** done (closed 2026-10-15 — P1+P2 PASS + e2e, push executed, both workflows green; fss 11 + the loss-detection hook shipped)
 **created:** 2026-10-15
 **created by:** Adviser (self-improvement cycle 22 audit)
 **repo:** C:\projects\aiproject (AgentA) — branch main @ bc1479c
@@ -121,7 +121,8 @@ Ranking rationale: the release un-gated the highest-value remaining item; the de
 | Date | Event |
 |---|---|
 | 2026-10-15 | Cycle-22 audit recorded; plan created `active` (task F11 part 4 — the un-gated ^11 follow-up). F28 recorded (softprops Node-20 nit). The consumer surface re-verified (2 files). The cycle-9 design cited as the baseline. |
-| pending | P1 (map, CHEAP) + P2 (apply, EXPENSIVE — forbidden if P1 STOPs) → **once-per-plan e2e run (required if P2 ran)** → single Reviewer pass → Adviser push confirmation → push + CI watch → on green: close plan, open cycle-23 audit. |
+| 2026-10-15 | **Push EXECUTED** — `d4a370f` feat(storage): fss 11.2.0 + checkUpgradeStatus (7 files, +169/−7), `9b1f7aa` docs(plans); remote main = `9b1f7aa`; version 1.2.4+1 untouched; no tags; consumers zero-diff. |
+| 2026-10-15 | **CI GREEN — PLAN CLOSED.** Build APK run **38675897935 SUCCESS (10m9s)**: **225/225 tests on the runner** (222 baseline + 3 cycle-22 tests); all guards + format gate + strict-lint analyze + APK build green; runners still ubuntu-24.04 (F18 observation recorded). Promote to Landing run **38676783649 SUCCESS (29s)**: real promotion path, no skip. **The staged-rollout arc is complete: v1.2.4 shipped the 9→10 auto-migration, and this cycle shipped 10→11 with the boot-time `checkUpgradeStatus()` loss detection — the skip-path verdict is "genuinely graceful — never silent, never crashing."** F11 part 4 CLOSED. Zombie run untouched (accepted). Moved to `plans/done/`. |
 
 - Cycle-23 pre-ranked: **F27** (sqflite in-range refresh #2 — routine) or F11-part-3c-4 residue; F26/F18 deferred-with-trigger; B2 parked; **F4/F5/F12 remain CLOUD-BLOCKED (21 cycles) — the standing user escalation.**
 - This plan is `done` only when P1+P2 PASS review (after the e2e run; or the STOP-deferral is recorded and the plan closes via Adviser re-scope), the push is Adviser-approved and executed, and BOTH workflows are green.
