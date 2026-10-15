@@ -34,9 +34,12 @@ dependencies:
 
   uuid: ^4.4.0
 
-  # Staged 9->10 (auto-migration on first access; zero-loss). 10->11 deferred:
-  # direct 9->11 is documented data-loss (fss 11.0.0 changelog) — see plans/cycle-9.
-  flutter_secure_storage: ^10.3.4
+  # Staged rollout complete: v1.2.4 shipped ^10 (9->10 auto-migration ran on
+  # first access). v11 keeps the v10 default ciphers, so v10 data survives;
+  # direct 9->11 remains documented data-loss — detected at boot by the
+  # checkUpgradeStatus() hook (lib/main.dart) and degraded to
+  # re-login/re-enroll, never silent. See plans/cycle-22.
+  flutter_secure_storage: ^11.2.0
 
   crypto: ^3.0.6
 

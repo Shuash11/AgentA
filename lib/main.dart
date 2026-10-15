@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_edge_ai/flutter_edge_ai.dart';
 import 'package:flutter_edge_ai_mediapipe/flutter_edge_ai_mediapipe.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'theme/app_theme.dart';
 import 'cubit/app_providers.dart';
 import 'cubit/connectivity/connectivity_cubit.dart';
@@ -93,6 +95,12 @@ class _AppLoaderState extends State<AppLoader> {
     setState(() {
       _initState = const InitState(status: AppInitStatus.initializing);
     });
+
+    // F11 part 4: read-only upgrade check BEFORE the first secure-storage
+    // access (AuthGate/SyncService reads, biometric reads, and DB-migration
+    // key drops all happen after this point); Android-only per the plugin
+    // contract; never blocks boot.
+    await _checkSecureStorageUpgrade();
 
     try {
       if (AppConfig.supabaseUrl.isEmpty ||
@@ -196,6 +204,32 @@ class _AppLoaderState extends State<AppLoader> {
 
     if (_initState.status == AppInitStatus.databaseReady) {
       _startMainApp();
+    }
+  }
+
+  /// F11 part 4: reports whether secure-storage data written by an older
+  /// plugin version survived the fss 10->11 upgrade. Read-only; Android is
+  /// the only platform the plugin implements it on (elsewhere the plugin
+  /// returns `unsupported`). A loss report arms the one-shot login notice
+  /// ([AppConfig.consumeStorageUpgradeNotice]) so skip-path users degrade to
+  /// re-login/re-enroll instead of a silent sign-out. Raw plugin detail stays
+  /// in debug logs (docs/error-hygiene.md).
+  Future<void> _checkSecureStorageUpgrade() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final status = await const FlutterSecureStorage().checkUpgradeStatus();
+      if (status.hasDataLoss) {
+        AppConfig.recordStorageUpgradeLoss(
+          state: status.state.name,
+          reason: status.reason.name,
+          entryCount: status.entryCount,
+          details: status.details,
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Main] secure-storage upgrade check failed: $e');
+      }
     }
   }
 

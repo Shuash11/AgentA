@@ -174,6 +174,38 @@ class AppConfig {
     }
   }
 
+  // ── Secure-storage upgrade loss (F11 part 4, cycle 22) ───────────────
+  // Armed once at boot by the Android-only fss checkUpgradeStatus() hook
+  // (lib/main.dart) when data written by an older plugin version did not
+  // survive the 10->11 upgrade. The login screen consumes the notice once
+  // and shows a friendly static line; raw plugin detail stays in debug
+  // logs (docs/error-hygiene.md).
+
+  static bool _storageUpgradeLossDetected = false;
+
+  static void recordStorageUpgradeLoss({
+    required String state,
+    required String reason,
+    required int entryCount,
+    String? details,
+  }) {
+    _storageUpgradeLossDetected = true;
+    if (kDebugMode) {
+      debugPrint(
+        '[AppConfig] storage upgrade loss: state=$state reason=$reason '
+        'entries=$entryCount details=$details',
+      );
+    }
+  }
+
+  /// One-shot read: returns whether a loss was recorded this launch and
+  /// clears the flag so the notice renders exactly once.
+  static bool consumeStorageUpgradeNotice() {
+    final detected = _storageUpgradeLossDetected;
+    _storageUpgradeLossDetected = false;
+    return detected;
+  }
+
   /// Returns lengths map for badge/debug UI without exposing secrets.
   static Map<String, int> get envLengths => {
     'SUPABASE_URL': supabaseUrl.length,

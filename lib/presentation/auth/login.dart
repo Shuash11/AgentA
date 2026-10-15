@@ -131,6 +131,48 @@ class _GoogleConfigBanner extends StatelessWidget {
   }
 }
 
+/// One-shot safety notice shown on login when the boot-time secure-storage
+/// upgrade check reported data loss (F11 part 4). Static friendly text only
+/// — raw plugin detail stays in the boot-time debug log
+/// (docs/error-hygiene.md).
+class _StorageUpgradeNotice extends StatelessWidget {
+  final ThemeColors colors;
+
+  const _StorageUpgradeNotice({required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.withOpacity(colors.amber, 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.withOpacity(colors.amber, 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.lock_reset_rounded, color: colors.amber, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'You were signed out after the app updated. Please sign in '
+              'again.',
+              style: TextStyle(
+                color: colors.subtext,
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -148,6 +190,9 @@ class _LoginPageState extends State<LoginPage> {
   bool _biometricReady = false;
   String? _errorMessage;
 
+  // F11 part 4: one-shot upgrade-loss notice consumed from [AppConfig].
+  bool _showStorageNotice = false;
+
   // Google sign-in UX state: distinguishes genuine user-cancel from
   // repeated cancel (almost certainly a setup issue).
   int _consecutiveGoogleCancel = 0;
@@ -162,6 +207,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+    _showStorageNotice = AppConfig.consumeStorageUpgradeNotice();
     unawaited(_checkBiometric());
   }
 
@@ -836,6 +882,7 @@ class _LoginPageState extends State<LoginPage> {
               emailController: _emailController,
               passwordController: _passwordController,
               showPassword: _showPassword,
+              showStorageNotice: _showStorageNotice,
               errorMessage: _errorMessage,
               googleFailure: _lastGoogleFailure,
               showGoogleFailureDetails: _showGoogleFailureDetails,
@@ -871,6 +918,7 @@ class _LoginForm extends StatelessWidget {
   final TextEditingController emailController;
   final TextEditingController passwordController;
   final bool showPassword;
+  final bool showStorageNotice;
   final String? errorMessage;
   final GoogleSignInFailure? googleFailure;
   final bool showGoogleFailureDetails;
@@ -891,6 +939,7 @@ class _LoginForm extends StatelessWidget {
     required this.emailController,
     required this.passwordController,
     required this.showPassword,
+    required this.showStorageNotice,
     this.errorMessage,
     this.googleFailure,
     this.showGoogleFailureDetails = false,
@@ -923,6 +972,7 @@ class _LoginForm extends StatelessWidget {
                     AppConfig.googleConfigError ??
                     'Google sign-in is not configured.',
               ),
+            if (showStorageNotice) _StorageUpgradeNotice(colors: colors),
             Center(
               child: Container(
                 padding: const EdgeInsets.all(20),
