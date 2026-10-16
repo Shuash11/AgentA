@@ -29,208 +29,85 @@ class MessageBubble extends StatelessWidget {
   BoxDecoration _buildDecoration(bool isUser, bool isImageMessage) {
     if (isUser) {
       return BoxDecoration(
-        color: colors.amber.withValues(alpha: 0.9),
+        color: colors.accent,
         borderRadius: AppRadius.userBubbleRadius,
-        boxShadow: [
-          BoxShadow(
-            color: colors.withOpacity(colors.amber, 0.15),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
       );
     }
     return BoxDecoration(
       color: colors.card,
       borderRadius: AppRadius.assistantBubbleRadius,
-      border: Border.all(color: colors.border, width: 0.5),
-      boxShadow: [
-        BoxShadow(
-          color: colors.withOpacity(Colors.black, 0.06),
-          blurRadius: 6,
-          offset: const Offset(0, 2),
-        ),
-      ],
+      border: Border.all(color: colors.border),
     );
   }
 
   TextStyle _getTextStyle(bool isUser) {
-    return TextStyle(
-      color: isUser ? Colors.black : colors.text,
-      fontSize: 14.5,
-      height: 1.45,
+    return AppTypography.bodyChat.copyWith(
+      color: isUser ? colors.onAccent : colors.text,
     );
   }
 
   static final MarkdownStyleSheet _cachedMarkdownStyleSheetUser =
-      MarkdownStyleSheet(
-        p: const TextStyle(color: Colors.black, fontSize: 14.5, height: 1.45),
-        code: const TextStyle(
-          color: Colors.black,
-          fontSize: 13.5,
-          fontFamily: 'monospace',
-        ),
-        codeblockDecoration: BoxDecoration(
-          color: const Color(0xFFE0E0E0),
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-        ),
-        blockquote: const TextStyle(
-          color: Color(0xFF757575),
-          fontSize: 14,
-          fontStyle: FontStyle.italic,
-        ),
-        blockquoteDecoration: const BoxDecoration(
-          border: Border(left: BorderSide(color: Color(0xFFFFB300), width: 3)),
-        ),
-        listBullet: const TextStyle(color: Colors.black),
-        h1: const TextStyle(
-          color: Colors.black,
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-        ),
-        h2: const TextStyle(
-          color: Colors.black,
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
-        h3: const TextStyle(
-          color: Colors.black,
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-        ),
-        h4: const TextStyle(
-          color: Colors.black,
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-        ),
-        h5: const TextStyle(
-          color: Colors.black,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
-        h6: const TextStyle(
-          color: Colors.black,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-        ),
-        a: const TextStyle(
-          color: Colors.black87,
-          decoration: TextDecoration.underline,
-        ),
-        strong: const TextStyle(
-          color: Colors.black,
-          fontWeight: FontWeight.bold,
-        ),
-        em: const TextStyle(color: Colors.black, fontStyle: FontStyle.italic),
+      _buildMarkdownStyleSheet(
+        ink: AppColors.onAccent,
+        link: AppColors.onAccent,
+        blockquote: AppColors.onAccent,
       );
 
   static final MarkdownStyleSheet _cachedMarkdownStyleSheetAssistant =
-      MarkdownStyleSheet(
-        p: const TextStyle(color: Colors.black, fontSize: 14.5, height: 1.45),
-        code: const TextStyle(
-          color: Colors.black,
-          fontSize: 13.5,
-          fontFamily: 'monospace',
-        ),
-        codeblockDecoration: BoxDecoration(
-          color: const Color(0xFFE0E0E0),
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-        ),
-        blockquote: const TextStyle(
-          color: Color(0xFF757575),
-          fontSize: 14,
-          fontStyle: FontStyle.italic,
-        ),
-        blockquoteDecoration: const BoxDecoration(
-          border: Border(left: BorderSide(color: Color(0xFFFFB300), width: 3)),
-        ),
-        listBullet: const TextStyle(color: Colors.black),
-        h1: const TextStyle(
-          color: Colors.black,
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-        ),
-        h2: const TextStyle(
-          color: Colors.black,
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
-        h3: const TextStyle(
-          color: Colors.black,
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-        ),
-        h4: const TextStyle(
-          color: Colors.black,
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-        ),
-        h5: const TextStyle(
-          color: Colors.black,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
-        h6: const TextStyle(
-          color: Colors.black,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-        ),
-        a: const TextStyle(
-          color: Colors.amber,
-          decoration: TextDecoration.underline,
-        ),
-        strong: const TextStyle(
-          color: Colors.black,
-          fontWeight: FontWeight.bold,
-        ),
-        em: const TextStyle(color: Colors.black, fontStyle: FontStyle.italic),
+      _buildMarkdownStyleSheet(
+        ink: AppColors.text,
+        link: AppColors.accent,
+        blockquote: AppColors.subtext,
       );
+
+  /// Markdown styling per §5.16. Code blocks keep the light `input` surface in
+  /// both bubbles (ink text); the user bubble renders all body/heading text in
+  /// `onAccent` on the accent fill, the assistant bubble in ink with `subtext`
+  /// blockquotes and accent links.
+  static MarkdownStyleSheet _buildMarkdownStyleSheet({
+    required Color ink,
+    required Color link,
+    required Color blockquote,
+  }) {
+    return MarkdownStyleSheet(
+      p: AppTypography.bodyChat.copyWith(color: ink),
+      code: const TextStyle(
+        color: AppColors.text,
+        fontSize: 13,
+        fontFamily: 'monospace',
+      ),
+      codeblockDecoration: BoxDecoration(
+        color: AppColors.input,
+        borderRadius: AppRadius.chipRadius,
+        border: Border.all(color: AppColors.border),
+      ),
+      blockquote: AppTypography.body.copyWith(
+        color: blockquote,
+        fontStyle: FontStyle.italic,
+      ),
+      blockquoteDecoration: const BoxDecoration(
+        border: Border(left: BorderSide(color: AppColors.border, width: 2)),
+      ),
+      listBullet: TextStyle(color: ink),
+      h1: AppTypography.title.copyWith(color: ink),
+      h2: AppTypography.subtitle.copyWith(color: ink),
+      h3: AppTypography.body.copyWith(color: ink, fontWeight: FontWeight.w700),
+      h4: AppTypography.body.copyWith(color: ink, fontWeight: FontWeight.w600),
+      h5: AppTypography.label.copyWith(color: ink, fontWeight: FontWeight.w600),
+      h6: AppTypography.labelSm.copyWith(
+        color: ink,
+        fontWeight: FontWeight.w600,
+      ),
+      a: TextStyle(color: link, decoration: TextDecoration.underline),
+      strong: TextStyle(color: ink, fontWeight: FontWeight.bold),
+      em: TextStyle(color: ink, fontStyle: FontStyle.italic),
+    );
+  }
 
   MarkdownStyleSheet _getMarkdownStyleSheet(bool isUser) {
     if (isUser) return _cachedMarkdownStyleSheetUser;
 
-    return _cachedMarkdownStyleSheetAssistant.copyWith(
-      p: TextStyle(color: colors.text, fontSize: 14.5, height: 1.45),
-      code: TextStyle(
-        color: colors.text,
-        fontSize: 13.5,
-        fontFamily: 'monospace',
-      ),
-      listBullet: TextStyle(color: colors.text),
-      h1: TextStyle(
-        color: colors.text,
-        fontSize: 20,
-        fontWeight: FontWeight.bold,
-      ),
-      h2: TextStyle(
-        color: colors.text,
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-      ),
-      h3: TextStyle(
-        color: colors.text,
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
-      ),
-      h4: TextStyle(
-        color: colors.text,
-        fontSize: 15,
-        fontWeight: FontWeight.w600,
-      ),
-      h5: TextStyle(
-        color: colors.text,
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-      ),
-      h6: TextStyle(
-        color: colors.text,
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-      ),
-      a: TextStyle(color: colors.amber, decoration: TextDecoration.underline),
-      strong: TextStyle(color: colors.text, fontWeight: FontWeight.bold),
-      em: TextStyle(color: colors.text, fontStyle: FontStyle.italic),
-    );
+    return _cachedMarkdownStyleSheetAssistant;
   }
 
   @override
@@ -262,9 +139,7 @@ class MessageBubble extends StatelessWidget {
 
   Widget _buildCopyableTextContent(BuildContext context, bool isUser) {
     final content = _buildTextContent(isUser);
-    final copyColor = isUser
-        ? Colors.black.withValues(alpha: 0.65)
-        : colors.subtext;
+    final copyColor = isUser ? colors.onAccent : colors.subtext;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -274,16 +149,12 @@ class MessageBubble extends StatelessWidget {
         const SizedBox(height: 6),
         Align(
           alignment: Alignment.centerRight,
-          child: SizedBox(
-            width: 32,
-            height: 32,
-            child: IconButton(
-              tooltip: 'Copy message',
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
-              icon: Icon(Icons.copy_rounded, size: 16, color: copyColor),
-              onPressed: () => _copyMessage(context),
-            ),
+          child: IconButton(
+            tooltip: 'Copy message',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: Icon(Icons.copy_rounded, size: 16, color: copyColor),
+            onPressed: () => _copyMessage(context),
           ),
         ),
       ],

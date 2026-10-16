@@ -28,13 +28,7 @@ class OfflineModelBanner extends StatelessWidget {
       (OnlineAIService o) => o.preferredModel.displayName,
     );
 
-    final (
-      Color bgColor,
-      Color accentColor,
-      IconData icon,
-      String text,
-      String? subtext,
-    ) = _getStatus(
+    final status = _getStatus(
       isOnline,
       isLimited,
       isGemmaReady,
@@ -47,12 +41,13 @@ class OfflineModelBanner extends StatelessWidget {
         onTap ?? (needsModel ? () => openDownloadScreen(context) : null);
 
     return _StatusBanner(
-      icon: icon,
-      text: text,
-      subtext: subtext,
-      bgColor: bgColor,
-      accentColor: accentColor,
-      textColor: colors.text,
+      icon: status.icon,
+      iconColor: status.iconColor,
+      bgColor: status.background,
+      titleColor: status.titleColor,
+      subtextColor: status.subtextColor,
+      text: status.text,
+      subtext: status.subtext,
       onTap: effectiveOnTap,
     );
   }
@@ -70,7 +65,16 @@ class OfflineModelBanner extends StatelessWidget {
     );
   }
 
-  (Color, Color, IconData, String, String?) _getStatus(
+  ({
+    Color background,
+    Color iconColor,
+    Color titleColor,
+    Color subtextColor,
+    IconData icon,
+    String text,
+    String? subtext,
+  })
+  _getStatus(
     bool isOnline,
     bool isLimited,
     bool isGemmaReady,
@@ -79,76 +83,82 @@ class OfflineModelBanner extends StatelessWidget {
   ) {
     if (isOnline) {
       return (
-        colors.success.withValues(alpha: 0.15),
-        colors.success,
-        Icons.cloud_done_rounded,
-        'Online - $modelName',
-        null,
+        background: colors.successContainer,
+        iconColor: colors.success,
+        titleColor: colors.text,
+        subtextColor: colors.subtext,
+        icon: Icons.cloud_done_rounded,
+        text: 'Online — $modelName',
+        subtext: null,
       );
     }
     if (isLimited) {
       return (
-        colors.amber.withValues(alpha: 0.15),
-        colors.amber,
-        Icons.cloud_queue_rounded,
-        'Limited - AgentA Offline AI',
-        _offlineDisclaimer,
+        background: colors.warningContainer,
+        iconColor: colors.warning,
+        titleColor: colors.text,
+        subtextColor: colors.subtext,
+        icon: Icons.cloud_queue_rounded,
+        text: 'Limited — AgentA Offline AI',
+        subtext: _offlineDisclaimer,
       );
     }
     if (isGemmaReady) {
       return (
-        colors.amber.withValues(alpha: 0.12),
-        colors.amber,
-        Icons.memory_rounded,
-        'Offline - AgentA Offline AI',
-        _offlineDisclaimer,
+        background: colors.accentContainer,
+        iconColor: colors.onAccentContainer,
+        titleColor: colors.onAccentContainer,
+        subtextColor: colors.onAccentContainer,
+        icon: Icons.memory_rounded,
+        text: 'Offline — AgentA Offline AI',
+        subtext: _offlineDisclaimer,
       );
     }
     return (
-      colors.error.withValues(alpha: 0.15),
-      colors.error,
-      Icons.wifi_off_rounded,
-      'Offline - model not ready',
-      'Tap to get the offline model.',
+      background: colors.errorContainer,
+      iconColor: colors.error,
+      titleColor: colors.error,
+      subtextColor: colors.subtext,
+      icon: Icons.wifi_off_rounded,
+      text: 'Offline — model not ready',
+      subtext: 'Tap to get the offline model.',
     );
   }
 }
 
 class _StatusBanner extends StatelessWidget {
   final IconData icon;
+  final Color iconColor;
+  final Color bgColor;
+  final Color titleColor;
+  final Color subtextColor;
   final String text;
   final String? subtext;
-  final Color bgColor;
-  final Color accentColor;
-  final Color textColor;
   final VoidCallback? onTap;
 
   const _StatusBanner({
     required this.icon,
+    required this.iconColor,
+    required this.bgColor,
+    required this.titleColor,
+    required this.subtextColor,
     required this.text,
     this.subtext,
-    required this.bgColor,
-    required this.accentColor,
-    required this.textColor,
     this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final content = Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.base,
-        vertical: AppSpacing.xs,
+        vertical: AppSpacing.sm,
       ),
-      decoration: BoxDecoration(
-        color: bgColor,
-        border: const Border(
-          left: BorderSide(color: AppColors.amber, width: 3),
-        ),
-      ),
+      color: bgColor,
       child: Row(
         children: [
-          Icon(icon, color: accentColor, size: 16),
+          Icon(icon, color: iconColor, size: 18),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
@@ -157,21 +167,14 @@ class _StatusBanner extends StatelessWidget {
               children: [
                 Text(
                   text,
-                  style: TextStyle(
-                    color: textColor.withValues(alpha: 0.9),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: AppTypography.label.copyWith(color: titleColor),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (subtext != null)
                   Text(
                     subtext!,
-                    style: TextStyle(
-                      color: textColor.withValues(alpha: 0.7),
-                      fontSize: 12,
-                    ),
+                    style: AppTypography.labelSm.copyWith(color: subtextColor),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -180,14 +183,14 @@ class _StatusBanner extends StatelessWidget {
           ),
           if (onTap != null) ...[
             const SizedBox(width: AppSpacing.sm),
-            Icon(Icons.arrow_forward_rounded, color: accentColor, size: 16),
+            Icon(Icons.arrow_forward_rounded, color: iconColor, size: 16),
           ],
         ],
       ),
     );
     if (onTap == null) return content;
     return Material(
-      color: Colors.transparent,
+      type: MaterialType.transparency,
       child: InkWell(onTap: onTap, child: content),
     );
   }
@@ -199,29 +202,27 @@ class SyncingBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.base,
         vertical: AppSpacing.sm,
       ),
-      color: AppColors.amber.withValues(alpha: 0.15),
+      color: AppColors.accentContainer,
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(
             width: 14,
             height: 14,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: AppColors.amber,
+              color: AppColors.accent,
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
           Text(
             'Syncing data...',
-            style: TextStyle(
-              color: AppColors.textDark.withValues(alpha: 0.9),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+            style: AppTypography.label.copyWith(
+              color: AppColors.onAccentContainer,
             ),
           ),
         ],

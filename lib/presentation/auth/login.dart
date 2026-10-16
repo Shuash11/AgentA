@@ -56,6 +56,7 @@ class _DiagnosticsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.select((ThemeCubit c) => c.state.colors);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -65,11 +66,14 @@ class _DiagnosticsRow extends StatelessWidget {
             width: 110,
             child: Text(
               label,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              style: AppTypography.label.copyWith(color: colors.subtext),
             ),
           ),
           Expanded(
-            child: SelectableText(value, style: const TextStyle(fontSize: 13)),
+            child: SelectableText(
+              value,
+              style: AppTypography.body.copyWith(color: colors.text),
+            ),
           ),
         ],
       ),
@@ -90,37 +94,38 @@ class _GoogleConfigBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
-        color: colors.withOpacity(colors.amber, 0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.withOpacity(colors.amber, 0.4)),
+        color: colors.warningContainer,
+        borderRadius: AppRadius.bannerRadius,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.warning_amber_rounded, color: colors.amber, size: 20),
-          const SizedBox(width: 10),
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Icon(
+              Icons.warning_amber_rounded,
+              color: AppColors.warning,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Google sign-in needs setup',
-                  style: TextStyle(
-                    color: colors.text,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
+                  style: AppTypography.label.copyWith(color: colors.text),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   '$message Check the setup docs for SHA-1 / OAuth / Supabase steps.',
-                  style: TextStyle(
-                    color: colors.subtext,
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
+                  style: AppTypography.labelSm.copyWith(color: colors.subtext),
                 ),
               ],
             ),
@@ -145,25 +150,32 @@ class _StorageUpgradeNotice extends StatelessWidget {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
-        color: colors.withOpacity(colors.amber, 0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.withOpacity(colors.amber, 0.4)),
+        color: colors.accentContainer,
+        borderRadius: AppRadius.bannerRadius,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.lock_reset_rounded, color: colors.amber, size: 20),
-          const SizedBox(width: 10),
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Icon(
+              Icons.lock_reset_rounded,
+              color: AppColors.onAccentContainer,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               'You were signed out after the app updated. Please sign in '
               'again.',
-              style: TextStyle(
-                color: colors.subtext,
-                fontSize: 12,
-                height: 1.4,
+              style: AppTypography.label.copyWith(
+                color: colors.onAccentContainer,
               ),
             ),
           ),
@@ -876,7 +888,7 @@ class _LoginPageState extends State<LoginPage> {
           behavior: HitTestBehavior.translucent,
           onTap: () => FocusScope.of(context).unfocus(),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(28, 0, 28, 100),
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
             child: _LoginForm(
               formKey: _formKey,
               emailController: _emailController,
@@ -974,39 +986,24 @@ class _LoginForm extends StatelessWidget {
               ),
             if (showStorageNotice) _StorageUpgradeNotice(colors: colors),
             Center(
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: colors.withOpacity(colors.amber, 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.bolt_rounded, color: colors.amber, size: 48),
+              child: Text(
+                'AgentA',
+                style: AppTypography.display.copyWith(color: colors.text),
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 8),
             Center(
               child: Text(
-                "Welcome Back",
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: colors.text,
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Center(
-              child: Text(
-                "Sign in to continue",
-                style: TextStyle(color: colors.subtext, fontSize: 15),
+                'Sign in to continue',
+                style: AppTypography.subtitle.copyWith(color: colors.subtext),
               ),
             ),
             const SizedBox(height: 44),
             Text(
               "Email",
-              style: TextStyle(
+              style: AppTypography.label.copyWith(
                 fontWeight: FontWeight.w600,
-                color: colors.subtext,
+                color: colors.text,
               ),
             ),
             const SizedBox(height: 8),
@@ -1014,45 +1011,46 @@ class _LoginForm extends StatelessWidget {
               controller: emailController,
               keyboardType: TextInputType.emailAddress,
               autofillHints: const [AutofillHints.email],
-              style: TextStyle(color: colors.text),
+              style: AppTypography.body.copyWith(color: colors.text),
               validator: AuthService.validateEmail,
               decoration: InputDecoration(
                 hintText: "Email",
-                hintStyle: TextStyle(color: colors.subtext),
-                prefixIcon: Icon(Icons.email_outlined, color: colors.amber),
+                hintStyle: AppTypography.body.copyWith(color: colors.subtext),
+                prefixIcon: Icon(
+                  Icons.email_outlined,
+                  color: colors.subtext,
+                  size: 20,
+                ),
                 filled: true,
                 fillColor: colors.input,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
-                  vertical: 16,
+                  vertical: 14,
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: colors.border),
+                  borderRadius: AppRadius.inputRadius,
+                  borderSide: BorderSide(color: colors.inputBorder),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: colors.amber, width: 1.2),
+                  borderRadius: AppRadius.inputRadius,
+                  borderSide: BorderSide(color: colors.accent, width: 1.5),
                 ),
                 errorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: AppColors.error),
+                  borderRadius: AppRadius.inputRadius,
+                  borderSide: BorderSide(color: colors.error, width: 1.5),
                 ),
                 focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(
-                    color: AppColors.error,
-                    width: 1.2,
-                  ),
+                  borderRadius: AppRadius.inputRadius,
+                  borderSide: BorderSide(color: colors.error, width: 1.5),
                 ),
               ),
             ),
             const SizedBox(height: 20),
             Text(
               "Password",
-              style: TextStyle(
+              style: AppTypography.label.copyWith(
                 fontWeight: FontWeight.w600,
-                color: colors.subtext,
+                color: colors.text,
               ),
             ),
             const SizedBox(height: 8),
@@ -1062,39 +1060,45 @@ class _LoginForm extends StatelessWidget {
               autocorrect: false,
               enableSuggestions: false,
               autofillHints: const [AutofillHints.password],
-              style: TextStyle(color: colors.text),
+              style: AppTypography.body.copyWith(color: colors.text),
               validator: AuthService.validatePassword,
               decoration: InputDecoration(
                 hintText: "Password",
-                hintStyle: TextStyle(color: colors.subtext),
-                prefixIcon: Icon(Icons.lock_outline, color: colors.amber),
+                hintStyle: AppTypography.body.copyWith(color: colors.subtext),
+                prefixIcon: Icon(
+                  Icons.lock_outline,
+                  color: colors.subtext,
+                  size: 20,
+                ),
                 filled: true,
                 fillColor: colors.input,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
-                  vertical: 16,
+                  vertical: 14,
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: colors.border),
+                  borderRadius: AppRadius.inputRadius,
+                  borderSide: BorderSide(color: colors.inputBorder),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: colors.amber, width: 1.2),
+                  borderRadius: AppRadius.inputRadius,
+                  borderSide: BorderSide(color: colors.accent, width: 1.5),
                 ),
                 errorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: colors.error),
+                  borderRadius: AppRadius.inputRadius,
+                  borderSide: BorderSide(color: colors.error, width: 1.5),
                 ),
                 focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: colors.error, width: 1.2),
+                  borderRadius: AppRadius.inputRadius,
+                  borderSide: BorderSide(color: colors.error, width: 1.5),
                 ),
                 suffixIcon: IconButton(
                   icon: Icon(
                     showPassword ? Icons.visibility_off : Icons.visibility,
                     color: colors.subtext,
+                    size: 20,
                   ),
+                  tooltip: showPassword ? 'Hide password' : 'Show password',
                   onPressed: onTogglePassword,
                 ),
               ),
@@ -1106,7 +1110,7 @@ class _LoginForm extends StatelessWidget {
                 onPressed: onForgotPassword,
                 child: Text(
                   "Forgot Password?",
-                  style: TextStyle(color: colors.amber, fontSize: 14),
+                  style: AppTypography.body.copyWith(color: colors.accent),
                 ),
               ),
             ),
@@ -1114,55 +1118,71 @@ class _LoginForm extends StatelessWidget {
             if (errorMessage != null)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.base,
+                  vertical: AppSpacing.md,
+                ),
                 decoration: BoxDecoration(
-                  color: colors.error.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: colors.error.withValues(alpha: 0.25),
-                  ),
+                  color: colors.errorContainer,
+                  borderRadius: AppRadius.bannerRadius,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(errorMessage!, style: TextStyle(color: colors.error)),
-                    if (googleFailure != null) ...[
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton(
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(0, 32),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 1),
+                          child: Icon(
+                            Icons.error_outline,
+                            color: AppColors.error,
+                            size: 18,
                           ),
-                          onPressed: onToggleGoogleDetails,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
                           child: Text(
-                            showGoogleFailureDetails
-                                ? 'Hide details'
-                                : 'Show details',
-                            style: TextStyle(
+                            errorMessage!,
+                            style: AppTypography.label.copyWith(
                               color: colors.error,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
                             ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (googleFailure != null) ...[
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(48, 48),
+                          alignment: Alignment.centerLeft,
+                        ),
+                        onPressed: onToggleGoogleDetails,
+                        child: Text(
+                          showGoogleFailureDetails
+                              ? 'Hide details'
+                              : 'Show details',
+                          style: AppTypography.body.copyWith(
+                            color: colors.accent,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
                       if (showGoogleFailureDetails)
                         Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(AppSpacing.sm),
                           decoration: BoxDecoration(
-                            color: colors.error.withValues(alpha: 0.06),
-                            borderRadius: BorderRadius.circular(8),
+                            color: colors.input,
+                            borderRadius: AppRadius.chipRadius,
                           ),
                           child: SelectableText(
                             'code: ${googleFailure!.code}\n'
                             'detail: ${googleFailure!.detail ?? '(none)'}\n'
                             'hint: ${googleFailure!.hint}',
-                            style: TextStyle(
+                            style: AppTypography.labelSm.copyWith(
                               color: colors.error,
-                              fontSize: 12,
                               height: 1.4,
                             ),
                           ),
@@ -1174,75 +1194,56 @@ class _LoginForm extends StatelessWidget {
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
-              height: 54,
+              height: 52,
               child: ElevatedButton(
                 onPressed: isLoading ? null : onLogin,
-                child: SizedBox(
-                  height: 22,
-                  child: Center(
-                    child: isLoading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.black,
-                            ),
-                          )
-                        : const Text(
-                            "Sign In",
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                  ),
-                ),
+                child: isLoading
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colors.onAccent,
+                        ),
+                      )
+                    : const Text("Sign In"),
               ),
             ),
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
-              height: 54,
+              height: 52,
               child: OutlinedButton.icon(
                 onPressed: isLoading ? null : onGoogleSignIn,
                 onLongPress: onGoogleLongPress,
-                icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
-                label: const Text("Continue with Google"),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: colors.text,
-                  side: BorderSide(color: colors.border),
+                icon: Icon(
+                  Icons.g_mobiledata_rounded,
+                  size: 28,
+                  color: colors.subtext,
                 ),
+                label: const Text("Continue with Google"),
               ),
             ),
             if (showBiometric) ...[
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
-                height: 54,
+                height: 52,
                 child: OutlinedButton.icon(
                   onPressed: isLoading ? null : onBiometricUnlock,
-                  icon: Icon(Icons.fingerprint, color: colors.amber),
+                  icon: Icon(Icons.fingerprint, color: colors.subtext),
                   label: const Text("Unlock with fingerprint"),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: colors.text,
-                    side: BorderSide(color: colors.border),
-                  ),
                 ),
               ),
             ],
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
-              height: 54,
+              height: 52,
               child: OutlinedButton.icon(
                 onPressed: onCreateAccount,
-                icon: const Icon(Icons.person_add),
+                icon: Icon(Icons.person_add, color: colors.subtext),
                 label: const Text("Create Account"),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: colors.text,
-                  side: BorderSide(color: colors.border),
-                ),
               ),
             ),
           ],

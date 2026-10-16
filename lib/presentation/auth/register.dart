@@ -248,7 +248,7 @@ class _RegisterPageState extends State<RegisterPage> {
           behavior: HitTestBehavior.translucent,
           onTap: () => FocusScope.of(context).unfocus(),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(28, 40, 28, 100),
+            padding: const EdgeInsets.fromLTRB(24, 40, 24, 100),
             child: _RegisterForm(
               formKey: _formKey,
               firstNameController: _firstNameController,
@@ -316,32 +316,16 @@ class _RegisterForm extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Center(
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: colors.withOpacity(colors.amber, 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.bolt_rounded, color: colors.amber, size: 48),
-            ),
-          ),
-          const SizedBox(height: 28),
-          Center(
             child: Text(
-              "Create Account",
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: colors.text,
-                letterSpacing: 0,
-              ),
+              "AgentA",
+              style: AppTypography.display.copyWith(color: colors.text),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Center(
             child: Text(
               "Fill in your details to get started",
-              style: TextStyle(color: colors.subtext, fontSize: 15),
+              style: AppTypography.subtitle.copyWith(color: colors.subtext),
             ),
           ),
           const SizedBox(height: 36),
@@ -411,22 +395,31 @@ class _RegisterForm extends StatelessWidget {
           if (errorMessage != null) ...[
             const SizedBox(height: 16),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.base,
+                vertical: AppSpacing.md,
+              ),
               decoration: BoxDecoration(
-                color: colors.withOpacity(colors.error, 0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: colors.withOpacity(colors.error, 0.3),
-                ),
+                color: colors.errorContainer,
+                borderRadius: AppRadius.bannerRadius,
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.error_outline, color: colors.error, size: 16),
-                  const SizedBox(width: 8),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 1),
+                    child: Icon(
+                      Icons.error_outline,
+                      color: AppColors.error,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
                       errorMessage!,
-                      style: TextStyle(color: colors.error, fontSize: 13),
+                      style: AppTypography.label.copyWith(color: colors.error),
                     ),
                   ),
                 ],
@@ -436,38 +429,19 @@ class _RegisterForm extends StatelessWidget {
           const SizedBox(height: 32),
           SizedBox(
             width: double.infinity,
+            height: 52,
             child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colors.amber,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 15),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                elevation: 0,
-              ),
               onPressed: isLoading ? null : onRegister,
-              child: SizedBox(
-                height: 22,
-                child: Center(
-                  child: isLoading
-                      ? const SizedBox(
-                          height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(
-                            color: Colors.black,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Text(
-                          "Create Account",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                ),
-              ),
+              child: isLoading
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: colors.onAccent,
+                      ),
+                    )
+                  : const Text("Create Account"),
             ),
           ),
           const SizedBox(height: 24),
@@ -476,7 +450,10 @@ class _RegisterForm extends StatelessWidget {
               Expanded(child: Divider(color: colors.border, thickness: 1)),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text("or", style: TextStyle(color: colors.subtext)),
+                child: Text(
+                  "or",
+                  style: AppTypography.labelSm.copyWith(color: colors.subtext),
+                ),
               ),
               Expanded(child: Divider(color: colors.border, thickness: 1)),
             ],
@@ -485,19 +462,22 @@ class _RegisterForm extends StatelessWidget {
           Center(
             child: InkWell(
               onTap: onSignIn,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: AppRadius.chipRadius,
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: 14,
+                ),
                 child: RichText(
                   text: TextSpan(
                     text: "Already have an account? ",
-                    style: TextStyle(color: colors.subtext),
+                    style: AppTypography.body.copyWith(color: colors.subtext),
                     children: [
                       TextSpan(
                         text: "Sign In",
-                        style: TextStyle(
-                          color: colors.amber,
-                          fontWeight: FontWeight.bold,
+                        style: AppTypography.body.copyWith(
+                          color: colors.accent,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
@@ -515,8 +495,7 @@ class _RegisterForm extends StatelessWidget {
   Widget _fieldLabel(String label, Color textColor) {
     return Text(
       label,
-      style: TextStyle(
-        fontSize: 14,
+      style: AppTypography.label.copyWith(
         fontWeight: FontWeight.w600,
         color: textColor,
       ),
@@ -535,28 +514,28 @@ class _RegisterForm extends StatelessWidget {
       controller: controller,
       keyboardType: keyboardType,
       textCapitalization: textCapitalization,
-      style: TextStyle(color: colors.text),
+      style: AppTypography.body.copyWith(color: colors.text),
       validator: validator,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(color: colors.subtext),
-        prefixIcon: Icon(icon, color: colors.amber, size: 20),
+        hintStyle: AppTypography.body.copyWith(color: colors.subtext),
+        prefixIcon: Icon(icon, color: colors.subtext, size: 20),
         filled: true,
         fillColor: colors.input,
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: colors.border),
+          borderRadius: AppRadius.inputRadius,
+          borderSide: BorderSide(color: colors.inputBorder),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: colors.amber, width: 1.5),
+          borderRadius: AppRadius.inputRadius,
+          borderSide: BorderSide(color: colors.accent, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: colors.error),
+          borderRadius: AppRadius.inputRadius,
+          borderSide: BorderSide(color: colors.error, width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: AppRadius.inputRadius,
           borderSide: BorderSide(color: colors.error, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(
@@ -579,28 +558,28 @@ class _RegisterForm extends StatelessWidget {
       obscureText: !show,
       autocorrect: false,
       enableSuggestions: false,
-      style: TextStyle(color: colors.text),
+      style: AppTypography.body.copyWith(color: colors.text),
       validator: validator,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(color: colors.subtext),
-        prefixIcon: Icon(Icons.lock_outline, color: colors.amber, size: 20),
+        hintStyle: AppTypography.body.copyWith(color: colors.subtext),
+        prefixIcon: Icon(Icons.lock_outline, color: colors.subtext, size: 20),
         filled: true,
         fillColor: colors.input,
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: colors.border),
+          borderRadius: AppRadius.inputRadius,
+          borderSide: BorderSide(color: colors.inputBorder),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: colors.amber, width: 1.5),
+          borderRadius: AppRadius.inputRadius,
+          borderSide: BorderSide(color: colors.accent, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: colors.error),
+          borderRadius: AppRadius.inputRadius,
+          borderSide: BorderSide(color: colors.error, width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: AppRadius.inputRadius,
           borderSide: BorderSide(color: colors.error, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(
@@ -613,6 +592,7 @@ class _RegisterForm extends StatelessWidget {
             color: colors.subtext,
             size: 20,
           ),
+          tooltip: show ? 'Hide password' : 'Show password',
           onPressed: onToggle,
         ),
       ),
@@ -637,60 +617,67 @@ class _RecoveryCodeDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: colors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.dialogRadius),
       title: Text(
         "Save Your Recovery Code",
-        style: TextStyle(fontWeight: FontWeight.bold, color: colors.text),
+        style: AppTypography.title.copyWith(color: colors.text),
         textAlign: TextAlign.center,
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.key_rounded, color: colors.amber, size: 40),
-          const SizedBox(height: 12),
+          const Icon(Icons.key_rounded, color: AppColors.accent, size: 28),
+          const SizedBox(height: AppSpacing.md),
           Text(
             "Store this code somewhere safe.\nYou'll need it to change your password.",
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, height: 1.5, color: colors.subtext),
+            style: AppTypography.body.copyWith(color: colors.subtext),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: AppSpacing.lg),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
             decoration: BoxDecoration(
-              color: colors.withOpacity(colors.amber, 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: colors.withOpacity(colors.amber, 0.4)),
+              color: colors.accentContainer,
+              borderRadius: AppRadius.bannerRadius,
             ),
             child: Text(
               recoveryCode,
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 8,
-                color: colors.amber,
+              style: AppTypography.title.copyWith(
+                fontFamily: 'monospace',
+                fontSize: 24,
+                letterSpacing: 4,
+                color: colors.onAccentContainer,
               ),
             ),
           ),
           if (isOffline) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
               decoration: BoxDecoration(
-                color: colors.withOpacity(colors.warning, 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: colors.withOpacity(colors.warning, 0.4),
-                ),
+                color: colors.warningContainer,
+                borderRadius: AppRadius.bannerRadius,
               ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.cloud_off, color: colors.warning, size: 16),
-                  const SizedBox(width: 8),
-                  Flexible(
+                  const Padding(
+                    padding: EdgeInsets.only(top: 1),
+                    child: Icon(
+                      Icons.cloud_off,
+                      color: AppColors.warning,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
                     child: Text(
                       'Account created offline. We\'ll sync when you\'re back online.',
-                      style: TextStyle(fontSize: 12, color: colors.warning),
+                      style: AppTypography.label.copyWith(color: colors.text),
                     ),
                   ),
                 ],
@@ -698,39 +685,45 @@ class _RecoveryCodeDialog extends StatelessWidget {
             ),
           ],
           if (confirmEmail) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
               decoration: BoxDecoration(
-                color: colors.withOpacity(colors.amber, 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: colors.withOpacity(colors.amber, 0.4),
-                ),
+                color: colors.accentContainer,
+                borderRadius: AppRadius.bannerRadius,
               ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.mark_email_read_outlined,
-                    color: colors.amber,
-                    size: 16,
+                  const Padding(
+                    padding: EdgeInsets.only(top: 1),
+                    child: Icon(
+                      Icons.mark_email_read_outlined,
+                      color: AppColors.onAccentContainer,
+                      size: 18,
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  Flexible(
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
                     child: Text(
                       'Check your email for a confirmation link, then sign in.',
-                      style: TextStyle(fontSize: 12, color: colors.amber),
+                      style: AppTypography.label.copyWith(
+                        color: colors.onAccentContainer,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Text(
             "This will only be shown once.",
-            style: TextStyle(fontSize: 12, color: colors.error),
+            style: AppTypography.labelSm.copyWith(color: colors.error),
           ),
         ],
       ),
@@ -738,14 +731,6 @@ class _RecoveryCodeDialog extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colors.amber,
-              foregroundColor: Colors.black,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-            ),
             onPressed: () {
               Navigator.pop(context);
               Navigator.pushAndRemoveUntil(
@@ -756,10 +741,7 @@ class _RecoveryCodeDialog extends StatelessWidget {
                 (route) => false,
               );
             },
-            child: const Text(
-              "I've saved it — Continue",
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+            child: const Text("I've saved it — Continue"),
           ),
         ),
       ],

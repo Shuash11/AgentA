@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../cubit/connectivity/connectivity_cubit.dart';
 import '../../services/auth/auth_service.dart';
+import '../../theme/app_theme.dart';
 import '../shared/system_keyboard_text_field.dart';
 
 class ChangePasswordPage extends StatefulWidget {
@@ -53,12 +54,9 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       await AuthService.updatePassword(_newPasswordController.text);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Password changed!'),
-            backgroundColor: Colors.amber,
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Password changed!')));
         Navigator.popUntil(context, (route) => route.isFirst);
       }
     } catch (e) {
@@ -96,6 +94,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
             color: colors.text,
             size: 20,
           ),
+          tooltip: 'Back',
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -111,8 +110,8 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
               children: [
                 Text(
                   'Current Password',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
+                  style: AppTypography.label.copyWith(
+                    fontWeight: FontWeight.w600,
                     color: colors.text,
                   ),
                 ),
@@ -122,11 +121,14 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                   obscureText: true,
                   autocorrect: false,
                   enableSuggestions: false,
-                  style: TextStyle(color: colors.text),
+                  style: AppTypography.body.copyWith(color: colors.text),
                   decoration: InputDecoration(
                     labelText: 'Current Password',
-                    labelStyle: TextStyle(color: colors.subtext),
-                    prefixIcon: Icon(Icons.lock, color: colors.amber),
+                    prefixIcon: Icon(
+                      Icons.lock,
+                      color: colors.subtext,
+                      size: 20,
+                    ),
                     filled: true,
                     fillColor: colors.input,
                   ),
@@ -135,8 +137,8 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                 const SizedBox(height: 24),
                 Text(
                   'New Password',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
+                  style: AppTypography.label.copyWith(
+                    fontWeight: FontWeight.w600,
                     color: colors.text,
                   ),
                 ),
@@ -146,11 +148,14 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                   obscureText: true,
                   autocorrect: false,
                   enableSuggestions: false,
-                  style: TextStyle(color: colors.text),
+                  style: AppTypography.body.copyWith(color: colors.text),
                   decoration: InputDecoration(
                     labelText: 'New Password',
-                    labelStyle: TextStyle(color: colors.subtext),
-                    prefixIcon: Icon(Icons.lock_outline, color: colors.amber),
+                    prefixIcon: Icon(
+                      Icons.lock_outline,
+                      color: colors.subtext,
+                      size: 20,
+                    ),
                     filled: true,
                     fillColor: colors.input,
                   ),
@@ -164,32 +169,24 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                   const SizedBox(height: 16),
                   Text(
                     _errorMessage!,
-                    style: const TextStyle(color: Colors.redAccent),
+                    style: AppTypography.label.copyWith(color: colors.error),
                   ),
                 ],
                 const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.amber,
-                      foregroundColor: Colors.black,
-                    ),
                     onPressed: _isSaving ? null : _submit,
-                    child: SizedBox(
-                      height: 22,
-                      child: Center(
-                        child: _isSaving
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Change Password'),
-                      ),
-                    ),
+                    child: _isSaving
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colors.onAccent,
+                            ),
+                          )
+                        : const Text('Change Password'),
                   ),
                 ),
               ],

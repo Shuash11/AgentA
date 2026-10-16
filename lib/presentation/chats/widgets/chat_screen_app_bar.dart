@@ -27,23 +27,20 @@ class ChatScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
         color: colors.text,
+        tooltip: 'Back',
         onPressed: onBack,
       ),
       title: Column(
         children: [
           Text(
             title,
-            style: TextStyle(
-              color: colors.text,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
+            style: AppTypography.subtitle.copyWith(color: colors.text),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
           Text(
             modelName,
-            style: TextStyle(color: colors.amber, fontSize: 11),
+            style: AppTypography.micro.copyWith(color: colors.subtext),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -54,6 +51,7 @@ class ChatScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
         IconButton(
           icon: const Icon(Icons.tune_rounded),
           color: colors.text,
+          tooltip: 'Select model',
           onPressed: onModelPickerTap,
         ),
       ],

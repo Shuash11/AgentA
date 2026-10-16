@@ -34,19 +34,19 @@ class _ChatInputBarState extends State<ChatInputBar> {
     contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
     border: OutlineInputBorder(
       borderRadius: _borderRadius,
-      borderSide: BorderSide(color: Colors.transparent),
+      borderSide: BorderSide.none,
     ),
     enabledBorder: OutlineInputBorder(
       borderRadius: _borderRadius,
-      borderSide: BorderSide(color: Colors.transparent),
+      borderSide: BorderSide.none,
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: _borderRadius,
-      borderSide: BorderSide(color: Colors.transparent),
+      borderSide: BorderSide.none,
     ),
     disabledBorder: OutlineInputBorder(
       borderRadius: _borderRadius,
-      borderSide: BorderSide(color: Colors.transparent),
+      borderSide: BorderSide.none,
     ),
   );
 
@@ -111,9 +111,11 @@ class _ChatInputBarState extends State<ChatInputBar> {
                   keyboardType: TextInputType.multiline,
                   textInputAction: TextInputAction.newline,
                   textCapitalization: TextCapitalization.sentences,
-                  style: TextStyle(color: colors.text, fontSize: 14.5),
+                  style: AppTypography.bodyChat.copyWith(color: colors.text),
                   decoration: _inputDecoration.copyWith(
-                    hintStyle: TextStyle(color: colors.subtext, fontSize: 14.5),
+                    hintStyle: AppTypography.bodyChat.copyWith(
+                      color: colors.subtext,
+                    ),
                     fillColor: colors.input,
                   ),
                 ),
@@ -157,26 +159,31 @@ class _SendButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool shouldShow = isTyping || hasText;
-    final color = isTyping
+    final Color color = isTyping
         ? colors.error
         : shouldShow
-        ? colors.amber
+        ? colors.accent
         : colors.input;
-    final iconColor = shouldShow ? Colors.black : colors.subtext;
+    final Color iconColor = shouldShow ? colors.onAccent : colors.subtext;
 
-    return SizedBox(
-      width: 48,
-      height: 48,
-      child: Material(
-        color: color,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: shouldShow ? (isTyping ? onStop : onSend) : null,
-          borderRadius: BorderRadius.circular(16),
-          child: Icon(
-            isTyping ? Icons.stop_rounded : Icons.send_rounded,
-            color: iconColor,
-            size: 20,
+    return Semantics(
+      button: true,
+      enabled: shouldShow,
+      label: isTyping ? 'Stop' : 'Send',
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: Material(
+          color: color,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          child: InkWell(
+            onTap: shouldShow ? (isTyping ? onStop : onSend) : null,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            child: Icon(
+              isTyping ? Icons.stop_rounded : Icons.send_rounded,
+              color: iconColor,
+              size: 20,
+            ),
           ),
         ),
       ),

@@ -146,14 +146,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       child: Scaffold(
         backgroundColor: colors.background,
         appBar: AppBar(
-          backgroundColor: colors.background,
-          elevation: 0,
           leading: IconButton(
             icon: Icon(
               Icons.arrow_back_ios_new_rounded,
               color: colors.text,
               size: 20,
             ),
+            tooltip: 'Back',
             onPressed: () => Navigator.pop(context),
           ),
         ),
@@ -161,7 +160,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           behavior: HitTestBehavior.translucent,
           onTap: () => FocusScope.of(context).unfocus(),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(28),
+            padding: const EdgeInsets.all(24),
             child: _stage == _ResetStage.email
                 ? _EmailStep(
                     formKey: _emailFormKey,
@@ -229,34 +228,38 @@ class _EmailStep extends StatelessWidget {
           const SizedBox(height: 44),
           Text(
             "Email",
-            style: TextStyle(
+            style: AppTypography.label.copyWith(
               fontWeight: FontWeight.w600,
-              color: colors.subtext,
+              color: colors.text,
             ),
           ),
           const SizedBox(height: 8),
           SystemKeyboardTextFormField(
             controller: emailController,
             keyboardType: TextInputType.emailAddress,
-            style: TextStyle(color: colors.text),
+            style: AppTypography.body.copyWith(color: colors.text),
             validator: AuthService.validateEmail,
             decoration: InputDecoration(
               hintText: "Email",
-              hintStyle: TextStyle(color: colors.subtext),
-              prefixIcon: Icon(Icons.email_outlined, color: colors.amber),
+              hintStyle: AppTypography.body.copyWith(color: colors.subtext),
+              prefixIcon: Icon(
+                Icons.email_outlined,
+                color: colors.subtext,
+                size: 20,
+              ),
               filled: true,
               fillColor: colors.input,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
-                vertical: 16,
+                vertical: 14,
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: colors.border),
+                borderRadius: AppRadius.inputRadius,
+                borderSide: BorderSide(color: colors.inputBorder),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: colors.amber, width: 1.2),
+                borderRadius: AppRadius.inputRadius,
+                borderSide: BorderSide(color: colors.accent, width: 1.5),
               ),
             ),
           ),
@@ -266,25 +269,19 @@ class _EmailStep extends StatelessWidget {
           const SizedBox(height: 32),
           SizedBox(
             width: double.infinity,
-            height: 54,
+            height: 52,
             child: ElevatedButton(
               onPressed: isLoading ? null : onSendOtp,
               child: isLoading
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.black,
+                        color: colors.onAccent,
                       ),
                     )
-                  : const Text(
-                      "Send Code",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                  : const Text("Send Code"),
             ),
           ),
         ],
@@ -348,26 +345,32 @@ class _OtpStep extends StatelessWidget {
           const SizedBox(height: 44),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.base,
+              vertical: AppSpacing.md,
+            ),
             decoration: BoxDecoration(
-              color: const Color(0xFF00C853).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: const Color(0xFF00C853).withValues(alpha: 0.3),
-              ),
+              color: colors.successContainer,
+              borderRadius: AppRadius.bannerRadius,
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
-                  Icons.mark_email_read_outlined,
-                  color: Colors.green,
-                  size: 24,
+                const Padding(
+                  padding: EdgeInsets.only(top: 1),
+                  child: Icon(
+                    Icons.mark_email_read_outlined,
+                    color: AppColors.success,
+                    size: 18,
+                  ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     "OTP sent! Check your Gmail inbox (and spam folder) for the 6-digit code sent to $email.",
-                    style: TextStyle(color: Colors.green[700], fontSize: 14),
+                    style: AppTypography.label.copyWith(
+                      color: colors.onSuccessContainer,
+                    ),
                   ),
                 ),
               ],
@@ -376,9 +379,9 @@ class _OtpStep extends StatelessWidget {
           const SizedBox(height: 24),
           Text(
             "Verification Code",
-            style: TextStyle(
+            style: AppTypography.label.copyWith(
               fontWeight: FontWeight.w600,
-              color: colors.subtext,
+              color: colors.text,
             ),
           ),
           const SizedBox(height: 8),
@@ -388,31 +391,36 @@ class _OtpStep extends StatelessWidget {
             maxLength: 6,
             autocorrect: false,
             enableSuggestions: false,
-            style: TextStyle(
+            style: AppTypography.title.copyWith(
               color: colors.text,
-              fontSize: 20,
               letterSpacing: 8,
-              fontWeight: FontWeight.bold,
             ),
             validator: _validateOtp,
             decoration: InputDecoration(
               hintText: "000000",
-              hintStyle: TextStyle(color: colors.subtext, letterSpacing: 8),
-              prefixIcon: Icon(Icons.password_rounded, color: colors.amber),
+              hintStyle: AppTypography.body.copyWith(
+                color: colors.subtext,
+                letterSpacing: 8,
+              ),
+              prefixIcon: Icon(
+                Icons.password_rounded,
+                color: colors.subtext,
+                size: 20,
+              ),
               filled: true,
               fillColor: colors.input,
               counterText: "",
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
-                vertical: 16,
+                vertical: 14,
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: colors.border),
+                borderRadius: AppRadius.inputRadius,
+                borderSide: BorderSide(color: colors.inputBorder),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: colors.amber, width: 1.2),
+                borderRadius: AppRadius.inputRadius,
+                borderSide: BorderSide(color: colors.accent, width: 1.5),
               ),
             ),
           ),
@@ -422,16 +430,16 @@ class _OtpStep extends StatelessWidget {
               onPressed: isLoading ? null : onResendOtp,
               child: Text(
                 "Didn't get it? Resend code",
-                style: TextStyle(color: colors.amber, fontSize: 14),
+                style: AppTypography.body.copyWith(color: colors.accent),
               ),
             ),
           ),
           const SizedBox(height: 12),
           Text(
             "New Password",
-            style: TextStyle(
+            style: AppTypography.label.copyWith(
               fontWeight: FontWeight.w600,
-              color: colors.subtext,
+              color: colors.text,
             ),
           ),
           const SizedBox(height: 8),
@@ -446,9 +454,9 @@ class _OtpStep extends StatelessWidget {
           const SizedBox(height: 20),
           Text(
             "Confirm New Password",
-            style: TextStyle(
+            style: AppTypography.label.copyWith(
               fontWeight: FontWeight.w600,
-              color: colors.subtext,
+              color: colors.text,
             ),
           ),
           const SizedBox(height: 8),
@@ -472,25 +480,19 @@ class _OtpStep extends StatelessWidget {
           const SizedBox(height: 32),
           SizedBox(
             width: double.infinity,
-            height: 54,
+            height: 52,
             child: ElevatedButton(
               onPressed: isLoading ? null : onResetPassword,
               child: isLoading
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.black,
+                        color: colors.onAccent,
                       ),
                     )
-                  : const Text(
-                      "Reset Password",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                  : const Text("Reset Password"),
             ),
           ),
         ],
@@ -512,49 +514,35 @@ class _DoneStep extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 40),
-        Center(
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFF00C853).withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.check_circle_outline_rounded,
-              color: Colors.green,
-              size: 48,
-            ),
+        const Center(
+          child: Icon(
+            Icons.check_circle_outline_rounded,
+            color: AppColors.success,
+            size: 48,
           ),
         ),
         const SizedBox(height: 32),
         Center(
           child: Text(
             "Password Updated",
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: colors.text,
-            ),
+            style: AppTypography.display.copyWith(color: colors.text),
           ),
         ),
         const SizedBox(height: 8),
         Center(
           child: Text(
             "Sign in with your new password",
-            style: TextStyle(color: colors.subtext, fontSize: 15),
+            style: AppTypography.body.copyWith(color: colors.subtext),
             textAlign: TextAlign.center,
           ),
         ),
         const SizedBox(height: 44),
         SizedBox(
           width: double.infinity,
-          height: 54,
+          height: 52,
           child: ElevatedButton(
             onPressed: onBackToLogin,
-            child: const Text(
-              "Back to Login",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
+            child: const Text("Back to Login"),
           ),
         ),
       ],
@@ -570,36 +558,26 @@ class _ResetHeader extends StatelessWidget {
     final colors = context.select((ThemeCubit c) => c.state.colors);
     return Column(
       children: [
-        Center(
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: colors.amber.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
               Icons.lock_reset_rounded,
-              color: colors.amber,
-              size: 48,
+              color: AppColors.accent,
+              size: 24,
             ),
-          ),
-        ),
-        const SizedBox(height: 32),
-        Center(
-          child: Text(
-            "Reset Password",
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: colors.text,
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              "Reset Password",
+              style: AppTypography.display.copyWith(color: colors.text),
             ),
-          ),
+          ],
         ),
         const SizedBox(height: 8),
         Center(
           child: Text(
             "We'll email you a 6-digit code to set a new password",
-            style: TextStyle(color: colors.subtext, fontSize: 15),
+            style: AppTypography.body.copyWith(color: colors.subtext),
             textAlign: TextAlign.center,
           ),
         ),
@@ -618,15 +596,30 @@ class _ErrorBox extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE53935).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: const Color(0xFFE53935).withValues(alpha: 0.25),
-        ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: AppSpacing.md,
       ),
-      child: Text(message, style: const TextStyle(color: Color(0xFFE53935))),
+      decoration: BoxDecoration(
+        color: colors.errorContainer,
+        borderRadius: AppRadius.bannerRadius,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Icon(Icons.error_outline, color: AppColors.error, size: 18),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              message,
+              style: AppTypography.label.copyWith(color: colors.error),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -656,31 +649,33 @@ class _PasswordField extends StatelessWidget {
       autocorrect: false,
       enableSuggestions: false,
       autofillHints: const [AutofillHints.newPassword],
-      style: TextStyle(color: colors.text),
+      style: AppTypography.body.copyWith(color: colors.text),
       validator: validator,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(color: colors.subtext),
-        prefixIcon: Icon(Icons.lock_outline, color: colors.amber),
+        hintStyle: AppTypography.body.copyWith(color: colors.subtext),
+        prefixIcon: Icon(Icons.lock_outline, color: colors.subtext, size: 20),
         filled: true,
         fillColor: colors.input,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
-          vertical: 16,
+          vertical: 14,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: colors.border),
+          borderRadius: AppRadius.inputRadius,
+          borderSide: BorderSide(color: colors.inputBorder),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: colors.amber, width: 1.2),
+          borderRadius: AppRadius.inputRadius,
+          borderSide: BorderSide(color: colors.accent, width: 1.5),
         ),
         suffixIcon: IconButton(
           icon: Icon(
             show ? Icons.visibility_off_outlined : Icons.visibility_outlined,
             color: colors.subtext,
+            size: 20,
           ),
+          tooltip: show ? 'Hide password' : 'Show password',
           onPressed: onToggle,
         ),
       ),

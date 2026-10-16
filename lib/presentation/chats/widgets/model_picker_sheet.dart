@@ -16,9 +16,7 @@ Future<void> showModelPickerSheet({
     backgroundColor: colors.surface,
     useSafeArea: true,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
+    shape: const RoundedRectangleBorder(borderRadius: AppRadius.sheetRadius),
     builder: (sheetContext) {
       return SafeArea(
         child: Padding(
@@ -38,12 +36,7 @@ Future<void> showModelPickerSheet({
                 ),
                 Text(
                   'Select AI Model',
-                  style: TextStyle(
-                    color: colors.text,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                    letterSpacing: 0,
-                  ),
+                  style: AppTypography.title.copyWith(color: colors.text),
                 ),
                 const SizedBox(height: 16),
                 _ModelTile(
@@ -116,11 +109,7 @@ class _ModelTile extends StatelessWidget {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: isSelected
-              ? colors.amber.withValues(alpha: 0.1)
-              : isDisabled
-              ? colors.border.withValues(alpha: 0.3)
-              : colors.input,
+          color: isSelected ? colors.accentContainer : colors.input,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(
@@ -128,23 +117,17 @@ class _ModelTile extends StatelessWidget {
               ? Icons.image_rounded
               : Icons.psychology_rounded,
           color: isSelected
-              ? colors.amber
+              ? colors.onAccentContainer
               : isDisabled
-              ? colors.subtext.withValues(alpha: 0.5)
+              ? colors.disabledText
               : colors.subtext,
           size: 24,
         ),
       ),
       title: Text(
         model.displayName,
-        style: TextStyle(
-          color: isSelected
-              ? colors.amber
-              : isDisabled
-              ? colors.text.withValues(alpha: 0.5)
-              : colors.text,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-          fontSize: 16,
+        style: AppTypography.subtitle.copyWith(
+          color: isDisabled ? colors.disabledText : colors.text,
         ),
       ),
       subtitle: Text(
@@ -153,12 +136,8 @@ class _ModelTile extends StatelessWidget {
             : isDisabled
             ? 'Requires Internet'
             : model.description,
-        style: TextStyle(
-          color: isDisabled
-              ? colors.subtext.withValues(alpha: 0.5)
-              : colors.subtext,
-          fontSize: 13,
-          height: 1.3,
+        style: AppTypography.label.copyWith(
+          color: isDisabled ? colors.disabledText : colors.subtext,
         ),
       ),
       trailing: _buildTrailing(isSelected, isGemmaUnready, isDisabled),
@@ -181,23 +160,15 @@ class _ModelTile extends StatelessWidget {
     bool isDisabled,
   ) {
     if (isSelected) {
-      return Icon(Icons.check_circle_rounded, color: colors.amber, size: 22);
+      return Icon(Icons.check_circle_rounded, color: colors.accent, size: 22);
     }
 
     if (isGemmaUnready) {
-      return Icon(
-        Icons.download_rounded,
-        color: colors.amber.withValues(alpha: 0.7),
-        size: 20,
-      );
+      return Icon(Icons.download_rounded, color: colors.accent, size: 20);
     }
 
     if (isDisabled) {
-      return Icon(
-        Icons.wifi_off_rounded,
-        color: colors.subtext.withValues(alpha: 0.3),
-        size: 20,
-      );
+      return Icon(Icons.wifi_off_rounded, color: colors.disabledText, size: 20);
     }
 
     return null;

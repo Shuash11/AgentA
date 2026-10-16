@@ -87,15 +87,8 @@ class _TypingIndicatorState extends State<TypingIndicator>
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           decoration: BoxDecoration(
             color: widget.colors.card,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
-              bottomLeft: Radius.circular(4),
-              bottomRight: Radius.circular(20),
-            ),
-            border: Border.all(
-              color: widget.colors.border.withValues(alpha: 0.5),
-            ),
+            borderRadius: AppRadius.assistantBubbleRadius,
+            border: Border.all(color: widget.colors.border),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -103,10 +96,8 @@ class _TypingIndicatorState extends State<TypingIndicator>
               if (widget.isThinking) ...[
                 Text(
                   'Generating response',
-                  style: TextStyle(
+                  style: AppTypography.label.copyWith(
                     color: widget.colors.subtext,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -127,19 +118,15 @@ class _TypingIndicatorState extends State<TypingIndicator>
                 const SizedBox(width: 8),
                 Text(
                   'Initializing model...',
-                  style: TextStyle(
+                  style: AppTypography.label.copyWith(
                     color: widget.colors.subtext,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ] else if (widget.isImageGeneration) ...[
                 Text(
                   'Generating your image',
-                  style: TextStyle(
+                  style: AppTypography.label.copyWith(
                     color: widget.colors.subtext,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -229,9 +216,9 @@ class _DotShape extends StatelessWidget {
     return Container(
       width: 7,
       height: 7,
-      decoration: const BoxDecoration(
-        color: AppColors.amber,
-        shape: BoxShape.circle,
+      decoration: BoxDecoration(
+        color: AppColors.subtext,
+        borderRadius: BorderRadius.circular(4),
       ),
     );
   }

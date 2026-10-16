@@ -86,22 +86,20 @@ class _ProfilePageState extends State<ProfilePage> {
                   const SizedBox(height: 20),
                   CircleAvatar(
                     radius: 50,
-                    backgroundColor: colors.amber,
+                    backgroundColor: colors.accentContainer,
                     child: Text(
                       _displayName?.isNotEmpty == true
                           ? _displayName![0].toUpperCase()
                           : 'U',
-                      style: const TextStyle(fontSize: 36, color: Colors.black),
+                      style: AppTypography.display.copyWith(
+                        color: colors.onAccentContainer,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     _displayName ?? 'User',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: colors.text,
-                    ),
+                    style: AppTypography.title.copyWith(color: colors.text),
                   ),
                   Text(_email ?? '', style: TextStyle(color: colors.subtext)),
                   const SizedBox(height: 32),
@@ -141,10 +139,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.error,
-                        foregroundColor: Colors.white,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: colors.error,
+                        side: BorderSide(color: colors.error),
                       ),
                       onPressed: () async {
                         final colors = context.read<ThemeCubit>().state.colors;
@@ -154,25 +152,26 @@ class _ProfilePageState extends State<ProfilePage> {
                             backgroundColor: colors.card,
                             title: Text(
                               'Sign Out?',
-                              style: TextStyle(color: colors.text),
+                              style: AppTypography.title.copyWith(
+                                color: colors.text,
+                              ),
                             ),
                             content: Text(
                               'Any unsynced data will be preserved and uploaded when you sign back in.',
-                              style: TextStyle(color: colors.subtext),
+                              style: AppTypography.body.copyWith(
+                                color: colors.subtext,
+                              ),
                             ),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(ctx, false),
-                                child: Text(
-                                  'Cancel',
-                                  style: TextStyle(color: colors.subtext),
-                                ),
+                                child: const Text('Cancel'),
                               ),
                               TextButton(
                                 onPressed: () => Navigator.pop(ctx, true),
                                 child: Text(
                                   'Sign Out',
-                                  style: TextStyle(color: colors.amber),
+                                  style: TextStyle(color: colors.error),
                                 ),
                               ),
                             ],
@@ -210,23 +209,26 @@ class _ProfilePageState extends State<ProfilePage> {
     ThemeColors colors,
   ) {
     return Material(
-      color: Colors.transparent,
+      type: MaterialType.transparency,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        borderRadius: AppRadius.tileRadius,
         child: Container(
           padding: const EdgeInsets.all(AppSpacing.base),
           decoration: BoxDecoration(
             color: colors.card,
-            borderRadius: BorderRadius.circular(AppRadius.md),
+            borderRadius: AppRadius.tileRadius,
             border: Border.all(color: colors.border),
           ),
           child: Row(
             children: [
-              Icon(icon, color: colors.amber),
+              Icon(icon, color: colors.subtext),
               const SizedBox(width: AppSpacing.base),
               Expanded(
-                child: Text(title, style: TextStyle(color: colors.text)),
+                child: Text(
+                  title,
+                  style: AppTypography.subtitle.copyWith(color: colors.text),
+                ),
               ),
               Icon(Icons.chevron_right, color: colors.subtext),
             ],

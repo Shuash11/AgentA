@@ -108,7 +108,7 @@ class _LoadingPlaceholder extends StatelessWidget {
             width: 40,
             height: 40,
             child: CircularProgressIndicator(
-              color: colors.amber,
+              color: colors.accent,
               backgroundColor: colors.border,
               strokeWidth: 3,
             ),
@@ -116,7 +116,7 @@ class _LoadingPlaceholder extends StatelessWidget {
           const SizedBox(height: 20),
           Text(
             'Loading messages...',
-            style: TextStyle(color: colors.subtext, fontSize: 14),
+            style: AppTypography.body.copyWith(color: colors.subtext),
           ),
         ],
       ),
@@ -135,27 +135,20 @@ class _EmptyChat extends StatelessWidget {
     final child = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
-            color: colors.withOpacity(colors.amber, 0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(Icons.bolt_rounded, color: colors.amber, size: 44),
+        const Icon(
+          Icons.chat_bubble_outline,
+          color: AppColors.subtext,
+          size: 40,
         ),
         const SizedBox(height: 20),
         Text(
           'Start the conversation',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: colors.text,
-          ),
+          style: AppTypography.title.copyWith(color: colors.text),
         ),
         const SizedBox(height: 8),
         Text(
           'Ask AgentA anything about your career',
-          style: TextStyle(color: colors.subtext, fontSize: 13),
+          style: AppTypography.body.copyWith(color: colors.subtext),
         ),
       ],
     );

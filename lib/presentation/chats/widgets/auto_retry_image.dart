@@ -152,18 +152,11 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.image_outlined,
-            color: widget.colors.subtext.withValues(alpha: 0.5),
-            size: 32,
-          ),
+          const Icon(Icons.image_outlined, color: AppColors.subtext, size: 32),
           const SizedBox(height: 8),
           Text(
             'Image',
-            style: TextStyle(
-              color: widget.colors.subtext.withValues(alpha: 0.5),
-              fontSize: 12,
-            ),
+            style: AppTypography.labelSm.copyWith(color: AppColors.subtext),
           ),
         ],
       ),
@@ -188,20 +181,20 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
             child: progress != null
                 ? CircularProgressIndicator(
                     value: progress,
-                    color: widget.colors.amber,
+                    color: widget.colors.accent,
                     backgroundColor: widget.colors.border,
                     strokeWidth: 2,
                   )
-                : Icon(
+                : const Icon(
                     Icons.image_outlined,
-                    color: widget.colors.subtext.withValues(alpha: 0.5),
+                    color: AppColors.subtext,
                     size: 32,
                   ),
           ),
           const SizedBox(height: 8),
           Text(
             progress != null ? 'Loading...' : 'Image',
-            style: TextStyle(color: widget.colors.subtext, fontSize: 12),
+            style: AppTypography.labelSm.copyWith(color: widget.colors.subtext),
           ),
         ],
       ),
@@ -225,13 +218,16 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
           const SizedBox(height: 12),
           Text(
             'Image failed to load',
-            style: TextStyle(color: widget.colors.subtext, fontSize: 13),
+            style: AppTypography.label.copyWith(color: widget.colors.subtext),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
           TextButton.icon(
-            icon: Icon(Icons.refresh, color: widget.colors.amber, size: 18),
-            label: Text('Retry', style: TextStyle(color: widget.colors.amber)),
+            icon: Icon(Icons.refresh, color: widget.colors.accent, size: 18),
+            label: Text(
+              'Retry',
+              style: AppTypography.body.copyWith(color: widget.colors.accent),
+            ),
             onPressed: _retry,
           ),
           if (widget.fallbackAvailable && widget.onFallbackRequested != null)
@@ -242,17 +238,17 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: widget.colors.amber,
+                        color: widget.colors.accent,
                       ),
                     )
                   : Icon(
                       Icons.hd_outlined,
-                      color: widget.colors.amber,
+                      color: widget.colors.accent,
                       size: 18,
                     ),
               label: Text(
                 _fallbackRunning ? 'Making HD...' : 'Try HD version',
-                style: TextStyle(color: widget.colors.amber),
+                style: AppTypography.body.copyWith(color: widget.colors.accent),
               ),
               onPressed: _fallbackRunning
                   ? null

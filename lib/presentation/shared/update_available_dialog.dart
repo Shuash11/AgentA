@@ -38,7 +38,7 @@ class UpdateAvailableDialog extends StatelessWidget {
 
     return AlertDialog(
       backgroundColor: colors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.dialogRadius),
       titlePadding: EdgeInsets.zero,
       buttonPadding: EdgeInsets.zero,
       insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
@@ -48,30 +48,19 @@ class UpdateAvailableDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Center(
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: colors.amber.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isForced
-                    ? Icons.system_security_update_warning_rounded
-                    : Icons.system_update_alt_rounded,
-                color: colors.amber,
-                size: 48,
-              ),
+            child: Icon(
+              isForced
+                  ? Icons.system_security_update_warning_rounded
+                  : Icons.system_update_alt_rounded,
+              color: AppColors.accent,
+              size: 28,
             ),
           ),
           const SizedBox(height: 16),
           Center(
             child: Text(
               isForced ? 'Update required' : 'New version available',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: colors.text,
-              ),
+              style: AppTypography.title.copyWith(color: colors.text),
               textAlign: TextAlign.center,
             ),
           ),
@@ -81,7 +70,7 @@ class UpdateAvailableDialog extends StatelessWidget {
               isForced
                   ? 'You must update to continue using AgentA.'
                   : 'A new version of AgentA has arrived.',
-              style: TextStyle(color: colors.subtext, fontSize: 15),
+              style: AppTypography.body.copyWith(color: colors.subtext),
               textAlign: TextAlign.center,
             ),
           ),
@@ -89,11 +78,7 @@ class UpdateAvailableDialog extends StatelessWidget {
           Center(
             child: Text(
               '$current → $next',
-              style: TextStyle(
-                color: colors.text,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
+              style: AppTypography.subtitle.copyWith(color: colors.text),
             ),
           ),
           const SizedBox(height: 16),
@@ -101,13 +86,10 @@ class UpdateAvailableDialog extends StatelessWidget {
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
-            height: 54,
+            height: 52,
             child: ElevatedButton(
               onPressed: () => _onUpdateTap(context),
-              child: const Text(
-                'Update',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              child: const Text('Update'),
             ),
           ),
           if (!isForced) ...[
@@ -115,7 +97,7 @@ class UpdateAvailableDialog extends StatelessWidget {
             Center(
               child: TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Later', style: TextStyle(fontSize: 15)),
+                child: const Text('Later'),
               ),
             ),
           ],
@@ -180,14 +162,14 @@ class _ReleaseNotes extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       constraints: const BoxConstraints(maxHeight: 160),
       decoration: BoxDecoration(
-        color: colors.card,
-        borderRadius: BorderRadius.circular(12),
+        color: colors.input,
+        borderRadius: AppRadius.bannerRadius,
         border: Border.all(color: colors.border),
       ),
       child: SingleChildScrollView(
         child: Text(
           text,
-          style: TextStyle(color: colors.text, fontSize: 14, height: 1.5),
+          style: AppTypography.body.copyWith(color: colors.text),
         ),
       ),
     );

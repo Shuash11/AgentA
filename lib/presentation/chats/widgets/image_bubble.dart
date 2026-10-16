@@ -33,7 +33,7 @@ class _ImageBubbleContentState extends State<ImageBubbleContent> {
         mainAxisSize: MainAxisSize.min,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: AppRadius.cardRadius,
             child: SizedBox(
               width: widget.width,
               height: widget.width,
@@ -62,10 +62,8 @@ class _ImageBubbleContentState extends State<ImageBubbleContent> {
                 const SizedBox(height: 8),
                 Text(
                   'Generated image',
-                  style: TextStyle(
+                  style: AppTypography.labelSm.copyWith(
                     color: widget.colors.subtext,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],

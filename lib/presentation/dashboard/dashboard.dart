@@ -45,19 +45,12 @@ class _DashboardState extends State<Dashboard> {
   static final Widget _dismissBackground = Container(
     margin: const EdgeInsets.only(bottom: AppSpacing.sm + 4),
     decoration: BoxDecoration(
-      color: Colors.transparent,
+      color: AppColors.errorContainer,
       borderRadius: AppRadius.cardRadius,
     ),
     alignment: Alignment.centerRight,
     padding: const EdgeInsets.only(right: 20),
-    child: Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.red.shade400,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
-      child: const Icon(Icons.delete, color: Colors.white, size: 20),
-    ),
+    child: const Icon(Icons.delete, color: AppColors.error, size: 20),
   );
 
   @override
@@ -171,27 +164,25 @@ class _DashboardState extends State<Dashboard> {
           context: context,
           builder: (context) => AlertDialog(
             backgroundColor: colors.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.lg),
+            shape: RoundedRectangleBorder(borderRadius: AppRadius.dialogRadius),
+            title: Text(
+              'Delete Chat',
+              style: AppTypography.title.copyWith(color: colors.text),
             ),
-            title: Text('Delete Chat', style: TextStyle(color: colors.text)),
             content: Text(
               'Are you sure you want to delete this chat? This action cannot be undone.',
-              style: TextStyle(color: colors.subtext),
+              style: AppTypography.body.copyWith(color: colors.subtext),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: Text('Cancel', style: TextStyle(color: colors.subtext)),
+                child: const Text('Cancel'),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: colors.error,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: AppRadius.buttonRadius,
-                  ),
+                  foregroundColor: colors.onAccent,
                 ),
                 child: const Text('Delete'),
               ),
@@ -230,6 +221,7 @@ class _DashboardState extends State<Dashboard> {
             ? IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
                 color: colors.text,
+                tooltip: 'Back',
                 onPressed: () => Navigator.pop(context),
               )
             : null,
@@ -250,12 +242,7 @@ class _DashboardState extends State<Dashboard> {
             const SizedBox(width: 10),
             Text(
               'AgentA',
-              style: TextStyle(
-                color: colors.text,
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-                letterSpacing: 0,
-              ),
+              style: AppTypography.subtitle.copyWith(color: colors.text),
             ),
           ],
         ),
@@ -272,7 +259,7 @@ class _DashboardState extends State<Dashboard> {
           OfflineModelBanner(onTap: () => _openDownloadScreen(context)),
           Expanded(
             child: _isLoading
-                ? Center(child: CircularProgressIndicator(color: colors.amber))
+                ? Center(child: CircularProgressIndicator(color: colors.accent))
                 : _chats.isNotEmpty
                 ? Column(
                     children: [
@@ -280,7 +267,7 @@ class _DashboardState extends State<Dashboard> {
                       Expanded(
                         child: RefreshIndicator(
                           onRefresh: _loadChats,
-                          color: colors.amber,
+                          color: colors.accent,
                           child: RepaintBoundary(
                             child: ListView.builder(
                               padding: const EdgeInsets.fromLTRB(
@@ -321,42 +308,28 @@ class _DashboardState extends State<Dashboard> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: colors.amber.withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.error_outline_rounded,
-                            color: colors.amber,
-                            size: 48,
-                          ),
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          color: AppColors.subtext,
+                          size: 40,
                         ),
                         const SizedBox(height: AppSpacing.xl),
                         Text(
                           _loadError!,
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
+                          style: AppTypography.title.copyWith(
                             color: colors.text,
                           ),
                         ),
                         const SizedBox(height: AppSpacing.md),
                         Text(
                           'Please try again.',
-                          style: TextStyle(color: colors.subtext, fontSize: 14),
+                          style: AppTypography.body.copyWith(
+                            color: colors.subtext,
+                          ),
                         ),
                         const SizedBox(height: AppSpacing.base),
                         ElevatedButton(
                           onPressed: _loadChats,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: colors.amber,
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: AppRadius.buttonRadius,
-                            ),
-                          ),
                           child: const Text('Retry'),
                         ),
                       ],
@@ -366,31 +339,24 @@ class _DashboardState extends State<Dashboard> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: colors.amber.withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.chat_bubble_outline_rounded,
-                            color: colors.amber,
-                            size: 48,
-                          ),
+                        const Icon(
+                          Icons.chat_bubble_outline_rounded,
+                          color: AppColors.subtext,
+                          size: 40,
                         ),
                         const SizedBox(height: AppSpacing.lg),
                         Text(
                           'No conversations yet',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
+                          style: AppTypography.title.copyWith(
                             color: colors.text,
                           ),
                         ),
                         const SizedBox(height: AppSpacing.sm),
                         Text(
                           'Tap "New Chat" to start chatting with AgentA',
-                          style: TextStyle(color: colors.subtext, fontSize: 14),
+                          style: AppTypography.body.copyWith(
+                            color: colors.subtext,
+                          ),
                         ),
                       ],
                     ),
@@ -400,17 +366,8 @@ class _DashboardState extends State<Dashboard> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _newChat,
-        backgroundColor: colors.amber,
-        foregroundColor: Colors.black,
-        elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-        ),
         icon: const Icon(Icons.edit_rounded, size: 20),
-        label: const Text(
-          'New Chat',
-          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-        ),
+        label: const Text('New Chat'),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: widget.showBottomNav
@@ -424,41 +381,40 @@ class _DashboardState extends State<Dashboard> {
   /// and has no dismiss affordance beyond a successful retry.
   Widget _buildStaleBanner(ThemeColors colors) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.base,
-        vertical: AppSpacing.sm,
+        vertical: AppSpacing.xs,
       ),
-      decoration: BoxDecoration(
-        color: colors.amber.withValues(alpha: 0.15),
-        border: Border(left: BorderSide(color: colors.amber, width: 3)),
-      ),
+      color: colors.warningContainer,
       child: Row(
         children: [
-          Icon(Icons.warning_amber_rounded, color: colors.amber, size: 16),
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: AppColors.warning,
+            size: 18,
+          ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               "Couldn't refresh \u2014 showing your saved chats",
-              style: TextStyle(
-                color: colors.text.withValues(alpha: 0.9),
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
+              style: AppTypography.label.copyWith(color: colors.text),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
           TextButton(
             onPressed: _loadChats,
             style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              minimumSize: const Size(48, 48),
+              padding: EdgeInsets.zero,
             ),
-            child: const Text(
+            child: Text(
               'Retry',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              style: AppTypography.body.copyWith(
+                color: colors.accent,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -486,12 +442,12 @@ class _DashboardState extends State<Dashboard> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: colors.amber.withValues(alpha: 0.12),
+                  color: colors.accentContainer,
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: Icon(
                   Icons.chat_bubble_rounded,
-                  color: colors.amber,
+                  color: colors.onAccentContainer,
                   size: 24,
                 ),
               ),
@@ -515,7 +471,9 @@ class _DashboardState extends State<Dashboard> {
                       chat.lastMessage.isEmpty
                           ? 'New conversation'
                           : chat.lastMessage,
-                      style: TextStyle(color: colors.subtext, fontSize: 13),
+                      style: AppTypography.label.copyWith(
+                        color: colors.subtext,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -525,7 +483,7 @@ class _DashboardState extends State<Dashboard> {
               const SizedBox(width: AppSpacing.sm),
               Text(
                 _formatDate(chat.updatedAt),
-                style: TextStyle(color: colors.subtext, fontSize: 11),
+                style: AppTypography.micro.copyWith(color: colors.subtext),
               ),
             ],
           ),

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import 'change_pass_page.dart';
 import '../../repositories/user_repository.dart';
+import '../../theme/app_theme.dart';
 import '../shared/system_keyboard_text_field.dart';
 
 class RecoveryCodeService {
@@ -68,6 +69,7 @@ class _RecoveryCodePageState extends State<RecoveryCodePage> {
             color: colors.text,
             size: 20,
           ),
+          tooltip: 'Back',
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -78,25 +80,20 @@ class _RecoveryCodePageState extends State<RecoveryCodePage> {
           child: Column(
             children: [
               const SizedBox(height: 40),
-              Icon(Icons.key_rounded, color: colors.amber, size: 60),
+              const Icon(Icons.key_rounded, color: AppColors.accent, size: 48),
               const SizedBox(height: 24),
               Text(
                 'Enter Recovery Code',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: colors.text,
-                ),
+                style: AppTypography.title.copyWith(color: colors.text),
               ),
               const SizedBox(height: 32),
               SystemKeyboardTextFormField(
                 controller: _codeController,
                 textCapitalization: TextCapitalization.characters,
-                style: TextStyle(color: colors.text),
+                style: AppTypography.body.copyWith(color: colors.text),
                 decoration: InputDecoration(
                   labelText: 'Recovery Code (e.g., ABC-123)',
-                  labelStyle: TextStyle(color: colors.subtext),
-                  prefixIcon: Icon(Icons.key, color: colors.amber),
+                  prefixIcon: Icon(Icons.key, color: colors.subtext, size: 20),
                   filled: true,
                   fillColor: colors.input,
                 ),
@@ -106,30 +103,24 @@ class _RecoveryCodePageState extends State<RecoveryCodePage> {
                 const SizedBox(height: 16),
                 Text(
                   _errorMessage!,
-                  style: const TextStyle(color: Colors.redAccent),
+                  style: AppTypography.label.copyWith(color: colors.error),
                 ),
               ],
               const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colors.amber,
-                    foregroundColor: Colors.black,
-                  ),
                   onPressed: _isVerifying ? null : _verify,
-                  child: SizedBox(
-                    height: 22,
-                    child: Center(
-                      child: _isVerifying
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Verify'),
-                    ),
-                  ),
+                  child: _isVerifying
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colors.onAccent,
+                          ),
+                        )
+                      : const Text('Verify'),
                 ),
               ),
             ],

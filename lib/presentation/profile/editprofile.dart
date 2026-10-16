@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../services/auth/auth_service.dart';
 import '../../repositories/user_repository.dart';
+import '../../theme/app_theme.dart';
 import '../shared/system_keyboard_text_field.dart';
 
 class EditProfilePage extends StatefulWidget {
@@ -60,12 +61,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
       await UserRepository.updateDisplayName(uid, newDisplayName);
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile saved'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Profile saved')));
       }
     } catch (e) {
       if (kDebugMode) {
@@ -75,7 +73,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Could not save your profile. Please try again.'),
-            backgroundColor: Colors.red,
           ),
         );
       }
@@ -99,6 +96,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
             color: colors.text,
             size: 20,
           ),
+          tooltip: 'Back',
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -114,12 +112,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 Center(
                   child: CircleAvatar(
                     radius: 50,
-                    backgroundColor: colors.withOpacity(colors.amber, 0.2),
+                    backgroundColor: colors.accentContainer,
                     child: Text(
                       _firstNameController.text.isNotEmpty
                           ? _firstNameController.text[0].toUpperCase()
                           : 'U',
-                      style: TextStyle(fontSize: 36, color: colors.amber),
+                      style: AppTypography.display.copyWith(
+                        color: colors.onAccentContainer,
+                      ),
                     ),
                   ),
                 ),
@@ -127,11 +127,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 SystemKeyboardTextFormField(
                   controller: _firstNameController,
                   textCapitalization: TextCapitalization.words,
-                  style: TextStyle(color: colors.text),
+                  style: AppTypography.body.copyWith(color: colors.text),
                   decoration: InputDecoration(
                     labelText: 'First Name',
-                    labelStyle: TextStyle(color: colors.subtext),
-                    prefixIcon: Icon(Icons.person, color: colors.amber),
+                    prefixIcon: Icon(
+                      Icons.person,
+                      color: colors.subtext,
+                      size: 20,
+                    ),
                     filled: true,
                     fillColor: colors.input,
                   ),
@@ -141,11 +144,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 SystemKeyboardTextFormField(
                   controller: _lastNameController,
                   textCapitalization: TextCapitalization.words,
-                  style: TextStyle(color: colors.text),
+                  style: AppTypography.body.copyWith(color: colors.text),
                   decoration: InputDecoration(
                     labelText: 'Last Name',
-                    labelStyle: TextStyle(color: colors.subtext),
-                    prefixIcon: Icon(Icons.person, color: colors.amber),
+                    prefixIcon: Icon(
+                      Icons.person,
+                      color: colors.subtext,
+                      size: 20,
+                    ),
                     filled: true,
                     fillColor: colors.input,
                   ),
@@ -155,25 +161,17 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: colors.amber,
-                      foregroundColor: Colors.black,
-                    ),
                     onPressed: _isSaving ? null : _saveProfile,
-                    child: SizedBox(
-                      height: 22,
-                      child: Center(
-                        child: _isSaving
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Save'),
-                      ),
-                    ),
+                    child: _isSaving
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colors.onAccent,
+                            ),
+                          )
+                        : const Text('Save'),
                   ),
                 ),
               ],

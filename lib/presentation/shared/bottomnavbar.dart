@@ -31,7 +31,7 @@ class _NavButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
+      type: MaterialType.transparency,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadius.md),
@@ -41,7 +41,7 @@ class _NavButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: isSelected
               ? BoxDecoration(
-                  color: colors.amber.withValues(alpha: 0.12),
+                  color: colors.accentContainer,
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 )
               : null,
@@ -50,16 +50,15 @@ class _NavButton extends StatelessWidget {
             children: [
               Icon(
                 isSelected ? item.activeIcon : item.icon,
-                color: isSelected ? colors.amber : colors.subtext,
+                color: isSelected ? colors.onAccentContainer : colors.subtext,
                 size: 24,
               ),
               const SizedBox(height: 4),
               Text(
                 item.label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                  color: isSelected ? colors.amber : colors.subtext,
+                style: AppTypography.micro.copyWith(
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  color: isSelected ? colors.onAccentContainer : colors.subtext,
                 ),
               ),
             ],
@@ -110,13 +109,6 @@ class BottomNav1 extends StatelessWidget {
         decoration: BoxDecoration(
           color: colors.surface,
           border: Border(top: BorderSide(color: colors.border, width: 1)),
-          boxShadow: [
-            BoxShadow(
-              color: colors.text.withValues(alpha: 0.08),
-              blurRadius: 8,
-              offset: const Offset(0, -2),
-            ),
-          ],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,

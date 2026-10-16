@@ -21,15 +21,18 @@ class SecurityPage extends StatelessWidget {
         context: context,
         builder: (_) => AlertDialog(
           backgroundColor: colors.card,
-          title: Text("Recovery Code", style: TextStyle(color: colors.text)),
+          title: Text(
+            "Recovery Code",
+            style: AppTypography.title.copyWith(color: colors.text),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.key_off, color: colors.subtext, size: 40),
+              const Icon(Icons.key_off, color: AppColors.subtext, size: 28),
               const SizedBox(height: 16),
               Text(
                 'For your security, the raw code was shown once at sign-up and only its hash is stored. Use it on the recovery screen — it cannot be displayed again.',
-                style: TextStyle(color: colors.subtext),
+                style: AppTypography.body.copyWith(color: colors.subtext),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -37,7 +40,7 @@ class SecurityPage extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Close', style: TextStyle(color: colors.subtext)),
+              child: const Text('Close'),
             ),
           ],
         ),
@@ -51,15 +54,18 @@ class SecurityPage extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: colors.card,
-        title: Text('Delete Account?', style: TextStyle(color: colors.text)),
+        title: Text(
+          'Delete Account?',
+          style: AppTypography.title.copyWith(color: colors.text),
+        ),
         content: Text(
           'This will permanently delete your account and all data. This action cannot be undone.',
-          style: TextStyle(color: colors.subtext),
+          style: AppTypography.body.copyWith(color: colors.subtext),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: TextStyle(color: colors.subtext)),
+            child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -73,24 +79,18 @@ class SecurityPage extends StatelessWidget {
 
     final success = await SecurityService.deleteAccount();
     if (success && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Account deleted'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Account deleted')));
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const LoginPage()),
         (route) => false,
       );
     } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to delete account'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Failed to delete account')));
     }
   }
 
@@ -109,6 +109,7 @@ class SecurityPage extends StatelessWidget {
             color: colors.text,
             size: 20,
           ),
+          tooltip: 'Back',
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -117,24 +118,27 @@ class SecurityPage extends StatelessWidget {
         child: Column(
           children: [
             Material(
-              color: Colors.transparent,
+              type: MaterialType.transparency,
               child: InkWell(
                 onTap: () => _showRecoveryCode(context),
-                borderRadius: BorderRadius.circular(AppRadius.md),
+                borderRadius: AppRadius.tileRadius,
                 child: Container(
                   padding: const EdgeInsets.all(AppSpacing.base),
                   decoration: BoxDecoration(
                     color: colors.card,
-                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    borderRadius: AppRadius.tileRadius,
+                    border: Border.all(color: colors.border),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.key, color: colors.amber),
+                      Icon(Icons.key, color: colors.subtext),
                       const SizedBox(width: AppSpacing.base),
                       Expanded(
                         child: Text(
                           'View Recovery Code',
-                          style: TextStyle(color: colors.text),
+                          style: AppTypography.subtitle.copyWith(
+                            color: colors.text,
+                          ),
                         ),
                       ),
                       Icon(Icons.chevron_right, color: colors.subtext),
@@ -145,15 +149,16 @@ class SecurityPage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Material(
-              color: Colors.transparent,
+              type: MaterialType.transparency,
               child: InkWell(
                 onTap: () => _deleteAccount(context),
-                borderRadius: BorderRadius.circular(AppRadius.md),
+                borderRadius: AppRadius.tileRadius,
                 child: Container(
                   padding: const EdgeInsets.all(AppSpacing.base),
                   decoration: BoxDecoration(
                     color: colors.card,
-                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    borderRadius: AppRadius.tileRadius,
+                    border: Border.all(color: colors.border),
                   ),
                   child: Row(
                     children: [
@@ -162,7 +167,9 @@ class SecurityPage extends StatelessWidget {
                       Expanded(
                         child: Text(
                           'Delete Account',
-                          style: TextStyle(color: colors.error),
+                          style: AppTypography.subtitle.copyWith(
+                            color: colors.error,
+                          ),
                         ),
                       ),
                     ],
