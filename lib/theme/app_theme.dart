@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// Spacing scale (spec §4.3): xs 4 / sm 8 / md 12 / base 16 / lg 20 / xl 24 / xxl 32.
 class AppSpacing {
   static const double xs = 4;
   static const double sm = 8;
@@ -11,16 +12,26 @@ class AppSpacing {
 
   static const EdgeInsets pagePadding = EdgeInsets.all(base);
   static const EdgeInsets cardPadding = EdgeInsets.all(base);
+
+  /// Text-field content padding (spec §4.3/§5.4: h16/v14).
   static const EdgeInsets inputPadding = EdgeInsets.symmetric(
+    horizontal: 16,
+    vertical: 14,
+  );
+
+  /// Chat composer pill content padding (spec §4.3: h16/v12).
+  static const EdgeInsets chatInputPadding = EdgeInsets.symmetric(
     horizontal: 16,
     vertical: 12,
   );
+
   static const EdgeInsets listItemPadding = EdgeInsets.symmetric(
     horizontal: base,
     vertical: md,
   );
 }
 
+/// Radius scale (spec §4.2) — differentiated by element role.
 class AppRadius {
   static const double sm = 8;
   static const double md = 12;
@@ -28,10 +39,29 @@ class AppRadius {
   static const double xl = 20;
   static const double xxl = 24;
 
+  /// Inline chips, small badges.
+  static final BorderRadius chipRadius = BorderRadius.circular(sm);
+
+  /// Buttons, inputs, banners, icon chips, snackbar.
   static final BorderRadius buttonRadius = BorderRadius.circular(md);
   static final BorderRadius inputRadius = BorderRadius.circular(md);
-  static final BorderRadius cardRadius = BorderRadius.circular(md);
+  static final BorderRadius bannerRadius = BorderRadius.circular(md);
+  static final BorderRadius snackbarRadius = BorderRadius.circular(md);
+
+  /// Cards, tiles, image bubbles, FAB.
+  static final BorderRadius cardRadius = BorderRadius.circular(lg);
+  static final BorderRadius tileRadius = BorderRadius.circular(lg);
+  static final BorderRadius fabRadius = BorderRadius.circular(lg);
+
+  /// Chat bubbles and dialogs.
   static final BorderRadius bubbleRadius = BorderRadius.circular(xl);
+  static final BorderRadius dialogRadius = BorderRadius.circular(xl);
+
+  /// Bottom sheets — top corners only.
+  static const BorderRadius sheetRadius = BorderRadius.vertical(
+    top: Radius.circular(xxl),
+  );
+
   static const BorderRadius assistantBubbleRadius = BorderRadius.only(
     topLeft: Radius.circular(xl),
     topRight: Radius.circular(xl),
@@ -46,6 +76,7 @@ class AppRadius {
   );
 }
 
+/// Motion (spec §4.5) — kept: fade/slide only, no bounce/elastic.
 class AppDurations {
   static const Duration quick = Duration(milliseconds: 150);
   static const Duration standard = Duration(milliseconds: 220);
@@ -53,233 +84,335 @@ class AppDurations {
   static const Curve standardCurve = Curves.easeOutCubic;
 }
 
+/// Color tokens — light palette only (spec §3). Hexes are normative.
 class AppColors {
-  static const Color amber = Color(0xFFFFC107);
-  static const Color amberDark = Color(0xFFFFA000);
-  static const Color amberLight = Color(0xFFFFE082);
+  // Neutrals (§3.1).
+  static const Color background = Color(0xFFFAFAFA);
+  static const Color surface = Color(0xFFFFFFFF);
+  static const Color card = Color(0xFFFFFFFF);
+  static const Color input = Color(0xFFF1F3F5);
+  static const Color border = Color(0xFFE2E5EA);
+  static const Color inputBorder = Color(0xFFD5DAE0);
+  static const Color text = Color(0xFF111827);
+  static const Color subtext = Color(0xFF5B6472);
+  static const Color disabledText = Color(0xFF9AA1AA);
 
-  static const Color darkBg = Color(0xFF0D0D0D);
-  static const Color darkSurface = Color(0xFF121212);
-  static const Color darkCard = Color(0xFF1E1E1E);
-  static const Color darkCardAlt = Color(0xFF1C1C1C);
-  static const Color darkInput = Color(0xFF2A2A2A);
+  /// #000000 @ 54% — dialog barriers.
+  static const Color scrim = Color(0x8A000000);
 
-  static const Color lightBg = Color(0xFFF5F5F5);
-  static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightCard = Color(0xFFFFFFFF);
-  static const Color lightInput = Color(0xFFF5F5F5);
+  // Accent (§3.2) — the ONE accent.
+  static const Color accent = Color(0xFF3D5AFE);
+  static const Color onAccent = Color(0xFFFFFFFF);
+  static const Color accentContainer = Color(0xFFE8ECFF);
+  static const Color onAccentContainer = Color(0xFF2A3990);
 
-  static const Color textDark = Color(0xFFFFFFFF);
-  static const Color textLight = Color(0xFF000000);
-  static const Color subDark = Color(0x8AFFFFFF);
-  static const Color subLight = Color(0x8A000000);
+  // Semantic (§3.3) — status only, never decoration.
+  static const Color success = Color(0xFF1B7F3B);
+  static const Color successContainer = Color(0xFFE6F4EA);
+  static const Color onSuccessContainer = Color(0xFF146C2E);
+  static const Color error = Color(0xFFC62828);
+  static const Color errorContainer = Color(0xFFFCE8E8);
+  static const Color onErrorContainer = Color(0xFF8C1D1D);
+  static const Color warning = Color(0xFF9A6700);
+  static const Color warningContainer = Color(0xFFFFF4D6);
+  static const Color onWarningContainer = Color(0xFF7A5200);
 
-  static const Color borderDark = Color(0x1AFFFFFF);
-  static const Color borderLight = Color(0x1A000000);
-
-  static const Color success = Color(0xFF4CAF50);
-  static const Color successDark = Color(0xFF2E7D32);
-  static const Color error = Color(0xFFF44336);
-  static const Color errorDark = Color(0xFFD32F2F);
-  static const Color warning = Color(0xFFFF9800);
-  static const Color warningDark = Color(0xFFF57C00);
-  static const Color info = Color(0xFF2196F3);
-
-  static ColorScheme darkColorScheme = ColorScheme.fromSeed(
-    seedColor: amber,
-    brightness: Brightness.dark,
-    surface: darkSurface,
-  );
-
-  static ColorScheme lightColorScheme = ColorScheme.fromSeed(
-    seedColor: amber,
-    brightness: Brightness.light,
-    surface: lightSurface,
-  );
+  /// M3 light scheme with the normative §3 hexes pinned onto the roles
+  /// the app actually consumes (one accent; derived roles stay M3).
+  static final ColorScheme lightColorScheme =
+      ColorScheme.fromSeed(
+        seedColor: accent,
+        brightness: Brightness.light,
+        surface: surface,
+      ).copyWith(
+        primary: accent,
+        onPrimary: onAccent,
+        primaryContainer: accentContainer,
+        onPrimaryContainer: onAccentContainer,
+        onSurface: text,
+        onSurfaceVariant: subtext,
+        outline: inputBorder,
+        outlineVariant: border,
+        error: error,
+        onError: onAccent,
+        errorContainer: errorContainer,
+        onErrorContainer: onErrorContainer,
+      );
 }
 
-class AppTheme {
-  static ThemeData get darkTheme => ThemeData(
-    useMaterial3: true,
-    brightness: Brightness.dark,
-    scaffoldBackgroundColor: AppColors.darkBg,
-    colorScheme: AppColors.darkColorScheme,
-    fontFamily: 'Roboto',
-    appBarTheme: const AppBarTheme(
-      backgroundColor: AppColors.darkSurface,
-      elevation: 0,
-      foregroundColor: AppColors.textDark,
-    ),
-    cardTheme: CardThemeData(
-      color: AppColors.darkCard,
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: AppRadius.cardRadius),
-    ),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: AppColors.darkInput,
-      border: OutlineInputBorder(
-        borderRadius: AppRadius.inputRadius,
-        borderSide: BorderSide.none,
-      ),
-    ),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.amber,
-        foregroundColor: Colors.black,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
-      ),
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.amber,
-        side: const BorderSide(color: AppColors.amber),
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
-      ),
-    ),
-    textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(
-        foregroundColor: AppColors.amber,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
-      ),
-    ),
-    iconButtonTheme: IconButtonThemeData(
-      style: IconButton.styleFrom(foregroundColor: AppColors.textDark),
-    ),
-    floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: AppColors.amber,
-      foregroundColor: Colors.black,
-    ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      backgroundColor: AppColors.darkSurface,
-      selectedItemColor: AppColors.amber,
-      unselectedItemColor: AppColors.subDark,
-    ),
-    snackBarTheme: SnackBarThemeData(
-      backgroundColor: AppColors.darkCard,
-      contentTextStyle: const TextStyle(color: AppColors.textDark),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
-      behavior: SnackBarBehavior.floating,
-    ),
-    bottomSheetTheme: const BottomSheetThemeData(
-      backgroundColor: AppColors.darkSurface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppRadius.xxl),
-        ),
-      ),
-    ),
-    dialogTheme: DialogThemeData(
-      backgroundColor: AppColors.darkSurface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    ),
-    dividerTheme: const DividerThemeData(
-      color: AppColors.borderDark,
-      thickness: 1,
-    ),
+/// Type scale (spec §4.1) — Roboto retained; hierarchy from size/weight only.
+class AppTypography {
+  static const TextStyle display = TextStyle(
+    fontSize: 28,
+    fontWeight: FontWeight.w700,
+    height: 1.2,
+  );
+  static const TextStyle title = TextStyle(
+    fontSize: 20,
+    fontWeight: FontWeight.w700,
+    height: 1.25,
+  );
+  static const TextStyle subtitle = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+    height: 1.3,
+  );
+  static const TextStyle body = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    height: 1.45,
+  );
+  static const TextStyle bodyChat = TextStyle(
+    fontSize: 14.5,
+    fontWeight: FontWeight.w400,
+    height: 1.45,
+  );
+  static const TextStyle label = TextStyle(
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+    height: 1.4,
+  );
+  static const TextStyle labelSm = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w500,
+    height: 1.3,
+  );
+  static const TextStyle micro = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w500,
+    height: 1.2,
   );
 
+  /// Button label (spec §5.1/§5.2): `body` at w600.
+  static final TextStyle button = body.copyWith(fontWeight: FontWeight.w600);
+
+  /// M3 slot mapping consumed as the app `TextTheme` (spec §4.1).
+  static TextTheme get textTheme => TextTheme(
+    displayLarge: display,
+    displayMedium: display,
+    displaySmall: display,
+    headlineLarge: display,
+    headlineMedium: display,
+    headlineSmall: title,
+    titleLarge: title,
+    titleMedium: subtitle,
+    titleSmall: labelSm.copyWith(color: AppColors.text),
+    bodyLarge: body,
+    bodyMedium: body,
+    bodySmall: labelSm.copyWith(color: AppColors.subtext),
+    labelLarge: button.copyWith(color: AppColors.text),
+    labelMedium: label.copyWith(color: AppColors.text),
+    labelSmall: micro.copyWith(color: AppColors.subtext),
+  ).apply(bodyColor: AppColors.text, displayColor: AppColors.text);
+}
+
+/// The app theme — light only (spec §2). Component defaults per §5.
+class AppTheme {
   static ThemeData get lightTheme => ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
-    scaffoldBackgroundColor: AppColors.lightBg,
     colorScheme: AppColors.lightColorScheme,
+    scaffoldBackgroundColor: AppColors.background,
     fontFamily: 'Roboto',
-    appBarTheme: const AppBarTheme(
-      backgroundColor: AppColors.lightSurface,
+    textTheme: AppTypography.textTheme,
+    appBarTheme: AppBarTheme(
+      backgroundColor: AppColors.surface,
+      foregroundColor: AppColors.text,
       elevation: 0,
-      foregroundColor: AppColors.textLight,
+      scrolledUnderElevation: 0,
+      centerTitle: true,
+      iconTheme: const IconThemeData(color: AppColors.text, size: 20),
+      titleTextStyle: AppTypography.subtitle.copyWith(color: AppColors.text),
+      shape: const Border(bottom: BorderSide(color: AppColors.border)),
     ),
     cardTheme: CardThemeData(
-      color: AppColors.lightCard,
+      color: AppColors.card,
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: AppRadius.cardRadius),
+      shape: RoundedRectangleBorder(
+        borderRadius: AppRadius.cardRadius,
+        side: const BorderSide(color: AppColors.border),
+      ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: AppColors.lightInput,
+      fillColor: AppColors.input,
+      contentPadding: AppSpacing.inputPadding,
       border: OutlineInputBorder(
         borderRadius: AppRadius.inputRadius,
-        borderSide: BorderSide.none,
+        borderSide: const BorderSide(color: AppColors.inputBorder),
       ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: AppRadius.inputRadius,
+        borderSide: const BorderSide(color: AppColors.inputBorder),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: AppRadius.inputRadius,
+        borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: AppRadius.inputRadius,
+        borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: AppRadius.inputRadius,
+        borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: AppRadius.inputRadius,
+        borderSide: const BorderSide(color: AppColors.border),
+      ),
+      labelStyle: AppTypography.label.copyWith(color: AppColors.subtext),
+      floatingLabelStyle: AppTypography.label.copyWith(
+        fontWeight: FontWeight.w600,
+        color: AppColors.text,
+      ),
+      hintStyle: AppTypography.labelSm.copyWith(color: AppColors.subtext),
+      helperStyle: AppTypography.labelSm.copyWith(color: AppColors.subtext),
+      errorStyle: AppTypography.labelSm.copyWith(color: AppColors.error),
+      prefixIconColor: AppColors.subtext,
+      suffixIconColor: AppColors.subtext,
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.amber,
-        foregroundColor: Colors.black,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? AppColors.input
+              : AppColors.accent,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? AppColors.disabledText
+              : AppColors.onAccent,
+        ),
+        overlayColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.pressed)
+              ? AppColors.onAccent.withValues(alpha: 0.11)
+              : null,
+        ),
+        minimumSize: const WidgetStatePropertyAll(Size(64, 52)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
+        ),
+        textStyle: WidgetStatePropertyAll(AppTypography.button),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.amberDark,
-        side: const BorderSide(color: AppColors.amber),
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
+      style: ButtonStyle(
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? AppColors.disabledText
+              : AppColors.text,
+        ),
+        overlayColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.pressed)
+              ? AppColors.text.withValues(alpha: 0.04)
+              : null,
+        ),
+        side: WidgetStateProperty.resolveWith(
+          (states) => BorderSide(
+            color: states.contains(WidgetState.disabled)
+                ? AppColors.border
+                : AppColors.inputBorder,
+          ),
+        ),
+        minimumSize: const WidgetStatePropertyAll(Size(64, 52)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
+        ),
+        textStyle: WidgetStatePropertyAll(AppTypography.button),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(
-        foregroundColor: AppColors.amberDark,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
+      style: ButtonStyle(
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? AppColors.disabledText
+              : AppColors.accent,
+        ),
+        minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
+        ),
+        textStyle: WidgetStatePropertyAll(AppTypography.body),
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
-      style: IconButton.styleFrom(foregroundColor: AppColors.textLight),
+      style: IconButton.styleFrom(foregroundColor: AppColors.text),
     ),
-    floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: AppColors.amber,
-      foregroundColor: Colors.black,
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: AppColors.accent,
+      foregroundColor: AppColors.onAccent,
+      elevation: 3,
+      focusElevation: 3,
+      hoverElevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.fabRadius),
+      extendedTextStyle: AppTypography.button,
     ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      backgroundColor: AppColors.lightSurface,
-      selectedItemColor: AppColors.amberDark,
-      unselectedItemColor: AppColors.subLight,
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
+      backgroundColor: AppColors.surface,
+      elevation: 0,
+      selectedItemColor: AppColors.onAccentContainer,
+      unselectedItemColor: AppColors.subtext,
+      selectedLabelStyle: AppTypography.micro.copyWith(
+        fontWeight: FontWeight.w600,
+      ),
+      unselectedLabelStyle: AppTypography.micro,
     ),
     snackBarTheme: SnackBarThemeData(
-      backgroundColor: AppColors.lightCard,
-      contentTextStyle: const TextStyle(color: AppColors.textLight),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
       behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.snackbarRadius),
     ),
-    bottomSheetTheme: const BottomSheetThemeData(
-      backgroundColor: AppColors.lightSurface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppRadius.xxl),
-        ),
-      ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: AppColors.surface,
+      modalBackgroundColor: AppColors.surface,
+      elevation: 0,
+      modalElevation: 0,
+      dragHandleColor: AppColors.border,
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.sheetRadius),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: AppColors.lightSurface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: AppColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.dialogRadius),
+      titleTextStyle: AppTypography.title.copyWith(color: AppColors.text),
+      contentTextStyle: AppTypography.body.copyWith(color: AppColors.subtext),
     ),
-    dividerTheme: const DividerThemeData(
-      color: AppColors.borderLight,
-      thickness: 1,
+    progressIndicatorTheme: const ProgressIndicatorThemeData(
+      color: AppColors.accent,
+      linearTrackColor: AppColors.input,
     ),
+    dividerTheme: const DividerThemeData(color: AppColors.border, thickness: 1),
   );
 }
 
+/// Flat light palette consumed by screens via `context.select` (spec §2/§3).
 class ThemeColors {
-  final bool isDark;
+  const ThemeColors();
 
-  const ThemeColors(this.isDark);
+  Color get background => AppColors.background;
+  Color get surface => AppColors.surface;
+  Color get card => AppColors.card;
+  Color get input => AppColors.input;
+  Color get border => AppColors.border;
+  Color get inputBorder => AppColors.inputBorder;
+  Color get text => AppColors.text;
+  Color get subtext => AppColors.subtext;
+  Color get disabledText => AppColors.disabledText;
+  Color get scrim => AppColors.scrim;
 
-  Color get background => isDark ? AppColors.darkBg : AppColors.lightBg;
-  Color get surface => isDark ? AppColors.darkSurface : AppColors.lightSurface;
-  Color get card => isDark ? AppColors.darkCard : AppColors.lightCard;
-  Color get input => isDark ? AppColors.darkInput : AppColors.lightInput;
-  Color get text => isDark ? AppColors.textDark : AppColors.textLight;
-  Color get subtext => isDark ? AppColors.subDark : AppColors.subLight;
-  Color get border => isDark ? AppColors.borderDark : AppColors.borderLight;
-  Color get amber => AppColors.amber;
-  Color get success => isDark ? AppColors.success : AppColors.successDark;
-  Color get error => isDark ? AppColors.error : AppColors.errorDark;
-  Color get warning => isDark ? AppColors.warning : AppColors.warningDark;
+  Color get accent => AppColors.accent;
+  Color get onAccent => AppColors.onAccent;
+  Color get accentContainer => AppColors.accentContainer;
+  Color get onAccentContainer => AppColors.onAccentContainer;
+
+  Color get success => AppColors.success;
+  Color get successContainer => AppColors.successContainer;
+  Color get onSuccessContainer => AppColors.onSuccessContainer;
+  Color get error => AppColors.error;
+  Color get errorContainer => AppColors.errorContainer;
+  Color get onErrorContainer => AppColors.onErrorContainer;
+  Color get warning => AppColors.warning;
+  Color get warningContainer => AppColors.warningContainer;
+  Color get onWarningContainer => AppColors.onWarningContainer;
 
   Color withOpacity(Color color, double opacity) {
     return color.withValues(alpha: opacity);

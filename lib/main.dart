@@ -314,25 +314,30 @@ class _AppLoaderState extends State<AppLoader> {
     final err = AppConfig.googleConfigError ?? 'Google sign-in not configured';
     return Container(
       margin: const EdgeInsets.only(top: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+        color: AppColors.warningContainer,
+        borderRadius: AppRadius.bannerRadius,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.warning_amber_rounded,
-            color: Colors.orange,
-            size: 18,
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Icon(
+              Icons.warning_amber_rounded,
+              color: AppColors.warning,
+              size: 18,
+            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               err,
-              style: const TextStyle(color: Colors.orange, fontSize: 11),
+              style: AppTypography.label.copyWith(color: AppColors.text),
             ),
           ),
         ],
@@ -346,10 +351,8 @@ class _AppLoaderState extends State<AppLoader> {
       debugShowCheckedModeBanner: false,
       title: 'AgentA',
       theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.dark,
       home: Scaffold(
-        backgroundColor: const Color(0xFF1A1A2E),
+        backgroundColor: AppColors.background,
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -359,16 +362,12 @@ class _AppLoaderState extends State<AppLoader> {
                 const Icon(
                   Icons.smart_toy_outlined,
                   size: 80,
-                  color: Color(0xFFFFD700),
+                  color: AppColors.accent,
                 ),
                 const SizedBox(height: 32),
-                const Text(
+                Text(
                   'AgentA',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                  style: AppTypography.display.copyWith(color: AppColors.text),
                 ),
                 const SizedBox(height: 48),
                 _buildStatusWidget(),
@@ -384,11 +383,14 @@ class _AppLoaderState extends State<AppLoader> {
   Widget _buildStatusWidget() {
     switch (_initState.status) {
       case AppInitStatus.initializing:
-        return const Column(
+        return Column(
           children: [
-            CircularProgressIndicator(color: Color(0xFFFFD700)),
-            SizedBox(height: 16),
-            Text('Initializing...', style: TextStyle(color: Colors.white70)),
+            const CircularProgressIndicator(color: AppColors.accent),
+            const SizedBox(height: 16),
+            Text(
+              'Initializing...',
+              style: AppTypography.label.copyWith(color: AppColors.subtext),
+            ),
           ],
         );
 
@@ -397,33 +399,29 @@ class _AppLoaderState extends State<AppLoader> {
           children: [
             const Icon(
               Icons.warning_amber_rounded,
-              color: Colors.orange,
+              color: AppColors.warning,
               size: 48,
             ),
             const SizedBox(height: 16),
             Text(
               _initState.errorMessage ?? 'Backend connection failed',
-              style: const TextStyle(color: Colors.orange),
+              style: AppTypography.body.copyWith(color: AppColors.warning),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
             if (_isRetrying)
-              const CircularProgressIndicator(color: Color(0xFFFFD700))
+              const CircularProgressIndicator(color: AppColors.accent)
             else ...[
               ElevatedButton(
                 onPressed: _retryBackend,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFD700),
-                  foregroundColor: Colors.black,
-                ),
                 child: const Text('Retry'),
               ),
               const SizedBox(height: 12),
               TextButton(
                 onPressed: _continueOffline,
-                child: const Text(
+                child: Text(
                   'Continue Offline',
-                  style: TextStyle(color: Colors.white70),
+                  style: AppTypography.body.copyWith(color: AppColors.subtext),
                 ),
               ),
             ],
@@ -433,20 +431,16 @@ class _AppLoaderState extends State<AppLoader> {
       case AppInitStatus.error:
         return Column(
           children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            const Icon(Icons.error_outline, color: AppColors.error, size: 48),
             const SizedBox(height: 16),
             Text(
               _initState.errorMessage ?? 'An error occurred',
-              style: const TextStyle(color: Colors.red),
+              style: AppTypography.body.copyWith(color: AppColors.error),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _retryBackend,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFD700),
-                foregroundColor: Colors.black,
-              ),
               child: const Text('Retry'),
             ),
           ],
@@ -454,11 +448,14 @@ class _AppLoaderState extends State<AppLoader> {
 
       case AppInitStatus.backendSuccess:
       case AppInitStatus.databaseReady:
-        return const Column(
+        return Column(
           children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 48),
-            SizedBox(height: 16),
-            Text('Ready!', style: TextStyle(color: Colors.green)),
+            const Icon(Icons.check_circle, color: AppColors.success, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              'Ready!',
+              style: AppTypography.body.copyWith(color: AppColors.success),
+            ),
           ],
         );
     }
@@ -474,8 +471,6 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'AgentA',
       theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.dark,
       // Update dialog host: app-level overlay via the builder — the dialog
       // appears over ANY screen (login, model-download gate, shell). The
       // navigatorKey lets the host (mounted above the navigator) push the
@@ -564,27 +559,29 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
   Widget build(BuildContext context) {
     if (_loadingError != null) {
       return Scaffold(
-        backgroundColor: const Color(0xFF0D0D0D),
+        backgroundColor: AppColors.background,
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const Icon(
+                  Icons.error_outline,
+                  color: AppColors.error,
+                  size: 48,
+                ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'Failed to load offline model',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppTypography.subtitle.copyWith(color: AppColors.text),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'The offline model could not be loaded. Please try again.',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                  style: AppTypography.labelSm.copyWith(
+                    color: AppColors.subtext,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
@@ -594,10 +591,6 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
                     _isChecking = true;
                     unawaited(_checkModelStatus());
                   }),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFFD700),
-                    foregroundColor: Colors.black,
-                  ),
                   child: const Text('Retry'),
                 ),
               ],
@@ -609,24 +602,26 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
 
     if (_isChecking || _isLoadingModel) {
       return Scaffold(
-        backgroundColor: const Color(0xFF0D0D0D),
+        backgroundColor: AppColors.background,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(color: Color(0xFFFFC107)),
+              const CircularProgressIndicator(color: AppColors.accent),
               const SizedBox(height: 20),
               Text(
                 _isChecking
                     ? 'Checking model status...'
                     : 'Loading offline model...',
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
+                style: AppTypography.body.copyWith(color: AppColors.subtext),
               ),
               if (!_isChecking) ...[
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'First load can take a moment.',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                  style: AppTypography.labelSm.copyWith(
+                    color: AppColors.subtext,
+                  ),
                 ),
               ],
             ],
@@ -679,7 +674,7 @@ class _AuthGateState extends State<AuthGate> {
           if (snapshot.connectionState != ConnectionState.done) {
             return const Scaffold(
               body: Center(
-                child: CircularProgressIndicator(color: Color(0xFFFFC107)),
+                child: CircularProgressIndicator(color: AppColors.accent),
               ),
             );
           }
@@ -711,7 +706,7 @@ class _AuthGateState extends State<AuthGate> {
                 session == null) {
               return const Scaffold(
                 body: Center(
-                  child: CircularProgressIndicator(color: Color(0xFFFFC107)),
+                  child: CircularProgressIndicator(color: AppColors.accent),
                 ),
               );
             }
