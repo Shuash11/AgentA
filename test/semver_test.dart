@@ -54,6 +54,10 @@ void main() {
       expect(v.patch, 0);
     });
 
+    test('strips leading uppercase V', () {
+      expect(SemVer.tryParseTag('V1.2.5')?.toString(), '1.2.5');
+    });
+
     test('accepts tag without v prefix', () {
       expect(SemVer.tryParseTag('1.1.0')!.toString(), '1.1.0');
     });
@@ -70,6 +74,21 @@ void main() {
   group('SemVer.compareTo (major → minor → patch)', () {
     test('equal versions compare 0', () {
       expect(SemVer.tryParse('1.1.0')!.compareTo(SemVer.tryParse('1.1.0')!), 0);
+    });
+
+    test('equal versions are == with matching hashCode', () {
+      expect(SemVer.tryParse('1.2.5') == SemVer.tryParse('1.2.5'), isTrue);
+      expect(
+        SemVer.tryParse('1.2.5')!.hashCode,
+        SemVer.tryParse('1.2.5')!.hashCode,
+      );
+    });
+
+    test('numeric, not lexicographic: 1.10.0 > 1.9.9', () {
+      expect(
+        SemVer.tryParse('1.10.0')!.compareTo(SemVer.tryParse('1.9.9')!),
+        greaterThan(0),
+      );
     });
 
     test('major dominates minor and patch', () {

@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:aiproject/services/update/github_releases_source.dart';
+import 'package:aiproject/services/update/version_source.dart';
 
 http.Response _releaseResponse({Map<String, dynamic>? overrides}) {
   final body = <String, dynamic>{
@@ -29,6 +31,10 @@ http.Response _releaseResponse({Map<String, dynamic>? overrides}) {
   return http.Response(jsonEncode(body), 200);
 }
 
+/// Unwraps a [ReleaseFetched] — fails the test on any other result.
+RemoteRelease _releaseOf(ReleaseFetchResult result) =>
+    (result as ReleaseFetched).release;
+
 void main() {
   group('GithubReleasesSource (GitHub API)', () {
     test('200 parses the JSON subset per contract', () async {
@@ -36,10 +42,9 @@ void main() {
         client: MockClient((_) async => _releaseResponse()),
       );
 
-      final release = await source.fetchLatestRelease();
+      final release = _releaseOf(await source.fetchLatestRelease());
 
-      expect(release, isNotNull);
-      expect(release!.version, '1.2.0'); // 'v'-stripped, strict semver
+      expect(release.version, '1.2.0'); // 'v'-stripped, strict semver
       expect(release.minVersion, '1.0.0'); // from body marker line
       expect(
         release.downloadUrl,
@@ -52,6 +57,35 @@ void main() {
       expect(release.notes, 'Release notes\nmin-version: 1.0.0');
       expect(release.publishedAt, isNotNull);
       expect(source.backoffUntil, isNull);
+    });
+
+    test('real v1.2.5 payload shape → ReleaseFetched (P1 regression)', () async {
+      // The shape verified in the P1 diagnosis (authenticated read of the real
+      // release): tag v1.2.5, not draft/prerelease, no min-version marker,
+      // one APK asset.
+      final source = GithubReleasesSource(
+        client: MockClient(
+          (_) async => _releaseResponse(
+            overrides: {
+              'tag_name': 'v1.2.5',
+              'body': 'Bug fixes and improvements',
+              'assets': [
+                {
+                  'name': 'AgentA-v1.2.5.apk',
+                  'browser_download_url':
+                      'https://github.com/Shuash11/AgentA/releases/download/v1.2.5/AgentA-v1.2.5.apk',
+                },
+              ],
+            },
+          ),
+        ),
+      );
+
+      final release = _releaseOf(await source.fetchLatestRelease());
+
+      expect(release.version, '1.2.5');
+      expect(release.minVersion, isNull);
+      expect(release.downloadUrl, endsWith('AgentA-v1.2.5.apk'));
     });
 
     test('downloadUrl falls back to html_url when no *.apk asset', () async {
@@ -70,16 +104,16 @@ void main() {
         ),
       );
 
-      final release = await source.fetchLatestRelease();
+      final release = _releaseOf(await source.fetchLatestRelease());
 
       expect(
-        release!.downloadUrl,
+        release.downloadUrl,
         'https://github.com/Shuash11/AgentA/releases/tag/v1.2.0',
       );
     });
 
     test(
-      'draft/prerelease releases are ignored (defensive re-check)',
+      'draft/prerelease releases → ReleaseUnexpected(200) (defensive)',
       () async {
         final draftSource = GithubReleasesSource(
           client: MockClient(
@@ -92,19 +126,27 @@ void main() {
           ),
         );
 
-        expect(await draftSource.fetchLatestRelease(), isNull);
-        expect(await preSource.fetchLatestRelease(), isNull);
+        final draftResult = await draftSource.fetchLatestRelease();
+        final preResult = await preSource.fetchLatestRelease();
+
+        expect(draftResult, isA<ReleaseUnexpected>());
+        expect(preResult, isA<ReleaseUnexpected>());
+        expect((draftResult as ReleaseUnexpected).statusCode, 200);
+        expect((preResult as ReleaseUnexpected).statusCode, 200);
       },
     );
 
-    test('non-semver tag_name → null', () async {
+    test('non-semver tag_name → ReleaseUnexpected(200)', () async {
       final source = GithubReleasesSource(
         client: MockClient(
           (_) async => _releaseResponse(overrides: {'tag_name': 'latest'}),
         ),
       );
 
-      expect(await source.fetchLatestRelease(), isNull);
+      final result = await source.fetchLatestRelease();
+
+      expect(result, isA<ReleaseUnexpected>());
+      expect((result as ReleaseUnexpected).statusCode, 200);
     });
 
     test(
@@ -117,24 +159,25 @@ void main() {
           ),
         );
 
-        final release = await source.fetchLatestRelease();
+        final release = _releaseOf(await source.fetchLatestRelease());
 
-        expect(release, isNotNull);
-        expect(release!.minVersion, isNull);
+        expect(release.minVersion, isNull);
       },
     );
 
-    test('404 → null, no backoff', () async {
+    test('404 → ReleaseNotFound (classified), no backoff', () async {
       final source = GithubReleasesSource(
         client: MockClient((_) async => http.Response('Not Found', 404)),
       );
 
-      expect(await source.fetchLatestRelease(), isNull);
+      final result = await source.fetchLatestRelease();
+
+      expect(result, isA<ReleaseNotFound>());
       expect(source.backoffUntil, isNull);
     });
 
     test(
-      '403 → backoffUntil from x-ratelimit-reset; never retries until it passes',
+      '403 → ReleaseRateLimited with x-ratelimit-reset; never retries until it passes',
       () async {
         var calls = 0;
         final resetEpoch = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600;
@@ -149,12 +192,17 @@ void main() {
           }),
         );
 
-        expect(await source.fetchLatestRelease(), isNull);
+        final first = await source.fetchLatestRelease();
+        expect(first, isA<ReleaseRateLimited>());
+        final retryAt = (first as ReleaseRateLimited).retryAt;
+        expect(retryAt.isAfter(DateTime.now()), isTrue);
         expect(source.backoffUntil, isNotNull);
-        expect(source.backoffUntil!.isAfter(DateTime.now()), isTrue);
+        expect(retryAt, source.backoffUntil);
 
         // Second call refused by the source's own backoff gate.
-        expect(await source.fetchLatestRelease(), isNull);
+        final second = await source.fetchLatestRelease();
+        expect(second, isA<ReleaseRateLimited>());
+        expect((second as ReleaseRateLimited).retryAt, retryAt);
         expect(calls, 1);
       },
     );
@@ -170,9 +218,10 @@ void main() {
         ),
       );
 
-      expect(await source.fetchLatestRelease(), isNull);
-
+      final result = await source.fetchLatestRelease();
+      expect(result, isA<ReleaseRateLimited>());
       expect(source.backoffUntil, isNotNull);
+
       // Skew-tolerant window — the source timestamps with its own clock read.
       final now = DateTime.now();
       expect(
@@ -197,31 +246,105 @@ void main() {
         }),
       );
 
-      expect(await source.fetchLatestRelease(), isNull); // 429 → backoff set
+      final first = await source.fetchLatestRelease(); // 429 → backoff set
+      expect(first, isA<ReleaseRateLimited>());
       expect(source.backoffUntil, isNotNull);
 
-      final release = await source.fetchLatestRelease(); // retry allowed
-      expect(release, isNotNull);
-      expect(release!.version, '1.2.0');
+      final second = await source.fetchLatestRelease(); // retry allowed
+      final release = _releaseOf(second);
+      expect(release.version, '1.2.0');
       expect(source.backoffUntil, isNull); // 200 cleared it
       expect(calls, 2);
     });
 
-    test('network errors → silent failure (null)', () async {
+    test('5xx / other status → ReleaseUnexpected(statusCode)', () async {
+      final source = GithubReleasesSource(
+        client: MockClient((_) async => http.Response('oops', 503)),
+      );
+
+      final result = await source.fetchLatestRelease();
+
+      expect(result, isA<ReleaseUnexpected>());
+      expect((result as ReleaseUnexpected).statusCode, 503);
+      expect(source.backoffUntil, isNull);
+    });
+
+    test(
+      'transport failures → ReleaseOffline (socket/TLS/http/client)',
+      () async {
+        final socketSource = GithubReleasesSource(
+          client: MockClient(
+            (_) async => throw SocketException('Failed host lookup'),
+          ),
+        );
+        final tlsSource = GithubReleasesSource(
+          client: MockClient(
+            (_) async => throw HandshakeException('CERTIFICATE_VERIFY_FAILED'),
+          ),
+        );
+        final httpSource = GithubReleasesSource(
+          client: MockClient((_) async => throw HttpException('bad response')),
+        );
+        final clientSource = GithubReleasesSource(
+          client: MockClient(
+            (_) async => throw http.ClientException(
+              'Connection closed before full header was received',
+            ),
+          ),
+        );
+
+        expect(await socketSource.fetchLatestRelease(), isA<ReleaseOffline>());
+        expect(await tlsSource.fetchLatestRelease(), isA<ReleaseOffline>());
+        expect(await httpSource.fetchLatestRelease(), isA<ReleaseOffline>());
+        expect(await clientSource.fetchLatestRelease(), isA<ReleaseOffline>());
+        expect(socketSource.backoffUntil, isNull);
+      },
+    );
+
+    test('timeout (8s deadline) → ReleaseTimedOut', () async {
+      final source = GithubReleasesSource(
+        client: MockClient((_) async {
+          await Future<void>.delayed(const Duration(milliseconds: 150));
+          return _releaseResponse();
+        }),
+        timeout: const Duration(milliseconds: 30),
+      );
+
+      expect(await source.fetchLatestRelease(), isA<ReleaseTimedOut>());
+    });
+
+    test('unknown exception → ReleaseUnexpected (statusCode null)', () async {
       final source = GithubReleasesSource(
         client: MockClient((_) async => throw Exception('boom')),
       );
 
-      expect(await source.fetchLatestRelease(), isNull);
+      final result = await source.fetchLatestRelease();
+
+      expect(result, isA<ReleaseUnexpected>());
+      expect((result as ReleaseUnexpected).statusCode, isNull);
       expect(source.backoffUntil, isNull);
     });
 
-    test('malformed JSON → silent failure (null)', () async {
+    test('malformed JSON → ReleaseUnexpected(200)', () async {
       final source = GithubReleasesSource(
         client: MockClient((_) async => http.Response('not json', 200)),
       );
 
-      expect(await source.fetchLatestRelease(), isNull);
+      final result = await source.fetchLatestRelease();
+
+      expect(result, isA<ReleaseUnexpected>());
+      expect((result as ReleaseUnexpected).statusCode, 200);
+    });
+
+    test('non-map JSON → ReleaseUnexpected(200)', () async {
+      final source = GithubReleasesSource(
+        client: MockClient((_) async => http.Response('[1,2,3]', 200)),
+      );
+
+      final result = await source.fetchLatestRelease();
+
+      expect(result, isA<ReleaseUnexpected>());
+      expect((result as ReleaseUnexpected).statusCode, 200);
     });
   });
 }

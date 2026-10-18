@@ -154,17 +154,17 @@ class UpdateCubit extends Cubit<UpdateState> {
 
   /// Force a network check now (user-initiated — the service still enforces
   /// its backoff/debug gates). While the call runs the state is
-  /// [UpdateStatus.checking]; a silent failure/throttle returns to idle so the
+  /// [UpdateStatus.checking]; a failed/skipped check returns to idle so the
   /// UI never gets stuck on "checking".
   Future<void> checkNow() async {
     emit(state.copyWith(status: UpdateStatus.checking));
-    final result = await _service.checkNow();
-    if (result == null) {
+    final outcome = await _service.checkNow();
+    if (outcome is! UpdateCheckCompleted) {
       if (state.status == UpdateStatus.checking) {
         emit(state.copyWith(status: UpdateStatus.idle));
       }
     }
-    // Non-null: the resultStream listener has already mapped it (the service
+    // Completed: the resultStream listener has already mapped it (the service
     // adds the result before returning; applying again is idempotent).
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -12,14 +13,17 @@ import 'version_source.dart';
 /// (`GET /repos/Shuash11/AgentA/releases/latest`, see
 /// [AppConfig.githubLatestReleaseUrl]).
 ///
-/// Handling per contract:
+/// Classification per `contracts/update-engine.yaml`:
 ///  - 8s timeout ([timeout]);
-///  - 200 → parses the JSON subset, defensively re-checking
-///    `draft == false && prerelease == false` and strict semver `tag_name`;
-///  - 404 → null (no releases published yet — a valid "nothing to see");
-///  - 403/429 → parses `x-ratelimit-reset` / `retry-after` and exposes a
-///    [backoffUntil] deadline; no request is retried until it passes;
-///  - network errors → silent failure (debug log only, returns null).
+///  - 200 → parsed; unusable content (malformed JSON, non-map, draft,
+///    prerelease, non-semver tag) → [ReleaseUnexpected] with `statusCode: 200`;
+///  - 404 → [ReleaseNotFound] — covers a private/non-anonymous endpoint too;
+///  - 403/429 → [ReleaseRateLimited], with the deadline from `retry-after`
+///    (seconds) or `x-ratelimit-reset` (Unix epoch seconds); no request is
+///    retried until it passes;
+///  - transport errors (DNS/connect/TLS) → [ReleaseOffline]; the deadline
+///    elapsed → [ReleaseTimedOut];
+///  - anything else → [ReleaseUnexpected].
 ///
 /// The unauthenticated GitHub rate limit is 60 req/hour/IP, which is why
 /// [VersionCheckService] aggressively throttles and caches upstream.
@@ -31,6 +35,7 @@ class GithubReleasesSource implements VersionSource {
 
   /// Rate-limit backoff deadline — null when not rate-limited.
   /// While this is in the future, no request may be retried.
+  @override
   DateTime? get backoffUntil => _backoffUntil;
 
   /// [client] is injectable for unit tests (MockClient); defaults to a real
@@ -41,10 +46,11 @@ class GithubReleasesSource implements VersionSource {
   }) : _client = client ?? http.Client();
 
   @override
-  Future<RemoteRelease?> fetchLatestRelease() async {
-    if (_isBackedOff) {
-      _log('[UpdateSource] skip — rate-limited until $_backoffUntil');
-      return null;
+  Future<ReleaseFetchResult> fetchLatestRelease() async {
+    final backoff = _backoffUntil;
+    if (backoff != null && backoff.isAfter(DateTime.now())) {
+      _log('[UpdateSource] skip — rate-limited until $backoff');
+      return ReleaseRateLimited(backoff);
     }
     try {
       final response = await _client
@@ -63,30 +69,44 @@ class GithubReleasesSource implements VersionSource {
           _backoffUntil = null;
           return _parseRelease(response.body);
         case 404:
-          // No releases published yet — a valid "nothing to see" answer.
+          // No releases published yet — or the endpoint is not anonymously
+          // reachable (private repo): both are "no release info".
           _backoffUntil = null;
-          return null;
+          return const ReleaseNotFound();
         case 403:
         case 429:
-          _applyRateLimitBackoff(response.headers);
-          return null;
+          return ReleaseRateLimited(_applyRateLimitBackoff(response.headers));
         default:
           _log('[UpdateSource] unexpected status ${response.statusCode}');
-          return null;
+          return ReleaseUnexpected(statusCode: response.statusCode);
       }
+    } on TimeoutException {
+      _log('[UpdateSource] request timed out after ${timeout.inSeconds}s');
+      return const ReleaseTimedOut();
+    } on SocketException catch (e) {
+      // DNS failure / connection refused / reset. package:http wraps these in
+      // a ClientException that still implements SocketException.
+      _log('[UpdateSource] offline (socket): $e');
+      return const ReleaseOffline();
+    } on HandshakeException catch (e) {
+      _log('[UpdateSource] offline (TLS): $e');
+      return const ReleaseOffline();
+    } on HttpException catch (e) {
+      _log('[UpdateSource] offline (http): $e');
+      return const ReleaseOffline();
+    } on http.ClientException catch (e) {
+      _log('[UpdateSource] offline (client): $e');
+      return const ReleaseOffline();
     } catch (e) {
-      // Network errors, timeouts, malformed JSON → silent failure.
-      _log('[UpdateSource] fetch failed (silent): $e');
-      return null;
+      _log('[UpdateSource] unexpected fetch failure: $e');
+      return const ReleaseUnexpected();
     }
   }
 
-  bool get _isBackedOff =>
-      _backoffUntil != null && _backoffUntil!.isAfter(DateTime.now());
-
   /// 403/429: derive the backoff deadline from `retry-after` (seconds) or
   /// `x-ratelimit-reset` (Unix epoch seconds). No retry until it passes.
-  void _applyRateLimitBackoff(Map<String, String> headers) {
+  /// Returns the applied deadline (always non-null).
+  DateTime _applyRateLimitBackoff(Map<String, String> headers) {
     final now = DateTime.now();
     final retryAfter = int.tryParse(_header(headers, 'retry-after') ?? '');
     final resetEpoch = int.tryParse(
@@ -106,6 +126,7 @@ class GithubReleasesSource implements VersionSource {
       _backoffUntil = now.add(const Duration(hours: 1));
     }
     _log('[UpdateSource] rate-limited — backoff until $_backoffUntil');
+    return _backoffUntil!;
   }
 
   /// Case-insensitive header lookup (http normalizes keys to lowercase,
@@ -119,21 +140,26 @@ class GithubReleasesSource implements VersionSource {
     return null;
   }
 
-  RemoteRelease? _parseRelease(String body) {
+  /// Parses a 200 body into [ReleaseFetched], or [ReleaseUnexpected]
+  /// (`statusCode: 200`) when the content is not usable.
+  ReleaseFetchResult _parseRelease(String body) {
     dynamic json;
     try {
       json = jsonDecode(body);
     } catch (e) {
       _log('[UpdateSource] release JSON decode failed: $e');
-      return null;
+      return const ReleaseUnexpected(statusCode: 200);
     }
-    if (json is! Map<String, dynamic>) return null;
+    if (json is! Map<String, dynamic>) {
+      _log('[UpdateSource] release JSON is not an object');
+      return const ReleaseUnexpected(statusCode: 200);
+    }
 
     // Defensive re-check: /latest should never return drafts or prereleases,
     // but proxies/mirrors or API changes make this worth enforcing.
     if (json['draft'] == true || json['prerelease'] == true) {
       _log('[UpdateSource] latest release is draft/prerelease — ignoring');
-      return null;
+      return const ReleaseUnexpected(statusCode: 200);
     }
 
     final tagName = json['tag_name'];
@@ -142,7 +168,7 @@ class GithubReleasesSource implements VersionSource {
       _log(
         '[UpdateSource] tag_name "${tagName ?? ''}" is not strict semver — ignoring',
       );
-      return null;
+      return const ReleaseUnexpected(statusCode: 200);
     }
 
     final notes = (json['body'] as String?)?.trim();
@@ -152,13 +178,15 @@ class GithubReleasesSource implements VersionSource {
         ? DateTime.tryParse(publishedRaw)
         : null;
 
-    return RemoteRelease(
-      version: version.toString(),
-      minVersion: _parseMinVersion(notes),
-      downloadUrl: _parseDownloadUrl(json, releaseUrl),
-      releaseUrl: releaseUrl,
-      notes: notes,
-      publishedAt: publishedAt,
+    return ReleaseFetched(
+      RemoteRelease(
+        version: version.toString(),
+        minVersion: _parseMinVersion(notes),
+        downloadUrl: _parseDownloadUrl(json, releaseUrl),
+        releaseUrl: releaseUrl,
+        notes: notes,
+        publishedAt: publishedAt,
+      ),
     );
   }
 

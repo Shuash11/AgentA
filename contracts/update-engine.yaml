@@ -1,0 +1,151 @@
+# Update-engine contract (cycle-27 P3)
+#
+# Governs the boundary between the update-check engine
+# (lib/services/update/) and its consumers (UpdateCubit, the Profile
+# "Check for updates" affordance). Authoritative file — code, comments and
+# delegation prompts are never the contract. No second copy exists anywhere.
+#
+# Recorded 2026-10-18 (cycle-27 P3, middle-end) under the Adviser's explicit
+# P3 mandate; supersedes the pre-contract implicit behaviour ("null for every
+# non-success", which made the private-repo 404 invisible — see the plan's
+# root-cause section). Initial recording, so no version-bump decision applies.
+
+contract: update-engine
+version: 1.0.0
+status: active
+
+# ---------------------------------------------------------------------------
+# 1. Upstream HTTP API (consumed)
+# ---------------------------------------------------------------------------
+
+upstream:
+  api: GitHub Releases REST v3
+  endpoint: GET https://api.github.com/repos/Shuash11/AgentA/releases/latest
+  source: lib/core/config/app_config.dart (AppConfig.githubLatestReleaseUrl)
+  auth: none
+  auth_notes: >-
+    Anonymous only. GitHub answers 404 to anonymous callers for private or
+    non-existent repositories (existence is not leaked), so a private channel
+    is indistinguishable from "no releases" at this layer — classified as
+    noRelease and surfaced by user-initiated checks. The channel itself is a
+    separate user-gated workstream (cycle-27); the engine never authenticates.
+  request:
+    path_params: none
+    query_params: none
+    body: none
+    headers:
+      Accept: application/vnd.github+json
+      X-GitHub-Api-Version: "2022-11-28"
+      User-Agent: AgentA-UpdateCheck
+    timeout: 8 seconds (GithubReleasesSource.timeout)
+  responses:
+    "200":
+      description: latest published release
+      body_fields_consumed:
+        tag_name: "string — release tag; strict semver with optional leading 'v' (v stripped)"
+        draft: "bool — must be false; true is treated as unusable content"
+        prerelease: "bool — must be false; true is treated as unusable content"
+        body: "string|null — release notes; a line 'min-version: x.y.z' maps to RemoteRelease.minVersion"
+        html_url: "string|null — release page (fallback download link)"
+        published_at: "string|null — ISO-8601"
+        assets: "list — first entry whose name ends in .apk supplies browser_download_url → RemoteRelease.downloadUrl"
+    "404":
+      description: no release info — no releases published, or the endpoint is not anonymously reachable (private repo/renamed)
+      classification: noRelease
+    "403":
+      description: rate limited (primary 60 req/h/IP unauthenticated, or secondary limits)
+      headers: "retry-after (seconds) and/or x-ratelimit-reset (UTC epoch seconds)"
+      classification: rateLimited
+    "429":
+      description: rate limited
+      headers: same as 403
+      classification: rateLimited
+    other:
+      description: any other HTTP status (5xx etc.)
+      classification: unexpected (statusCode carried)
+  errors:
+    message_body: "{message: string, documentation_url: string} on 4xx — not consumed"
+    rate_limit_headers: consumed only from 403/429; fallback backoff = 1 hour when headers are missing/unparseable
+  transport_errors:
+    TimeoutException: timeout
+    SocketException: offline
+    HandshakeException: offline
+    HttpException: offline
+    http.ClientException: offline
+    other: unexpected (statusCode null)
+
+# ---------------------------------------------------------------------------
+# 2. Engine boundary (Dart types consumed by the UI)
+# ---------------------------------------------------------------------------
+
+version_source:
+  interface: lib/services/update/version_source.dart
+  fetch_latest_release:
+    signature: "Future<ReleaseFetchResult> fetchLatestRelease()"
+    invariants:
+      - never throws — every outcome is classified
+      - while backoffUntil is in the future the source itself refuses to issue a request and returns rateLimited
+  backoff_until:
+    signature: "DateTime? get backoffUntil — interface default: null"
+    semantics: rate-limit deadline; null when not backed off or unsupported by the source
+  release_fetch_result:
+    type: "sealed class ReleaseFetchResult"
+    variants:
+      ReleaseFetched: "release: RemoteRelease — 200 with usable content"
+      ReleaseNotFound: "no fields — 404 (includes private/non-anonymous endpoints)"
+      ReleaseRateLimited: "retryAt: DateTime — 403/429; also returned while backed off"
+      ReleaseOffline: "no fields — DNS/connect/TLS/transport failure"
+      ReleaseTimedOut: "no fields — 8s deadline elapsed"
+      ReleaseUnexpected: "statusCode: int|null — 5xx/other status; 200 for unusable 200 content; null when no response was received"
+  content_rejections_on_200:
+    mapping: "malformed JSON | non-map JSON | draft=true | prerelease=true | non-semver tag_name → ReleaseUnexpected(statusCode: 200)"
+    note: "a malformed 'min-version:' marker is NOT a failure — treated as absent (never force on junk); the release is still returned"
+
+version_check_service:
+  class: lib/services/update/version_check_service.dart
+  check_now:
+    signature: "Future<UpdateCheckOutcome> checkNow()"
+    semantics:
+      - user-initiated: bypasses the 5-minute throttle
+      - respects the build gate (debug/profile → skipped nonRelease) and the rate-limit backoff gate (→ failed rateLimited with retryAt, no network call)
+      - joins an in-flight check and returns THAT check's outcome — never a stale lastResult
+  update_check_outcome:
+    type: "sealed class UpdateCheckOutcome"
+    variants:
+      UpdateCheckCompleted: "result: UpdateCheckResult — fresh decision; already emitted on resultStream"
+      UpdateCheckFailed: "reason: UpdateFailureReason, retryAt: DateTime|null — retryAt is set iff reason == rateLimited"
+      UpdateCheckSkipped: "reason: UpdateSkipReason"
+    failure_reasons: [noRelease, rateLimited, offline, timeout, unexpected]
+    skip_reasons: [nonRelease, throttled, versionUnknown]
+  fetch_to_outcome_mapping:
+    ReleaseFetched: "UpdateCheckCompleted (after the decision rules below)"
+    ReleaseNotFound: "UpdateCheckFailed(noRelease)"
+    ReleaseRateLimited: "UpdateCheckFailed(rateLimited, retryAt)"
+    ReleaseOffline: "UpdateCheckFailed(offline)"
+    ReleaseTimedOut: "UpdateCheckFailed(timeout)"
+    ReleaseUnexpected: "UpdateCheckFailed(unexpected)"
+    "enabled == false": "UpdateCheckSkipped(nonRelease)"
+    "throttled (automatic paths only)": "UpdateCheckSkipped(throttled)"
+    "current version missing/unparseable": "UpdateCheckSkipped(versionUnknown)"
+  decision_rules:
+    - "minVersion != null && current < minVersion → forced"
+    - "else latest > current → available"
+    - "else none"
+    - "build number is recorded but NEVER compared"
+  silence_contract:
+    - "automatic paths (init/startup, AppLifecycleState.resumed, 30-min periodic, connectivity-restored) discard their outcome and emit nothing on failure or skip"
+    - "resultStream emits ONLY UpdateCheckCompleted results"
+    - "failures and skips never emit, never overwrite lastResult, never change dialog state"
+  state:
+    lastResult: "UpdateCheckResult? — last completed decision; unchanged by failures/skips"
+    resultStream: "Stream<UpdateCheckResult> — broadcast, completed results only"
+    cachedRelease: "RemoteRelease? — inspection only; NEVER drives UI (dialogs come from fresh checks only)"
+    lastSuccessfulCheckAt: "DateTime? — inspection only"
+
+# ---------------------------------------------------------------------------
+# 3. Consumers
+# ---------------------------------------------------------------------------
+
+consumers:
+  update_cubit: "maps completed results to dialog state; ignores failed/skipped (idle) — unchanged behaviour"
+  profile_check_affordance: "cycle-27 P4 (frontend) — renders the five outcomes from UpdateCheckOutcome"

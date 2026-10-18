@@ -9,7 +9,7 @@ import '../../core/utils/semver.dart';
 import 'github_releases_source.dart';
 import 'version_source.dart';
 
-/// Update state level exposed to the (Phase 2) dialog.
+/// Update state level exposed to the dialog.
 enum UpdateLevel { none, available, forced }
 
 /// Outcome of a fresh version check (Adviser contract):
@@ -37,8 +37,64 @@ class UpdateCheckResult {
       'UpdateCheckResult(level: ${level.name}, current: $currentVersion+$currentBuild, remote: ${remote?.version})';
 }
 
+/// Classified outcome of a version check (contract §2). User-initiated
+/// checks ([VersionCheckService.checkNow]) return it directly; automatic
+/// paths discard it — failures and skips are silent by contract.
+sealed class UpdateCheckOutcome {
+  const UpdateCheckOutcome();
+}
+
+/// A fresh decision was produced; it has already been emitted on
+/// [VersionCheckService.resultStream].
+final class UpdateCheckCompleted extends UpdateCheckOutcome {
+  final UpdateCheckResult result;
+
+  const UpdateCheckCompleted(this.result);
+}
+
+/// The check failed before producing a decision. Failed checks never emit
+/// on [VersionCheckService.resultStream] and never change dialog state.
+final class UpdateCheckFailed extends UpdateCheckOutcome {
+  final UpdateFailureReason reason;
+
+  /// Rate-limit deadline — set iff [reason] is
+  /// [UpdateFailureReason.rateLimited].
+  final DateTime? retryAt;
+
+  const UpdateCheckFailed(this.reason, {this.retryAt});
+}
+
+/// The check was not attempted (build gate, throttle, unknown current
+/// version) — distinct from a failure: nothing was tried and nothing failed.
+final class UpdateCheckSkipped extends UpdateCheckOutcome {
+  final UpdateSkipReason reason;
+
+  const UpdateCheckSkipped(this.reason);
+}
+
+/// Why a check failed (contract §2).
+enum UpdateFailureReason {
+  noRelease,
+  rateLimited,
+  offline,
+  timeout,
+  unexpected,
+}
+
+/// Why a check was not attempted (contract §2).
+enum UpdateSkipReason { nonRelease, throttled, versionUnknown }
+
 /// Owns update-check comparison + scheduling for the "new version has
 /// arrived" feature.
+///
+/// Contract: `contracts/update-engine.yaml` (cycle-27, §2). Core rules:
+///  - every fetch is classified ([VersionSource]); failures are only silent
+///    on automatic paths, and only user-initiated checks surface them;
+///  - automatic paths (startup, resumed, periodic, connectivity-restored)
+///    emit NOTHING on failure or skip — `resultStream` carries completed
+///    results only;
+///  - [checkNow] joins an in-flight check and returns THAT check's outcome,
+///    never a stale [lastResult].
 ///
 /// Public API: [init] (must be called post-first-frame, never before
 /// `runApp()` — `PackageInfo.fromPlatform` before the first frame is a known
@@ -54,7 +110,8 @@ class UpdateCheckResult {
 ///
 /// Checks are skipped entirely in debug/profile builds ([kReleaseMode] gate)
 /// to avoid dev noise — unit tests inject a fake [VersionSource] with
-/// `enabled: true` instead.
+/// `enabled: true` instead. A user-initiated check in such a build reports
+/// [UpdateCheckSkipped] with [UpdateSkipReason.nonRelease].
 ///
 /// The last successful response is cached in memory with a timestamp
 /// ([cachedRelease] / [lastSuccessfulCheckAt]) for inspection only — the
@@ -72,7 +129,7 @@ class VersionCheckService with WidgetsBindingObserver {
   Timer? _periodicTimer;
   StreamSubscription<InternetStatus>? _connectivitySubscription;
   bool _initialized = false;
-  bool _isChecking = false;
+  Future<UpdateCheckOutcome>? _inFlight; // the running check, if any
   AppLifecycleState? _lifecycleState;
 
   DateTime? _lastCheckAt; // last network call attempt — throttle gate
@@ -108,11 +165,12 @@ class VersionCheckService with WidgetsBindingObserver {
 
   Duration get _minInterval => _minCheckIntervalOverride ?? _minCheckInterval;
 
-  /// Last emitted result (state). Null until a fresh check produced an
-  /// outcome; a failed/skipped check never overwrites it.
+  /// Last emitted result (state). Null until a fresh check produced a
+  /// decision; a failed/skipped check never overwrites it.
   UpdateCheckResult? get lastResult => _lastResult;
 
-  /// Broadcast stream of fresh check outcomes (callback).
+  /// Broadcast stream of fresh check outcomes (callback) — completed
+  /// results only; failures and skips never emit (contract §2).
   Stream<UpdateCheckResult> get resultStream => _resultController.stream;
 
   /// Last successful response — inspection only. NEVER use this to surface
@@ -138,14 +196,16 @@ class VersionCheckService with WidgetsBindingObserver {
 
     _startScheduling();
 
-    // Fire-and-forget startup check — never blocks boot.
+    // Fire-and-forget startup check — never blocks boot. The outcome is
+    // discarded: automatic paths stay silent on failure (contract §2).
     unawaited(_runCheck(respectInterval: true));
   }
 
   /// Immediate, user-initiated check. Bypasses the 5-min throttle (it is
-  /// explicit) but still respects the rate-limit backoff gate, the
-  /// debug-build gate, and the in-flight reentrancy guard.
-  Future<UpdateCheckResult?> checkNow() => _runCheck(respectInterval: false);
+  /// explicit) but still respects the build gate and the rate-limit backoff
+  /// gate. When a check is already in flight, this JOINS it and returns that
+  /// check's outcome — never a stale [lastResult].
+  Future<UpdateCheckOutcome> checkNow() => _runCheck(respectInterval: false);
 
   Future<void> _loadCurrentVersion() async {
     try {
@@ -191,18 +251,29 @@ class VersionCheckService with WidgetsBindingObserver {
     }
   }
 
-  /// The single backoff/throttle gate every check passes through.
-  Future<UpdateCheckResult?> _runCheck({required bool respectInterval}) async {
-    if (!_enabled) return null;
-    if (_isChecking) return _lastResult; // a check is already in flight
+  /// The single backoff/throttle gate every check passes through. Returns
+  /// the classified outcome; automatic callers discard it (silence).
+  Future<UpdateCheckOutcome> _runCheck({required bool respectInterval}) {
+    // A check is already in flight — join it (never a stale return).
+    final inFlight = _inFlight;
+    if (inFlight != null) return inFlight;
+
+    if (!_enabled) {
+      return Future.value(
+        const UpdateCheckSkipped(UpdateSkipReason.nonRelease),
+      );
+    }
 
     // Rate-limit backoff: never retry until the deadline passes.
-    if (_isBackedOff) {
-      final until = _source is GithubReleasesSource
-          ? _source.backoffUntil
-          : null;
-      _log('[Update] skip — rate-limit backoff until $until');
-      return null;
+    final backoffUntil = _source.backoffUntil;
+    if (backoffUntil != null && backoffUntil.isAfter(DateTime.now())) {
+      _log('[Update] skip — rate-limit backoff until $backoffUntil');
+      return Future.value(
+        UpdateCheckFailed(
+          UpdateFailureReason.rateLimited,
+          retryAt: backoffUntil,
+        ),
+      );
     }
 
     // Min 5 min between network calls (automatic triggers only).
@@ -212,53 +283,74 @@ class VersionCheckService with WidgetsBindingObserver {
         _log(
           '[Update] skip — throttled (min interval ${_minInterval.inMinutes}m)',
         );
-        return null;
+        return Future.value(
+          const UpdateCheckSkipped(UpdateSkipReason.throttled),
+        );
       }
     }
 
     final current = SemVer.tryParse(_currentVersion ?? '');
     if (current == null) {
       _log('[Update] skip — current version unknown/unparseable');
-      return null;
-    }
-
-    _isChecking = true;
-    try {
-      _lastCheckAt = DateTime.now();
-      final remote = await _source.fetchLatestRelease();
-      if (remote == null) {
-        // 404 / rate-limited / network failure — no information. Do NOT emit:
-        // a failed check must never clear or downgrade a previous state, and
-        // null must never be read as "up to date".
-        _log('[Update] no release info — no result emitted');
-        return null;
-      }
-
-      // Cache the last successful response with its timestamp (inspection
-      // only — never drives emitted results or UI).
-      _cachedRelease = remote;
-      _lastSuccessfulCheckAt = DateTime.now();
-
-      final result = _decide(remote, current);
-      _lastResult = result;
-      _resultController.add(result);
-      _log(
-        '[Update] level=${result.level.name} current=$_currentVersion remote=v${remote.version}',
+      return Future.value(
+        const UpdateCheckSkipped(UpdateSkipReason.versionUnknown),
       );
-      return result;
-    } catch (e) {
-      // Silent failure — debug log only.
-      _log('[Update] check failed (silent): $e');
-      return null;
-    } finally {
-      _isChecking = false;
     }
+
+    final future = _executeCheck(current);
+    _inFlight = future;
+    return future.whenComplete(() {
+      if (identical(_inFlight, future)) _inFlight = null;
+    });
   }
 
-  bool get _isBackedOff {
-    if (_source is! GithubReleasesSource) return false;
-    final until = _source.backoffUntil;
-    return until != null && until.isAfter(DateTime.now());
+  /// Runs one network check and maps its classified fetch result to an
+  /// outcome. Only a completed decision is cached and emitted (contract §2,
+  /// `silence_contract`).
+  Future<UpdateCheckOutcome> _executeCheck(SemVer current) async {
+    _lastCheckAt = DateTime.now();
+    try {
+      final fetch = await _source.fetchLatestRelease();
+      switch (fetch) {
+        case ReleaseFetched(:final release):
+          // Cache the last successful response with its timestamp
+          // (inspection only — never drives emitted results or UI).
+          _cachedRelease = release;
+          _lastSuccessfulCheckAt = DateTime.now();
+
+          final result = _decide(release, current);
+          _lastResult = result;
+          _resultController.add(result);
+          _log(
+            '[Update] level=${result.level.name} current=$_currentVersion remote=v${release.version}',
+          );
+          return UpdateCheckCompleted(result);
+        case ReleaseNotFound():
+          _log('[Update] no release info (404) — no result emitted');
+          return const UpdateCheckFailed(UpdateFailureReason.noRelease);
+        case ReleaseRateLimited(:final retryAt):
+          _log('[Update] rate-limited until $retryAt — no result emitted');
+          return UpdateCheckFailed(
+            UpdateFailureReason.rateLimited,
+            retryAt: retryAt,
+          );
+        case ReleaseOffline():
+          _log('[Update] offline — no result emitted');
+          return const UpdateCheckFailed(UpdateFailureReason.offline);
+        case ReleaseTimedOut():
+          _log('[Update] timed out — no result emitted');
+          return const UpdateCheckFailed(UpdateFailureReason.timeout);
+        case ReleaseUnexpected(:final statusCode):
+          _log(
+            '[Update] unexpected fetch result (status $statusCode) — no result emitted',
+          );
+          return const UpdateCheckFailed(UpdateFailureReason.unexpected);
+      }
+    } catch (e) {
+      // Defensive only — a VersionSource never throws (contract §2).
+      _log('[Update] check failed (unexpected): $e');
+      return const UpdateCheckFailed(UpdateFailureReason.unexpected);
+    }
   }
 
   /// Decision per the Adviser's rules:
