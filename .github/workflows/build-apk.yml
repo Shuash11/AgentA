@@ -419,6 +419,65 @@ jobs:
           files: dist/*.apk
           generate_release_notes: true
 
+      # P5 anonymous release guard (cycle 27): the update engine checks the
+      # githubLatestReleaseUrl from lib/core/config/app_config.dart with NO
+      # credentials — a release APK cannot hold a secret. This guard tests
+      # the just-published release exactly as an anonymous user (tokens
+      # explicitly cleared for this step) and FAILS the workflow loudly when
+      # the latest release is not anonymously readable (HTTP 200 + strict-
+      # semver tag_name) or the APK asset HEAD is not 200. It is the
+      # systemic control that would have caught the private-repo 404 at
+      # publish time. The channel URL is derived from the config file
+      # (single source of truth), so a future mirror-repo channel (B) is
+      # followed automatically. Skipped on non-tag pushes (same gating as
+      # the release step above).
+      - name: Guard - anonymous release check (update channel)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ""
+          GITHUB_TOKEN: ""
+        run: |
+          unset GH_TOKEN GITHUB_TOKEN
+          echo "Anonymous release check: GH_TOKEN=${GH_TOKEN:-<unset>} GITHUB_TOKEN=${GITHUB_TOKEN:-<unset>}"
+
+          CONFIG="lib/core/config/app_config.dart"
+          URL="$(grep -oE 'https://api\.github\.com/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/releases/latest' "$CONFIG" | head -1)"
+          if [ -z "$URL" ]; then
+            echo "::error::Anonymous release check FAILED: could not derive the update-channel URL from ${CONFIG}. Expected a https://api.github.com/repos/<owner>/<repo>/releases/latest constant; received none. Keep the config and this guard in sync."
+            exit 1
+          fi
+          echo "Channel URL (from ${CONFIG}): ${URL}"
+
+          BODY="$(mktemp)"
+          HTTP_CODE="$(curl -sS --max-time 30 -o "$BODY" -w '%{http_code}' "$URL" || true)"
+          HTTP_CODE="${HTTP_CODE:-000}"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Anonymous release check FAILED: GET ${URL} returned HTTP ${HTTP_CODE}; expected 200. A 404 here means the repo/release is not publicly readable — credential-less clients (the app's update check) see exactly this response (cycle-27 root cause). Body: $(head -c 300 "$BODY")"
+            exit 1
+          fi
+
+          TAG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("tag_name") or "")' "$BODY")"
+          SEMVER="${TAG#v}"
+          if [ -z "$TAG" ] || ! [[ "$SEMVER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Anonymous release check FAILED: GET ${URL} returned 200, but tag_name '${TAG}' is missing or not strict semver. The update engine ignores non-semver tags — the release would be invisible to every installed app."
+            exit 1
+          fi
+          echo "Anonymous latest release OK: ${TAG} (strict semver)"
+
+          APK_URL="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(next((a["browser_download_url"] for a in d.get("assets",[]) if a.get("name","").endswith(".apk")), ""))' "$BODY")"
+          if [ -z "$APK_URL" ]; then
+            echo "::error::Anonymous release check FAILED: release ${TAG} has no *.apk asset (received assets: $(python3 -c 'import json,sys; print(", ".join(a.get("name","?") for a in json.load(open(sys.argv[1])).get("assets",[])) or "none")' "$BODY")). The update flow needs the APK asset."
+            exit 1
+          fi
+
+          APK_CODE="$(curl -sS --max-time 30 -I -L -o /dev/null -w '%{http_code}' "$APK_URL" || true)"
+          APK_CODE="${APK_CODE:-000}"
+          if [ "$APK_CODE" != "200" ]; then
+            echo "::error::Anonymous release check FAILED: HEAD ${APK_URL} returned HTTP ${APK_CODE}; expected 200. Anonymous users must be able to download the APK the update flow links to."
+            exit 1
+          fi
+          echo "Anonymous APK asset OK: HTTP 200 (${APK_URL})"
+
       # Short retention: promotion downloads the artifact minutes after the
       # build, so 3 days is plenty. Prevents artifact-storage quota exhaustion
       # (30 artifacts x ~117MB previously hit the 90-day-retention quota).
