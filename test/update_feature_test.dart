@@ -15,16 +15,27 @@ import 'package:aiproject/services/update/version_source.dart';
 
 /// Fake [VersionSource] — drives the real [VersionCheckService] in tests.
 class FakeVersionSource implements VersionSource {
-  RemoteRelease? release;
+  ReleaseFetchResult result;
   int calls = 0;
 
-  FakeVersionSource({this.release});
+  FakeVersionSource({RemoteRelease? release})
+    : result = release == null
+          ? const ReleaseNotFound()
+          : ReleaseFetched(release);
+
+  /// Switches the result mid-test (e.g. a newer release arrives).
+  set release(RemoteRelease? value) {
+    result = value == null ? const ReleaseNotFound() : ReleaseFetched(value);
+  }
 
   @override
-  Future<RemoteRelease?> fetchLatestRelease() async {
+  Future<ReleaseFetchResult> fetchLatestRelease() async {
     calls++;
-    return release;
+    return result;
   }
+
+  @override
+  DateTime? get backoffUntil => null;
 }
 
 /// Fake [UrlLauncherPlatform] — records launches for the Update-tap tests.

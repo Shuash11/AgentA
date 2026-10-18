@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth/auth_service.dart';
+import '../../services/update/version_check_service.dart';
 import '../../repositories/user_repository.dart';
 import '../../presentation/auth/login.dart';
 import '../shared/bottomnavbar.dart';
@@ -26,6 +27,14 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _displayName;
   String? _email;
   bool _isLoading = true;
+
+  // Cycle-27 P4: manual "Check for updates" row. Only USER-initiated checks
+  // render here — automatic paths stay silent (contract §2). The outcome
+  // comes from VersionCheckService.checkNow() (the contract's outcome
+  // source); the dialog flow (resultStream → UpdateCubit → host) is
+  // untouched and re-shows the dialog on `available` automatically.
+  bool _checkingUpdates = false;
+  UpdateCheckOutcome? _updateOutcome;
 
   @override
   void initState() {
@@ -65,9 +74,125 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  /// User-initiated check (plan ruling 4). Double taps are prevented by the
+  /// [_checkingUpdates] guard; the row is disabled while the check runs.
+  Future<void> _checkForUpdates() async {
+    if (_checkingUpdates) return;
+    setState(() {
+      _checkingUpdates = true;
+      _updateOutcome = null;
+    });
+    final outcome = await VersionCheckService.instance.checkNow();
+    if (!mounted) return;
+    setState(() {
+      _checkingUpdates = false;
+      _updateOutcome = outcome;
+    });
+  }
+
+  /// Per-outcome content for the row (plan ruling 4): checking /
+  /// up-to-date (vX) / available → dialog / failed(reason, retryAt?) + Retry /
+  /// skipped(nonRelease). All states carry text (never color-only, §7.4-5).
+  ({String? subtitle, Color? subtitleColor, Widget? action}) _updateRowContent(
+    ThemeColors colors,
+  ) {
+    if (_checkingUpdates) {
+      return (
+        subtitle: 'Checking for updates…',
+        subtitleColor: null,
+        action: null,
+      );
+    }
+    return switch (_updateOutcome) {
+      null => (subtitle: null, subtitleColor: null, action: null),
+      UpdateCheckCompleted(:final result) => _completedContent(result),
+      UpdateCheckFailed(:final reason, :final retryAt) => _failedContent(
+        colors,
+        reason,
+        retryAt,
+      ),
+      UpdateCheckSkipped(:final reason) => (
+        subtitle: switch (reason) {
+          UpdateSkipReason.nonRelease =>
+            "Update check skipped — this build doesn't check for updates.",
+          UpdateSkipReason.versionUnknown =>
+            'Update check skipped — the installed version could not be determined.',
+          UpdateSkipReason.throttled =>
+            'Update check skipped — try again in a few minutes.',
+        },
+        subtitleColor: null,
+        action: null,
+      ),
+    };
+  }
+
+  /// A fresh decision: the host auto-shows the dialog on `available`/`forced`
+  /// (dismissals suppress only the exact version); the row states the fact.
+  ({String? subtitle, Color? subtitleColor, Widget? action}) _completedContent(
+    UpdateCheckResult result,
+  ) {
+    return switch (result.level) {
+      UpdateLevel.available || UpdateLevel.forced => (
+        subtitle: switch (result.remote?.version) {
+          null => 'A new version of AgentA is available.',
+          final version => 'AgentA v$version is available.',
+        },
+        subtitleColor: null,
+        action: null,
+      ),
+      UpdateLevel.none => (
+        subtitle: switch (result.currentVersion) {
+          null || '' => "You're on the latest version.",
+          final current => "You're on the latest version (v$current)",
+        },
+        subtitleColor: null,
+        action: null,
+      ),
+    };
+  }
+
+  /// Failure text per reason + the Retry action (re-runs the check and
+  /// clears the failure). The rate-limit deadline renders as local HH:mm.
+  ({String? subtitle, Color? subtitleColor, Widget? action}) _failedContent(
+    ThemeColors colors,
+    UpdateFailureReason reason,
+    DateTime? retryAt,
+  ) {
+    final text = switch (reason) {
+      UpdateFailureReason.noRelease =>
+        'Update check failed — no release found on the server.',
+      UpdateFailureReason.offline =>
+        'Update check failed — offline. Check your connection.',
+      UpdateFailureReason.timeout =>
+        'Update check failed — timed out. Try again.',
+      UpdateFailureReason.rateLimited => switch (retryAt) {
+        null => 'Update check rate-limited. Try again later.',
+        final deadline =>
+          'Update check rate-limited. Retry after '
+              '${deadline.hour.toString().padLeft(2, '0')}:'
+              '${deadline.minute.toString().padLeft(2, '0')}',
+      },
+      // The outcome carries no HTTP status (contract §2) — the engine logs it.
+      UpdateFailureReason.unexpected =>
+        'Update check failed — server error. Try again.',
+    };
+    return (
+      subtitle: text,
+      subtitleColor: colors.error,
+      action: TextButton(
+        onPressed: _checkForUpdates,
+        child: Text(
+          'Retry',
+          style: AppTypography.body.copyWith(color: colors.accent),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.select((ThemeCubit c) => c.state.colors);
+    final updateRow = _updateRowContent(colors);
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -135,6 +260,23 @@ class _ProfilePageState extends State<ProfilePage> {
                       MaterialPageRoute(builder: (_) => const SecurityPage()),
                     ),
                     colors,
+                  ),
+                  const SizedBox(height: 12),
+                  _tile(
+                    Icons.cloud_queue,
+                    'Check for updates',
+                    _checkingUpdates ? null : _checkForUpdates,
+                    colors,
+                    trailing: _checkingUpdates
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : null,
+                    subtitle: updateRow.subtitle,
+                    subtitleColor: updateRow.subtitleColor,
+                    action: updateRow.action,
                   ),
                   const SizedBox(height: 32),
                   SizedBox(
@@ -205,9 +347,13 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _tile(
     IconData icon,
     String title,
-    VoidCallback onTap,
-    ThemeColors colors,
-  ) {
+    VoidCallback? onTap,
+    ThemeColors colors, {
+    Widget? trailing,
+    String? subtitle,
+    Color? subtitleColor,
+    Widget? action,
+  }) {
     return Material(
       type: MaterialType.transparency,
       child: InkWell(
@@ -220,17 +366,35 @@ class _ProfilePageState extends State<ProfilePage> {
             borderRadius: AppRadius.tileRadius,
             border: Border.all(color: colors.border),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: colors.subtext),
-              const SizedBox(width: AppSpacing.base),
-              Expanded(
-                child: Text(
-                  title,
-                  style: AppTypography.subtitle.copyWith(color: colors.text),
-                ),
+              Row(
+                children: [
+                  Icon(icon, color: colors.subtext),
+                  const SizedBox(width: AppSpacing.base),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: AppTypography.subtitle.copyWith(
+                        color: colors.text,
+                      ),
+                    ),
+                  ),
+                  trailing ?? Icon(Icons.chevron_right, color: colors.subtext),
+                ],
               ),
-              Icon(Icons.chevron_right, color: colors.subtext),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: AppTypography.label.copyWith(
+                    color: subtitleColor ?? colors.subtext,
+                  ),
+                ),
+              ],
+              if (action != null) ...[const SizedBox(height: 4), action],
             ],
           ),
         ),
