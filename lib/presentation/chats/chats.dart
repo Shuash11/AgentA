@@ -660,7 +660,7 @@ class _ChatScreenState extends State<Chats> {
   Widget build(BuildContext context) {
     final colors = context.select((ThemeCubit c) => c.state.colors);
     return Scaffold(
-      backgroundColor: colors.background,
+      backgroundColor: colors.base,
       appBar: ChatScreenAppBar(
         title: widget.title,
         modelName: _aiService.currentModelName,

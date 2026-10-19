@@ -13,7 +13,7 @@ Future<void> showModelPickerSheet({
 }) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.base,
     useSafeArea: true,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(borderRadius: AppRadius.sheetRadius),
@@ -30,13 +30,13 @@ Future<void> showModelPickerSheet({
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 20),
                   decoration: BoxDecoration(
-                    color: colors.border,
+                    color: colors.base,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
                 Text(
                   'Select AI Model',
-                  style: AppTypography.title.copyWith(color: colors.text),
+                  style: AppTypography.title.copyWith(color: colors.ink),
                 ),
                 const SizedBox(height: 16),
                 _ModelTile(
@@ -103,49 +103,62 @@ class _ModelTile extends StatelessWidget {
     final isGemmaUnready = model == AIModel.gemma && !isOfflineModelReady;
     final isDisabled = !isAvailable;
 
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-      enabled: isAvailable || isGemmaUnready,
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: isSelected ? colors.accentContainer : colors.input,
-          borderRadius: BorderRadius.circular(12),
+    return Container(
+      // Selected = inset well (§5); unselected/disabled sit flat on the sheet.
+      decoration: BoxDecoration(
+        color: colors.base,
+        borderRadius: AppRadius.tileRadius,
+        boxShadow: isSelected ? AppShadows.pressed : AppShadows.flat,
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+        enabled: isAvailable || isGemmaUnready,
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: colors.base,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            _isImageGenerationModel(model)
+                ? Icons.image_rounded
+                : Icons.psychology_rounded,
+            color: isSelected
+                ? colors.accent
+                : isDisabled
+                ? colors.disabledText
+                : colors.subtext,
+            size: 24,
+          ),
         ),
-        child: Icon(
-          _isImageGenerationModel(model)
-              ? Icons.image_rounded
-              : Icons.psychology_rounded,
-          color: isSelected
-              ? colors.onAccentContainer
+        title: Text(
+          model.displayName,
+          style: AppTypography.subtitle.copyWith(
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+            color: isSelected
+                ? colors.accentInk
+                : isDisabled
+                ? colors.disabledText
+                : colors.ink,
+          ),
+        ),
+        subtitle: Text(
+          isGemmaUnready
+              ? 'Download to use offline'
               : isDisabled
-              ? colors.disabledText
-              : colors.subtext,
-          size: 24,
+              ? 'Requires Internet'
+              : model.description,
+          style: AppTypography.label.copyWith(
+            color: isDisabled ? colors.disabledText : colors.subtext,
+          ),
         ),
+        trailing: _buildTrailing(isSelected, isGemmaUnready, isDisabled),
+        onTap: isAvailable
+            ? () => onSelected(model)
+            : isGemmaUnready
+            ? onDownloadRequested
+            : null,
       ),
-      title: Text(
-        model.displayName,
-        style: AppTypography.subtitle.copyWith(
-          color: isDisabled ? colors.disabledText : colors.text,
-        ),
-      ),
-      subtitle: Text(
-        isGemmaUnready
-            ? 'Download to use offline'
-            : isDisabled
-            ? 'Requires Internet'
-            : model.description,
-        style: AppTypography.label.copyWith(
-          color: isDisabled ? colors.disabledText : colors.subtext,
-        ),
-      ),
-      trailing: _buildTrailing(isSelected, isGemmaUnready, isDisabled),
-      onTap: isAvailable
-          ? () => onSelected(model)
-          : isGemmaUnready
-          ? onDownloadRequested
-          : null,
     );
   }
 

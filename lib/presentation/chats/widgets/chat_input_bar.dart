@@ -27,7 +27,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
   final FocusNode _focusNode = FocusNode();
   final ValueNotifier<bool> _hasTextNotifier = ValueNotifier<bool>(false);
 
-  static const _borderRadius = BorderRadius.all(Radius.circular(20));
+  /// Composer pill — radius matches the chat bubble (spec §6: bubbles 24).
+  static const _borderRadius = BorderRadius.all(Radius.circular(24));
   static const _inputDecoration = InputDecoration(
     hintText: 'Ask AgentA...',
     filled: true,
@@ -94,29 +95,32 @@ class _ChatInputBarState extends State<ChatInputBar> {
           AppSpacing.base,
           12,
         ),
-        decoration: BoxDecoration(
-          color: colors.surface,
-          border: Border(top: BorderSide(color: colors.border)),
-        ),
+        decoration: BoxDecoration(color: colors.base),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 120),
-                child: SystemKeyboardTextField(
-                  focusNode: _focusNode,
-                  controller: widget.controller,
-                  maxLines: null,
-                  keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
-                  textCapitalization: TextCapitalization.sentences,
-                  style: AppTypography.bodyChat.copyWith(color: colors.text),
-                  decoration: _inputDecoration.copyWith(
-                    hintStyle: AppTypography.bodyChat.copyWith(
-                      color: colors.subtext,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: _borderRadius,
+                  boxShadow: AppShadows.well,
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 120),
+                  child: SystemKeyboardTextField(
+                    focusNode: _focusNode,
+                    controller: widget.controller,
+                    maxLines: null,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
+                    textCapitalization: TextCapitalization.sentences,
+                    style: AppTypography.bodyChat.copyWith(color: colors.ink),
+                    decoration: _inputDecoration.copyWith(
+                      hintStyle: AppTypography.bodyChat.copyWith(
+                        color: colors.subtext,
+                      ),
+                      fillColor: colors.base,
                     ),
-                    fillColor: colors.input,
                   ),
                 ),
               ),
@@ -160,29 +164,36 @@ class _SendButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool shouldShow = isTyping || hasText;
     final Color color = isTyping
-        ? colors.error
+        ? colors.errorText
         : shouldShow
         ? colors.accent
-        : colors.input;
+        : colors.base;
     final Color iconColor = shouldShow ? colors.onAccent : colors.subtext;
 
     return Semantics(
       button: true,
       enabled: shouldShow,
       label: isTyping ? 'Stop' : 'Send',
-      child: SizedBox(
-        width: 48,
-        height: 48,
-        child: Material(
-          color: color,
+      child: Container(
+        decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppRadius.lg),
-          child: InkWell(
-            onTap: shouldShow ? (isTyping ? onStop : onSend) : null,
+          // Ready/stop float; idle sits flat (§5: idle = flat + subtext).
+          boxShadow: shouldShow ? AppShadows.raised : AppShadows.flat,
+        ),
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Material(
+            color: color,
             borderRadius: BorderRadius.circular(AppRadius.lg),
-            child: Icon(
-              isTyping ? Icons.stop_rounded : Icons.send_rounded,
-              color: iconColor,
-              size: 20,
+            child: InkWell(
+              onTap: shouldShow ? (isTyping ? onStop : onSend) : null,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              child: Icon(
+                isTyping ? Icons.stop_rounded : Icons.send_rounded,
+                color: iconColor,
+                size: 20,
+              ),
             ),
           ),
         ),

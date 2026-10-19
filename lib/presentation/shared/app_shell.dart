@@ -32,7 +32,7 @@ class _AppShellState extends State<AppShell> {
     final isOffline = !isOnline;
 
     return Scaffold(
-      backgroundColor: colors.background,
+      backgroundColor: colors.base,
       body: RepaintBoundary(
         child: IndexedStack(
           index: _selectedIndex,

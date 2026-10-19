@@ -31,18 +31,19 @@ class MessageBubble extends StatelessWidget {
       return BoxDecoration(
         color: colors.accent,
         borderRadius: AppRadius.userBubbleRadius,
+        boxShadow: AppShadows.raised,
       );
     }
     return BoxDecoration(
-      color: colors.card,
+      color: colors.base,
       borderRadius: AppRadius.assistantBubbleRadius,
-      border: Border.all(color: colors.border),
+      boxShadow: AppShadows.raised,
     );
   }
 
   TextStyle _getTextStyle(bool isUser) {
     return AppTypography.bodyChat.copyWith(
-      color: isUser ? colors.onAccent : colors.text,
+      color: isUser ? colors.onAccent : colors.ink,
     );
   }
 
@@ -55,8 +56,8 @@ class MessageBubble extends StatelessWidget {
 
   static final MarkdownStyleSheet _cachedMarkdownStyleSheetAssistant =
       _buildMarkdownStyleSheet(
-        ink: AppColors.text,
-        link: AppColors.accent,
+        ink: AppColors.ink,
+        link: AppColors.accentInk,
         blockquote: AppColors.subtext,
       );
 
@@ -72,21 +73,18 @@ class MessageBubble extends StatelessWidget {
     return MarkdownStyleSheet(
       p: AppTypography.bodyChat.copyWith(color: ink),
       code: const TextStyle(
-        color: AppColors.text,
+        color: AppColors.ink,
         fontSize: 13,
         fontFamily: 'monospace',
       ),
       codeblockDecoration: BoxDecoration(
-        color: AppColors.input,
+        color: AppColors.base,
         borderRadius: AppRadius.chipRadius,
-        border: Border.all(color: AppColors.border),
+        boxShadow: AppShadows.well,
       ),
       blockquote: AppTypography.body.copyWith(
         color: blockquote,
         fontStyle: FontStyle.italic,
-      ),
-      blockquoteDecoration: const BoxDecoration(
-        border: Border(left: BorderSide(color: AppColors.border, width: 2)),
       ),
       listBullet: TextStyle(color: ink),
       h1: AppTypography.title.copyWith(color: ink),

@@ -86,9 +86,9 @@ class _TypingIndicatorState extends State<TypingIndicator>
           margin: const EdgeInsets.symmetric(vertical: 4),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           decoration: BoxDecoration(
-            color: widget.colors.card,
+            color: widget.colors.base,
             borderRadius: AppRadius.assistantBubbleRadius,
-            border: Border.all(color: widget.colors.border),
+            boxShadow: AppShadows.raised,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

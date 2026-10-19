@@ -84,14 +84,14 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     final colors = context.select((ThemeCubit c) => c.state.colors);
 
     return Scaffold(
-      backgroundColor: colors.background,
+      backgroundColor: colors.base,
       appBar: AppBar(
-        backgroundColor: colors.surface,
-        title: Text('Change Password', style: TextStyle(color: colors.text)),
+        backgroundColor: colors.base,
+        title: Text('Change Password', style: TextStyle(color: colors.ink)),
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back_ios_new_rounded,
-            color: colors.text,
+            color: colors.ink,
             size: 20,
           ),
           tooltip: 'Back',
@@ -112,81 +112,102 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                   'Current Password',
                   style: AppTypography.label.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: colors.text,
+                    color: colors.ink,
                   ),
                 ),
                 const SizedBox(height: 8),
-                SystemKeyboardTextFormField(
-                  controller: _currentPasswordController,
-                  obscureText: true,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  style: AppTypography.body.copyWith(color: colors.text),
-                  decoration: InputDecoration(
-                    labelText: 'Current Password',
-                    prefixIcon: Icon(
-                      Icons.lock,
-                      color: colors.subtext,
-                      size: 20,
-                    ),
-                    filled: true,
-                    fillColor: colors.input,
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: AppRadius.inputRadius,
+                    boxShadow: AppShadows.well,
                   ),
-                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                  child: SystemKeyboardTextFormField(
+                    controller: _currentPasswordController,
+                    obscureText: true,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    style: AppTypography.body.copyWith(color: colors.ink),
+                    decoration: InputDecoration(
+                      labelText: 'Current Password',
+                      prefixIcon: Icon(
+                        Icons.lock,
+                        color: colors.subtext,
+                        size: 20,
+                      ),
+                      filled: true,
+                      fillColor: colors.base,
+                    ),
+                    validator: (v) =>
+                        v == null || v.isEmpty ? 'Required' : null,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 Text(
                   'New Password',
                   style: AppTypography.label.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: colors.text,
+                    color: colors.ink,
                   ),
                 ),
                 const SizedBox(height: 8),
-                SystemKeyboardTextFormField(
-                  controller: _newPasswordController,
-                  obscureText: true,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  style: AppTypography.body.copyWith(color: colors.text),
-                  decoration: InputDecoration(
-                    labelText: 'New Password',
-                    prefixIcon: Icon(
-                      Icons.lock_outline,
-                      color: colors.subtext,
-                      size: 20,
-                    ),
-                    filled: true,
-                    fillColor: colors.input,
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: AppRadius.inputRadius,
+                    boxShadow: AppShadows.well,
                   ),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Required';
-                    if (v.length < 6) return 'At least 6 characters';
-                    return null;
-                  },
+                  child: SystemKeyboardTextFormField(
+                    controller: _newPasswordController,
+                    obscureText: true,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    style: AppTypography.body.copyWith(color: colors.ink),
+                    decoration: InputDecoration(
+                      labelText: 'New Password',
+                      prefixIcon: Icon(
+                        Icons.lock_outline,
+                        color: colors.subtext,
+                        size: 20,
+                      ),
+                      filled: true,
+                      fillColor: colors.base,
+                    ),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Required';
+                      if (v.length < 6) return 'At least 6 characters';
+                      return null;
+                    },
+                  ),
                 ),
                 if (_errorMessage != null) ...[
                   const SizedBox(height: 16),
                   Text(
                     _errorMessage!,
-                    style: AppTypography.label.copyWith(color: colors.error),
+                    style: AppTypography.label.copyWith(
+                      color: colors.errorText,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isSaving ? null : _submit,
-                    child: _isSaving
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: colors.onAccent,
-                            ),
-                          )
-                        : const Text('Change Password'),
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: AppRadius.buttonRadius,
+                    boxShadow: AppShadows.raised,
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isSaving ? null : _submit,
+                      child: _isSaving
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colors.onAccent,
+                              ),
+                            )
+                          : const Text('Change Password'),
+                    ),
                   ),
                 ),
               ],

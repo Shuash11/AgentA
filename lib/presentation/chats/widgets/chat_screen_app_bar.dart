@@ -19,14 +19,14 @@ class ChatScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight + 1);
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 
   @override
   Widget build(BuildContext context) {
     return AppBar(
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-        color: colors.text,
+        color: colors.ink,
         tooltip: 'Back',
         onPressed: onBack,
       ),
@@ -34,7 +34,7 @@ class ChatScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
         children: [
           Text(
             title,
-            style: AppTypography.subtitle.copyWith(color: colors.text),
+            style: AppTypography.subtitle.copyWith(color: colors.ink),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -50,17 +50,13 @@ class ChatScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
       actions: [
         IconButton(
           icon: const Icon(Icons.tune_rounded),
-          color: colors.text,
+          color: colors.ink,
           tooltip: 'Select model',
           onPressed: onModelPickerTap,
         ),
       ],
-      backgroundColor: colors.surface,
+      backgroundColor: colors.base,
       elevation: 0,
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(1),
-        child: Container(height: 1, color: colors.border),
-      ),
     );
   }
 }

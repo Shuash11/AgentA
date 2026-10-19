@@ -140,7 +140,7 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
     );
 
     return Scaffold(
-      backgroundColor: colors.background,
+      backgroundColor: colors.base,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Container(
@@ -159,7 +159,7 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                   widget.isForcedGate
                       ? 'Download AI Model'
                       : 'Download Offline AI',
-                  style: AppTypography.display.copyWith(color: colors.text),
+                  style: AppTypography.display.copyWith(color: colors.ink),
                 ),
                 const SizedBox(height: AppSpacing.base),
                 Text(
@@ -176,8 +176,9 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                     vertical: AppSpacing.sm,
                   ),
                   decoration: BoxDecoration(
-                    color: colors.input,
+                    color: colors.base,
                     borderRadius: BorderRadius.circular(AppRadius.sm),
+                    boxShadow: AppShadows.well,
                   ),
                   child: Text(
                     'Model size: ~529MB',
@@ -198,14 +199,14 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                           children: [
                             const Icon(
                               Icons.check_circle,
-                              color: AppColors.success,
+                              color: AppColors.successText,
                               size: 48,
                             ),
                             const SizedBox(height: AppSpacing.base),
                             Text(
                               'Download Complete!',
                               style: AppTypography.title.copyWith(
-                                color: colors.text,
+                                color: colors.ink,
                               ),
                             ),
                           ],
@@ -242,11 +243,19 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                         return Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            LinearProgressIndicator(
-                              value: modelDownload.progress / 100,
-                              backgroundColor: colors.input,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                colors.accent,
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(
+                                  AppSpacing.sm,
+                                ),
+                                boxShadow: AppShadows.well,
+                              ),
+                              child: LinearProgressIndicator(
+                                value: modelDownload.progress / 100,
+                                backgroundColor: colors.base,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  colors.accent,
+                                ),
                               ),
                             ),
                             const SizedBox(height: AppSpacing.md),
@@ -265,14 +274,15 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                                   vertical: AppSpacing.sm,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: colors.warningContainer,
+                                  color: colors.base,
                                   borderRadius: AppRadius.bannerRadius,
+                                  boxShadow: AppShadows.raised,
                                 ),
                                 child: Row(
                                   children: [
                                     const Icon(
                                       Icons.warning_rounded,
-                                      color: AppColors.warning,
+                                      color: AppColors.warningText,
                                       size: 18,
                                     ),
                                     const SizedBox(width: AppSpacing.sm),
@@ -280,7 +290,7 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                                       child: Text(
                                         'Slow connection detected. Download may take longer.',
                                         style: AppTypography.label.copyWith(
-                                          color: colors.text,
+                                          color: colors.ink,
                                         ),
                                       ),
                                     ),
@@ -300,14 +310,15 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                             vertical: AppSpacing.sm,
                           ),
                           decoration: BoxDecoration(
-                            color: colors.errorContainer,
+                            color: colors.base,
                             borderRadius: AppRadius.bannerRadius,
+                            boxShadow: AppShadows.raised,
                           ),
                           child: Row(
                             children: [
                               const Icon(
                                 Icons.wifi_off_rounded,
-                                color: AppColors.error,
+                                color: AppColors.errorText,
                                 size: 18,
                               ),
                               const SizedBox(width: AppSpacing.sm),
@@ -315,7 +326,7 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                                 child: Text(
                                   'Connection required. Please turn on Wi-Fi or Data to start the download.',
                                   style: AppTypography.label.copyWith(
-                                    color: colors.error,
+                                    color: colors.errorText,
                                   ),
                                 ),
                               ),
@@ -331,21 +342,30 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                   const SizedBox(height: AppSpacing.base),
                   Text(
                     _errorMessage!,
-                    style: AppTypography.label.copyWith(color: colors.error),
+                    style: AppTypography.label.copyWith(
+                      color: colors.errorText,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ],
                 const SizedBox(height: AppSpacing.xxl),
                 if (!_downloading) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: isOnline ? _startAutoDownload : null,
-                      child: Text(
-                        isOnline
-                            ? 'Download Offline AI'
-                            : 'Waiting for Connection...',
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: AppRadius.buttonRadius,
+                      // Disabled = flat (§5): no shadow while offline.
+                      boxShadow: isOnline ? AppShadows.raised : AppShadows.flat,
+                    ),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: isOnline ? _startAutoDownload : null,
+                        child: Text(
+                          isOnline
+                              ? 'Download Offline AI'
+                              : 'Waiting for Connection...',
+                        ),
                       ),
                     ),
                   ),
@@ -356,7 +376,7 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                       child: Text(
                         'Use Online AI Instead',
                         style: AppTypography.body.copyWith(
-                          color: colors.accent,
+                          color: colors.accentInk,
                         ),
                       ),
                     ),

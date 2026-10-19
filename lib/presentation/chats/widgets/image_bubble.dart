@@ -32,24 +32,30 @@ class _ImageBubbleContentState extends State<ImageBubbleContent> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          ClipRRect(
-            borderRadius: AppRadius.cardRadius,
-            child: SizedBox(
-              width: widget.width,
-              height: widget.width,
-              child: AutoRetryImage(
-                imageUrl: widget.imageUrl,
-                colors: widget.colors,
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: AppRadius.cardRadius,
+              boxShadow: AppShadows.raised,
+            ),
+            child: ClipRRect(
+              borderRadius: AppRadius.cardRadius,
+              child: SizedBox(
                 width: widget.width,
-                onFallbackRequested: widget.onFallbackRequested,
-                fallbackAvailable: widget.fallbackAvailable,
-                onImageLoaded: _isLoaded
-                    ? null
-                    : () {
-                        if (mounted) {
-                          setState(() => _isLoaded = true);
-                        }
-                      },
+                height: widget.width,
+                child: AutoRetryImage(
+                  imageUrl: widget.imageUrl,
+                  colors: widget.colors,
+                  width: widget.width,
+                  onFallbackRequested: widget.onFallbackRequested,
+                  fallbackAvailable: widget.fallbackAvailable,
+                  onImageLoaded: _isLoaded
+                      ? null
+                      : () {
+                          if (mounted) {
+                            setState(() => _isLoaded = true);
+                          }
+                        },
+                ),
               ),
             ),
           ),

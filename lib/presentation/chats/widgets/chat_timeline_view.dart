@@ -109,7 +109,7 @@ class _LoadingPlaceholder extends StatelessWidget {
             height: 40,
             child: CircularProgressIndicator(
               color: colors.accent,
-              backgroundColor: colors.border,
+              backgroundColor: colors.base,
               strokeWidth: 3,
             ),
           ),
@@ -132,25 +132,33 @@ class _EmptyChat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final child = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(
-          Icons.chat_bubble_outline,
-          color: AppColors.subtext,
-          size: 40,
-        ),
-        const SizedBox(height: 20),
-        Text(
-          'Start the conversation',
-          style: AppTypography.title.copyWith(color: colors.text),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Ask AgentA anything about your career',
-          style: AppTypography.body.copyWith(color: colors.subtext),
-        ),
-      ],
+    final child = Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: colors.base,
+        borderRadius: AppRadius.cardRadius,
+        boxShadow: AppShadows.raised,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.chat_bubble_outline,
+            color: AppColors.subtext,
+            size: 40,
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Start the conversation',
+            style: AppTypography.title.copyWith(color: colors.ink),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Ask AgentA anything about your career',
+            style: AppTypography.body.copyWith(color: colors.subtext),
+          ),
+        ],
+      ),
     );
 
     if (!animate) return Center(child: child);

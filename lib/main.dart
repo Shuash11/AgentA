@@ -319,7 +319,7 @@ class _AppLoaderState extends State<AppLoader> {
         vertical: AppSpacing.sm,
       ),
       decoration: BoxDecoration(
-        color: AppColors.warningContainer,
+        color: AppColors.base,
         borderRadius: AppRadius.bannerRadius,
       ),
       child: Row(
@@ -329,7 +329,7 @@ class _AppLoaderState extends State<AppLoader> {
             padding: EdgeInsets.only(top: 1),
             child: Icon(
               Icons.warning_amber_rounded,
-              color: AppColors.warning,
+              color: AppColors.warningText,
               size: 18,
             ),
           ),
@@ -337,7 +337,7 @@ class _AppLoaderState extends State<AppLoader> {
           Expanded(
             child: Text(
               err,
-              style: AppTypography.label.copyWith(color: AppColors.text),
+              style: AppTypography.label.copyWith(color: AppColors.ink),
             ),
           ),
         ],
@@ -352,7 +352,7 @@ class _AppLoaderState extends State<AppLoader> {
       title: 'AgentA',
       theme: AppTheme.lightTheme,
       home: Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.base,
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -367,7 +367,7 @@ class _AppLoaderState extends State<AppLoader> {
                 const SizedBox(height: 32),
                 Text(
                   'AgentA',
-                  style: AppTypography.display.copyWith(color: AppColors.text),
+                  style: AppTypography.display.copyWith(color: AppColors.ink),
                 ),
                 const SizedBox(height: 48),
                 _buildStatusWidget(),
@@ -399,13 +399,13 @@ class _AppLoaderState extends State<AppLoader> {
           children: [
             const Icon(
               Icons.warning_amber_rounded,
-              color: AppColors.warning,
+              color: AppColors.warningText,
               size: 48,
             ),
             const SizedBox(height: 16),
             Text(
               _initState.errorMessage ?? 'Backend connection failed',
-              style: AppTypography.body.copyWith(color: AppColors.warning),
+              style: AppTypography.body.copyWith(color: AppColors.warningText),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -431,11 +431,15 @@ class _AppLoaderState extends State<AppLoader> {
       case AppInitStatus.error:
         return Column(
           children: [
-            const Icon(Icons.error_outline, color: AppColors.error, size: 48),
+            const Icon(
+              Icons.error_outline,
+              color: AppColors.errorText,
+              size: 48,
+            ),
             const SizedBox(height: 16),
             Text(
               _initState.errorMessage ?? 'An error occurred',
-              style: AppTypography.body.copyWith(color: AppColors.error),
+              style: AppTypography.body.copyWith(color: AppColors.errorText),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -450,11 +454,15 @@ class _AppLoaderState extends State<AppLoader> {
       case AppInitStatus.databaseReady:
         return Column(
           children: [
-            const Icon(Icons.check_circle, color: AppColors.success, size: 48),
+            const Icon(
+              Icons.check_circle,
+              color: AppColors.successText,
+              size: 48,
+            ),
             const SizedBox(height: 16),
             Text(
               'Ready!',
-              style: AppTypography.body.copyWith(color: AppColors.success),
+              style: AppTypography.body.copyWith(color: AppColors.successText),
             ),
           ],
         );
@@ -559,7 +567,7 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
   Widget build(BuildContext context) {
     if (_loadingError != null) {
       return Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.base,
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -568,13 +576,13 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
               children: [
                 const Icon(
                   Icons.error_outline,
-                  color: AppColors.error,
+                  color: AppColors.errorText,
                   size: 48,
                 ),
                 const SizedBox(height: 16),
                 Text(
                   'Failed to load offline model',
-                  style: AppTypography.subtitle.copyWith(color: AppColors.text),
+                  style: AppTypography.subtitle.copyWith(color: AppColors.ink),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -602,7 +610,7 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
 
     if (_isChecking || _isLoadingModel) {
       return Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.base,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,

@@ -86,14 +86,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final colors = context.select((ThemeCubit c) => c.state.colors);
 
     return Scaffold(
-      backgroundColor: colors.background,
+      backgroundColor: colors.base,
       appBar: AppBar(
-        title: Text('Edit Profile', style: TextStyle(color: colors.text)),
-        backgroundColor: colors.surface,
+        title: Text('Edit Profile', style: TextStyle(color: colors.ink)),
+        backgroundColor: colors.base,
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back_ios_new_rounded,
-            color: colors.text,
+            color: colors.ink,
             size: 20,
           ),
           tooltip: 'Back',
@@ -110,68 +110,94 @@ class _EditProfilePageState extends State<EditProfilePage> {
             child: Column(
               children: [
                 Center(
-                  child: CircleAvatar(
-                    radius: 50,
-                    backgroundColor: colors.accentContainer,
-                    child: Text(
-                      _firstNameController.text.isNotEmpty
-                          ? _firstNameController.text[0].toUpperCase()
-                          : 'U',
-                      style: AppTypography.display.copyWith(
-                        color: colors.onAccentContainer,
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: AppShadows.pressed,
+                    ),
+                    child: CircleAvatar(
+                      radius: 50,
+                      backgroundColor: colors.base,
+                      child: Text(
+                        _firstNameController.text.isNotEmpty
+                            ? _firstNameController.text[0].toUpperCase()
+                            : 'U',
+                        style: AppTypography.display.copyWith(
+                          color: colors.accentInk,
+                        ),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 32),
-                SystemKeyboardTextFormField(
-                  controller: _firstNameController,
-                  textCapitalization: TextCapitalization.words,
-                  style: AppTypography.body.copyWith(color: colors.text),
-                  decoration: InputDecoration(
-                    labelText: 'First Name',
-                    prefixIcon: Icon(
-                      Icons.person,
-                      color: colors.subtext,
-                      size: 20,
-                    ),
-                    filled: true,
-                    fillColor: colors.input,
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: AppRadius.inputRadius,
+                    boxShadow: AppShadows.well,
                   ),
-                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                  child: SystemKeyboardTextFormField(
+                    controller: _firstNameController,
+                    textCapitalization: TextCapitalization.words,
+                    style: AppTypography.body.copyWith(color: colors.ink),
+                    decoration: InputDecoration(
+                      labelText: 'First Name',
+                      prefixIcon: Icon(
+                        Icons.person,
+                        color: colors.subtext,
+                        size: 20,
+                      ),
+                      filled: true,
+                      fillColor: colors.base,
+                    ),
+                    validator: (v) =>
+                        v == null || v.isEmpty ? 'Required' : null,
+                  ),
                 ),
                 const SizedBox(height: 16),
-                SystemKeyboardTextFormField(
-                  controller: _lastNameController,
-                  textCapitalization: TextCapitalization.words,
-                  style: AppTypography.body.copyWith(color: colors.text),
-                  decoration: InputDecoration(
-                    labelText: 'Last Name',
-                    prefixIcon: Icon(
-                      Icons.person,
-                      color: colors.subtext,
-                      size: 20,
-                    ),
-                    filled: true,
-                    fillColor: colors.input,
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: AppRadius.inputRadius,
+                    boxShadow: AppShadows.well,
                   ),
-                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                  child: SystemKeyboardTextFormField(
+                    controller: _lastNameController,
+                    textCapitalization: TextCapitalization.words,
+                    style: AppTypography.body.copyWith(color: colors.ink),
+                    decoration: InputDecoration(
+                      labelText: 'Last Name',
+                      prefixIcon: Icon(
+                        Icons.person,
+                        color: colors.subtext,
+                        size: 20,
+                      ),
+                      filled: true,
+                      fillColor: colors.base,
+                    ),
+                    validator: (v) =>
+                        v == null || v.isEmpty ? 'Required' : null,
+                  ),
                 ),
                 const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isSaving ? null : _saveProfile,
-                    child: _isSaving
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: colors.onAccent,
-                            ),
-                          )
-                        : const Text('Save'),
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: AppRadius.buttonRadius,
+                    boxShadow: AppShadows.raised,
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isSaving ? null : _saveProfile,
+                      child: _isSaving
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colors.onAccent,
+                              ),
+                            )
+                          : const Text('Save'),
+                    ),
                   ),
                 ),
               ],

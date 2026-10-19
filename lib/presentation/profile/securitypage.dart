@@ -20,10 +20,10 @@ class SecurityPage extends StatelessWidget {
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
-          backgroundColor: colors.card,
+          backgroundColor: colors.base,
           title: Text(
             "Recovery Code",
-            style: AppTypography.title.copyWith(color: colors.text),
+            style: AppTypography.title.copyWith(color: colors.ink),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -53,10 +53,10 @@ class SecurityPage extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: colors.card,
+        backgroundColor: colors.base,
         title: Text(
           'Delete Account?',
-          style: AppTypography.title.copyWith(color: colors.text),
+          style: AppTypography.title.copyWith(color: colors.ink),
         ),
         content: Text(
           'This will permanently delete your account and all data. This action cannot be undone.',
@@ -69,7 +69,7 @@ class SecurityPage extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Delete', style: TextStyle(color: colors.error)),
+            child: Text('Delete', style: TextStyle(color: colors.errorText)),
           ),
         ],
       ),
@@ -99,14 +99,14 @@ class SecurityPage extends StatelessWidget {
     final colors = context.select((ThemeCubit c) => c.state.colors);
 
     return Scaffold(
-      backgroundColor: colors.background,
+      backgroundColor: colors.base,
       appBar: AppBar(
-        title: Text('Security', style: TextStyle(color: colors.text)),
-        backgroundColor: colors.surface,
+        title: Text('Security', style: TextStyle(color: colors.ink)),
+        backgroundColor: colors.base,
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back_ios_new_rounded,
-            color: colors.text,
+            color: colors.ink,
             size: 20,
           ),
           tooltip: 'Back',
@@ -125,9 +125,9 @@ class SecurityPage extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(AppSpacing.base),
                   decoration: BoxDecoration(
-                    color: colors.card,
+                    color: colors.base,
                     borderRadius: AppRadius.tileRadius,
-                    border: Border.all(color: colors.border),
+                    boxShadow: AppShadows.raised,
                   ),
                   child: Row(
                     children: [
@@ -137,7 +137,7 @@ class SecurityPage extends StatelessWidget {
                         child: Text(
                           'View Recovery Code',
                           style: AppTypography.subtitle.copyWith(
-                            color: colors.text,
+                            color: colors.ink,
                           ),
                         ),
                       ),
@@ -156,19 +156,19 @@ class SecurityPage extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(AppSpacing.base),
                   decoration: BoxDecoration(
-                    color: colors.card,
+                    color: colors.base,
                     borderRadius: AppRadius.tileRadius,
-                    border: Border.all(color: colors.border),
+                    boxShadow: AppShadows.raised,
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.delete, color: colors.error),
+                      Icon(Icons.delete, color: colors.errorText),
                       const SizedBox(width: AppSpacing.base),
                       Expanded(
                         child: Text(
                           'Delete Account',
                           style: AppTypography.subtitle.copyWith(
-                            color: colors.error,
+                            color: colors.errorText,
                           ),
                         ),
                       ),

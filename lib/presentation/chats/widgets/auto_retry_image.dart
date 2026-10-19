@@ -147,7 +147,7 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
   Widget _buildStaticPlaceholder() {
     return Container(
       key: const ValueKey('placeholder'),
-      color: widget.colors.input,
+      color: widget.colors.base,
       alignment: Alignment.center,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -170,7 +170,7 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
         : null;
 
     return Container(
-      color: widget.colors.input,
+      color: widget.colors.base,
       alignment: Alignment.center,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -182,7 +182,7 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
                 ? CircularProgressIndicator(
                     value: progress,
                     color: widget.colors.accent,
-                    backgroundColor: widget.colors.border,
+                    backgroundColor: widget.colors.base,
                     strokeWidth: 2,
                   )
                 : const Icon(
@@ -204,7 +204,7 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
   Widget _buildErrorPlaceholder() {
     return Container(
       key: const ValueKey('error'),
-      color: widget.colors.input,
+      color: widget.colors.base,
       alignment: Alignment.center,
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -226,7 +226,9 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
             icon: Icon(Icons.refresh, color: widget.colors.accent, size: 18),
             label: Text(
               'Retry',
-              style: AppTypography.body.copyWith(color: widget.colors.accent),
+              style: AppTypography.body.copyWith(
+                color: widget.colors.accentInk,
+              ),
             ),
             onPressed: _retry,
           ),
@@ -248,7 +250,9 @@ class _AutoRetryImageState extends State<AutoRetryImage> {
                     ),
               label: Text(
                 _fallbackRunning ? 'Making HD...' : 'Try HD version',
-                style: AppTypography.body.copyWith(color: widget.colors.accent),
+                style: AppTypography.body.copyWith(
+                  color: widget.colors.accentInk,
+                ),
               ),
               onPressed: _fallbackRunning
                   ? null

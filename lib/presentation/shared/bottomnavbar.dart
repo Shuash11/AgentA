@@ -41,8 +41,9 @@ class _NavButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: isSelected
               ? BoxDecoration(
-                  color: colors.accentContainer,
+                  color: colors.base,
                   borderRadius: BorderRadius.circular(AppRadius.md),
+                  boxShadow: AppShadows.pressed,
                 )
               : null,
           child: Column(
@@ -50,7 +51,7 @@ class _NavButton extends StatelessWidget {
             children: [
               Icon(
                 isSelected ? item.activeIcon : item.icon,
-                color: isSelected ? colors.onAccentContainer : colors.subtext,
+                color: isSelected ? colors.accent : colors.subtext,
                 size: 24,
               ),
               const SizedBox(height: 4),
@@ -58,7 +59,7 @@ class _NavButton extends StatelessWidget {
                 item.label,
                 style: AppTypography.micro.copyWith(
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color: isSelected ? colors.onAccentContainer : colors.subtext,
+                  color: isSelected ? colors.accentInk : colors.subtext,
                 ),
               ),
             ],
@@ -106,10 +107,7 @@ class BottomNav1 extends StatelessWidget {
           horizontal: 20,
           vertical: AppSpacing.sm + 4,
         ),
-        decoration: BoxDecoration(
-          color: colors.surface,
-          border: Border(top: BorderSide(color: colors.border, width: 1)),
-        ),
+        decoration: BoxDecoration(color: colors.base),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: List.generate(

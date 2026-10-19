@@ -59,14 +59,14 @@ class _RecoveryCodePageState extends State<RecoveryCodePage> {
     final colors = context.select((ThemeCubit c) => c.state.colors);
 
     return Scaffold(
-      backgroundColor: colors.background,
+      backgroundColor: colors.base,
       appBar: AppBar(
-        backgroundColor: colors.surface,
-        title: Text('Recovery Code', style: TextStyle(color: colors.text)),
+        backgroundColor: colors.base,
+        title: Text('Recovery Code', style: TextStyle(color: colors.ink)),
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back_ios_new_rounded,
-            color: colors.text,
+            color: colors.ink,
             size: 20,
           ),
           tooltip: 'Back',
@@ -84,43 +84,59 @@ class _RecoveryCodePageState extends State<RecoveryCodePage> {
               const SizedBox(height: 24),
               Text(
                 'Enter Recovery Code',
-                style: AppTypography.title.copyWith(color: colors.text),
+                style: AppTypography.title.copyWith(color: colors.ink),
               ),
               const SizedBox(height: 32),
-              SystemKeyboardTextFormField(
-                controller: _codeController,
-                textCapitalization: TextCapitalization.characters,
-                style: AppTypography.body.copyWith(color: colors.text),
-                decoration: InputDecoration(
-                  labelText: 'Recovery Code (e.g., ABC-123)',
-                  prefixIcon: Icon(Icons.key, color: colors.subtext, size: 20),
-                  filled: true,
-                  fillColor: colors.input,
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: AppRadius.inputRadius,
+                  boxShadow: AppShadows.well,
                 ),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                child: SystemKeyboardTextFormField(
+                  controller: _codeController,
+                  textCapitalization: TextCapitalization.characters,
+                  style: AppTypography.body.copyWith(color: colors.ink),
+                  decoration: InputDecoration(
+                    labelText: 'Recovery Code (e.g., ABC-123)',
+                    prefixIcon: Icon(
+                      Icons.key,
+                      color: colors.subtext,
+                      size: 20,
+                    ),
+                    filled: true,
+                    fillColor: colors.base,
+                  ),
+                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                ),
               ),
               if (_errorMessage != null) ...[
                 const SizedBox(height: 16),
                 Text(
                   _errorMessage!,
-                  style: AppTypography.label.copyWith(color: colors.error),
+                  style: AppTypography.label.copyWith(color: colors.errorText),
                 ),
               ],
               const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isVerifying ? null : _verify,
-                  child: _isVerifying
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: colors.onAccent,
-                          ),
-                        )
-                      : const Text('Verify'),
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: AppRadius.buttonRadius,
+                  boxShadow: AppShadows.raised,
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isVerifying ? null : _verify,
+                    child: _isVerifying
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colors.onAccent,
+                            ),
+                          )
+                        : const Text('Verify'),
+                  ),
                 ),
               ),
             ],

@@ -83,9 +83,9 @@ class OfflineModelBanner extends StatelessWidget {
   ) {
     if (isOnline) {
       return (
-        background: colors.successContainer,
-        iconColor: colors.success,
-        titleColor: colors.text,
+        background: colors.base,
+        iconColor: colors.successText,
+        titleColor: colors.ink,
         subtextColor: colors.subtext,
         icon: Icons.cloud_done_rounded,
         text: 'Online — $modelName',
@@ -94,9 +94,9 @@ class OfflineModelBanner extends StatelessWidget {
     }
     if (isLimited) {
       return (
-        background: colors.warningContainer,
-        iconColor: colors.warning,
-        titleColor: colors.text,
+        background: colors.base,
+        iconColor: colors.warningText,
+        titleColor: colors.ink,
         subtextColor: colors.subtext,
         icon: Icons.cloud_queue_rounded,
         text: 'Limited — AgentA Offline AI',
@@ -105,19 +105,19 @@ class OfflineModelBanner extends StatelessWidget {
     }
     if (isGemmaReady) {
       return (
-        background: colors.accentContainer,
-        iconColor: colors.onAccentContainer,
-        titleColor: colors.onAccentContainer,
-        subtextColor: colors.onAccentContainer,
+        background: colors.base,
+        iconColor: colors.accentInk,
+        titleColor: colors.accentInk,
+        subtextColor: colors.accentInk,
         icon: Icons.memory_rounded,
         text: 'Offline — AgentA Offline AI',
         subtext: _offlineDisclaimer,
       );
     }
     return (
-      background: colors.errorContainer,
-      iconColor: colors.error,
-      titleColor: colors.error,
+      background: colors.base,
+      iconColor: colors.errorText,
+      titleColor: colors.errorText,
       subtextColor: colors.subtext,
       icon: Icons.wifi_off_rounded,
       text: 'Offline — model not ready',
@@ -155,7 +155,7 @@ class _StatusBanner extends StatelessWidget {
         horizontal: AppSpacing.base,
         vertical: AppSpacing.sm,
       ),
-      color: bgColor,
+      decoration: BoxDecoration(color: bgColor, boxShadow: AppShadows.raised),
       child: Row(
         children: [
           Icon(icon, color: iconColor, size: 18),
@@ -207,7 +207,10 @@ class SyncingBanner extends StatelessWidget {
         horizontal: AppSpacing.base,
         vertical: AppSpacing.sm,
       ),
-      color: AppColors.accentContainer,
+      decoration: BoxDecoration(
+        color: AppColors.base,
+        boxShadow: AppShadows.raised,
+      ),
       child: Row(
         children: [
           const SizedBox(
@@ -221,9 +224,7 @@ class SyncingBanner extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Text(
             'Syncing data...',
-            style: AppTypography.label.copyWith(
-              color: AppColors.onAccentContainer,
-            ),
+            style: AppTypography.label.copyWith(color: AppColors.ink),
           ),
         ],
       ),

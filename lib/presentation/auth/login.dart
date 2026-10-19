@@ -72,7 +72,7 @@ class _DiagnosticsRow extends StatelessWidget {
           Expanded(
             child: SelectableText(
               value,
-              style: AppTypography.body.copyWith(color: colors.text),
+              style: AppTypography.body.copyWith(color: colors.ink),
             ),
           ),
         ],
@@ -99,8 +99,9 @@ class _GoogleConfigBanner extends StatelessWidget {
         vertical: AppSpacing.sm,
       ),
       decoration: BoxDecoration(
-        color: colors.warningContainer,
+        color: colors.base,
         borderRadius: AppRadius.bannerRadius,
+        boxShadow: AppShadows.raised,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,7 +110,7 @@ class _GoogleConfigBanner extends StatelessWidget {
             padding: EdgeInsets.only(top: 1),
             child: Icon(
               Icons.warning_amber_rounded,
-              color: AppColors.warning,
+              color: AppColors.warningText,
               size: 18,
             ),
           ),
@@ -120,7 +121,7 @@ class _GoogleConfigBanner extends StatelessWidget {
               children: [
                 Text(
                   'Google sign-in needs setup',
-                  style: AppTypography.label.copyWith(color: colors.text),
+                  style: AppTypography.label.copyWith(color: colors.ink),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -155,8 +156,9 @@ class _StorageUpgradeNotice extends StatelessWidget {
         vertical: AppSpacing.sm,
       ),
       decoration: BoxDecoration(
-        color: colors.accentContainer,
+        color: colors.base,
         borderRadius: AppRadius.bannerRadius,
+        boxShadow: AppShadows.raised,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,7 +167,7 @@ class _StorageUpgradeNotice extends StatelessWidget {
             padding: EdgeInsets.only(top: 1),
             child: Icon(
               Icons.lock_reset_rounded,
-              color: AppColors.onAccentContainer,
+              color: AppColors.warningText,
               size: 18,
             ),
           ),
@@ -174,9 +176,7 @@ class _StorageUpgradeNotice extends StatelessWidget {
             child: Text(
               'You were signed out after the app updated. Please sign in '
               'again.',
-              style: AppTypography.label.copyWith(
-                color: colors.onAccentContainer,
-              ),
+              style: AppTypography.label.copyWith(color: colors.warningText),
             ),
           ),
         ],
@@ -882,7 +882,7 @@ class _LoginPageState extends State<LoginPage> {
 
     return SafeArea(
       child: Scaffold(
-        backgroundColor: colors.background,
+        backgroundColor: colors.base,
         resizeToAvoidBottomInset: true,
         body: GestureDetector(
           behavior: HitTestBehavior.translucent,
@@ -988,7 +988,7 @@ class _LoginForm extends StatelessWidget {
             Center(
               child: Text(
                 'AgentA',
-                style: AppTypography.display.copyWith(color: colors.text),
+                style: AppTypography.display.copyWith(color: colors.ink),
               ),
             ),
             const SizedBox(height: 8),
@@ -1003,45 +1003,35 @@ class _LoginForm extends StatelessWidget {
               "Email",
               style: AppTypography.label.copyWith(
                 fontWeight: FontWeight.w600,
-                color: colors.text,
+                color: colors.ink,
               ),
             ),
             const SizedBox(height: 8),
-            SystemKeyboardTextFormField(
-              controller: emailController,
-              keyboardType: TextInputType.emailAddress,
-              autofillHints: const [AutofillHints.email],
-              style: AppTypography.body.copyWith(color: colors.text),
-              validator: AuthService.validateEmail,
-              decoration: InputDecoration(
-                hintText: "Email",
-                hintStyle: AppTypography.body.copyWith(color: colors.subtext),
-                prefixIcon: Icon(
-                  Icons.email_outlined,
-                  color: colors.subtext,
-                  size: 20,
-                ),
-                filled: true,
-                fillColor: colors.input,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: AppRadius.inputRadius,
-                  borderSide: BorderSide(color: colors.inputBorder),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: AppRadius.inputRadius,
-                  borderSide: BorderSide(color: colors.accent, width: 1.5),
-                ),
-                errorBorder: OutlineInputBorder(
-                  borderRadius: AppRadius.inputRadius,
-                  borderSide: BorderSide(color: colors.error, width: 1.5),
-                ),
-                focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: AppRadius.inputRadius,
-                  borderSide: BorderSide(color: colors.error, width: 1.5),
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: AppRadius.inputRadius,
+                boxShadow: AppShadows.well,
+              ),
+              child: SystemKeyboardTextFormField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email],
+                style: AppTypography.body.copyWith(color: colors.ink),
+                validator: AuthService.validateEmail,
+                decoration: InputDecoration(
+                  hintText: "Email",
+                  hintStyle: AppTypography.body.copyWith(color: colors.subtext),
+                  prefixIcon: Icon(
+                    Icons.email_outlined,
+                    color: colors.subtext,
+                    size: 20,
+                  ),
+                  filled: true,
+                  fillColor: colors.base,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                 ),
               ),
             ),
@@ -1050,56 +1040,46 @@ class _LoginForm extends StatelessWidget {
               "Password",
               style: AppTypography.label.copyWith(
                 fontWeight: FontWeight.w600,
-                color: colors.text,
+                color: colors.ink,
               ),
             ),
             const SizedBox(height: 8),
-            SystemKeyboardTextFormField(
-              controller: passwordController,
-              obscureText: !showPassword,
-              autocorrect: false,
-              enableSuggestions: false,
-              autofillHints: const [AutofillHints.password],
-              style: AppTypography.body.copyWith(color: colors.text),
-              validator: AuthService.validatePassword,
-              decoration: InputDecoration(
-                hintText: "Password",
-                hintStyle: AppTypography.body.copyWith(color: colors.subtext),
-                prefixIcon: Icon(
-                  Icons.lock_outline,
-                  color: colors.subtext,
-                  size: 20,
-                ),
-                filled: true,
-                fillColor: colors.input,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: AppRadius.inputRadius,
-                  borderSide: BorderSide(color: colors.inputBorder),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: AppRadius.inputRadius,
-                  borderSide: BorderSide(color: colors.accent, width: 1.5),
-                ),
-                errorBorder: OutlineInputBorder(
-                  borderRadius: AppRadius.inputRadius,
-                  borderSide: BorderSide(color: colors.error, width: 1.5),
-                ),
-                focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: AppRadius.inputRadius,
-                  borderSide: BorderSide(color: colors.error, width: 1.5),
-                ),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    showPassword ? Icons.visibility_off : Icons.visibility,
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: AppRadius.inputRadius,
+                boxShadow: AppShadows.well,
+              ),
+              child: SystemKeyboardTextFormField(
+                controller: passwordController,
+                obscureText: !showPassword,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.password],
+                style: AppTypography.body.copyWith(color: colors.ink),
+                validator: AuthService.validatePassword,
+                decoration: InputDecoration(
+                  hintText: "Password",
+                  hintStyle: AppTypography.body.copyWith(color: colors.subtext),
+                  prefixIcon: Icon(
+                    Icons.lock_outline,
                     color: colors.subtext,
                     size: 20,
                   ),
-                  tooltip: showPassword ? 'Hide password' : 'Show password',
-                  onPressed: onTogglePassword,
+                  filled: true,
+                  fillColor: colors.base,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      showPassword ? Icons.visibility_off : Icons.visibility,
+                      color: colors.subtext,
+                      size: 20,
+                    ),
+                    tooltip: showPassword ? 'Hide password' : 'Show password',
+                    onPressed: onTogglePassword,
+                  ),
                 ),
               ),
             ),
@@ -1110,7 +1090,7 @@ class _LoginForm extends StatelessWidget {
                 onPressed: onForgotPassword,
                 child: Text(
                   "Forgot Password?",
-                  style: AppTypography.body.copyWith(color: colors.accent),
+                  style: AppTypography.body.copyWith(color: colors.accentInk),
                 ),
               ),
             ),
@@ -1123,8 +1103,9 @@ class _LoginForm extends StatelessWidget {
                   vertical: AppSpacing.md,
                 ),
                 decoration: BoxDecoration(
-                  color: colors.errorContainer,
+                  color: colors.base,
                   borderRadius: AppRadius.bannerRadius,
+                  boxShadow: AppShadows.raised,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1136,7 +1117,7 @@ class _LoginForm extends StatelessWidget {
                           padding: EdgeInsets.only(top: 1),
                           child: Icon(
                             Icons.error_outline,
-                            color: AppColors.error,
+                            color: AppColors.errorText,
                             size: 18,
                           ),
                         ),
@@ -1145,7 +1126,7 @@ class _LoginForm extends StatelessWidget {
                           child: Text(
                             errorMessage!,
                             style: AppTypography.label.copyWith(
-                              color: colors.error,
+                              color: colors.errorText,
                             ),
                           ),
                         ),
@@ -1164,7 +1145,7 @@ class _LoginForm extends StatelessWidget {
                               ? 'Hide details'
                               : 'Show details',
                           style: AppTypography.body.copyWith(
-                            color: colors.accent,
+                            color: colors.accentInk,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -1174,7 +1155,7 @@ class _LoginForm extends StatelessWidget {
                           width: double.infinity,
                           padding: const EdgeInsets.all(AppSpacing.sm),
                           decoration: BoxDecoration(
-                            color: colors.input,
+                            color: colors.base,
                             borderRadius: AppRadius.chipRadius,
                           ),
                           child: SelectableText(
@@ -1182,7 +1163,7 @@ class _LoginForm extends StatelessWidget {
                             'detail: ${googleFailure!.detail ?? '(none)'}\n'
                             'hint: ${googleFailure!.hint}',
                             style: AppTypography.labelSm.copyWith(
-                              color: colors.error,
+                              color: colors.errorText,
                               height: 1.4,
                             ),
                           ),
@@ -1192,58 +1173,91 @@ class _LoginForm extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                onPressed: isLoading ? null : onLogin,
-                child: isLoading
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: colors.onAccent,
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: AppRadius.buttonRadius,
+                boxShadow: AppShadows.raised,
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : onLogin,
+                  // Loading = inset + spinner only (§5): icon and label are
+                  // replaced together, never stacked with the spinner.
+                  child: isLoading
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colors.onAccent,
+                          ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.login, color: colors.onAccent, size: 20),
+                            const SizedBox(width: AppSpacing.sm),
+                            const Text("Sign In"),
+                          ],
                         ),
-                      )
-                    : const Text("Sign In"),
+                ),
               ),
             ),
             const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: OutlinedButton.icon(
-                onPressed: isLoading ? null : onGoogleSignIn,
-                onLongPress: onGoogleLongPress,
-                icon: Icon(
-                  Icons.g_mobiledata_rounded,
-                  size: 28,
-                  color: colors.subtext,
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: AppRadius.buttonRadius,
+                boxShadow: AppShadows.raised,
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: OutlinedButton.icon(
+                  onPressed: isLoading ? null : onGoogleSignIn,
+                  onLongPress: onGoogleLongPress,
+                  icon: Icon(
+                    Icons.g_mobiledata_rounded,
+                    size: 28,
+                    color: colors.subtext,
+                  ),
+                  label: const Text("Continue with Google"),
                 ),
-                label: const Text("Continue with Google"),
               ),
             ),
             if (showBiometric) ...[
               const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: OutlinedButton.icon(
-                  onPressed: isLoading ? null : onBiometricUnlock,
-                  icon: Icon(Icons.fingerprint, color: colors.subtext),
-                  label: const Text("Unlock with fingerprint"),
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: AppRadius.buttonRadius,
+                  boxShadow: AppShadows.raised,
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    onPressed: isLoading ? null : onBiometricUnlock,
+                    icon: Icon(Icons.fingerprint, color: colors.subtext),
+                    label: const Text("Unlock with fingerprint"),
+                  ),
                 ),
               ),
             ],
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: OutlinedButton.icon(
-                onPressed: onCreateAccount,
-                icon: Icon(Icons.person_add, color: colors.subtext),
-                label: const Text("Create Account"),
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: AppRadius.buttonRadius,
+                boxShadow: AppShadows.raised,
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: OutlinedButton.icon(
+                  onPressed: onCreateAccount,
+                  icon: Icon(Icons.person_add, color: colors.subtext),
+                  label: const Text("Create Account"),
+                ),
               ),
             ),
           ],
