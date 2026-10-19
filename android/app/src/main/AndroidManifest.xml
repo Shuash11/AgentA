@@ -14,6 +14,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Cycle-28 in-app update (docs/design/in-app-update-mechanics.md §2):
+         the app installs its own release APK via a PackageInstaller session.
+         NOT a runtime permission — the operative gate is the per-app
+         "install unknown apps" user grant, checked via
+         canRequestPackageInstalls() and routed with
+         ACTION_MANAGE_UNKNOWN_APP_SOURCES. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <!-- Scoped storage only: app-private files via path_provider; no broad
          external-storage permissions and no legacy storage flag (H7). -->
     <application
@@ -56,6 +63,16 @@
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
+        <!-- Cycle-28: PackageInstaller session commit status → ApkInstaller.
+             exported=false: the only sender is our own PendingIntent
+             (contracts/update-engine.yaml §4). -->
+        <receiver
+            android:name=".ApkInstallReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.agenta.AgentA.INSTALL_STATUS"/>
+            </intent-filter>
+        </receiver>
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

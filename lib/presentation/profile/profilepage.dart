@@ -3,11 +3,15 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../../cubit/theme/theme_cubit.dart';
-import '../../theme/app_theme.dart';
+import '../../cubit/update/update_cubit.dart';
 import '../../services/auth/auth_service.dart';
+import '../../services/update/install_failure_reason.dart';
 import '../../services/update/version_check_service.dart';
 import '../../repositories/user_repository.dart';
+import '../../theme/app_theme.dart';
 import '../../presentation/auth/login.dart';
 import '../shared/bottomnavbar.dart';
 import 'editprofile.dart';
@@ -92,9 +96,14 @@ class _ProfilePageState extends State<ProfilePage> {
 
   /// Per-outcome content for the row (plan ruling 4): checking /
   /// up-to-date (vX) / available → dialog / failed(reason, retryAt?) + Retry /
-  /// skipped(nonRelease). All states carry text (never color-only, §7.4-5).
+  /// skipped(nonRelease) — extended in cycle-28 P5 with the install-flow
+  /// states (contract §4): downloading/readyToInstall/installing/installed/
+  /// installFailed take priority over the check outcome while present. All
+  /// states carry text (never color-only, §7.4-5).
   ({String? subtitle, Color? subtitleColor, Widget? action}) _updateRowContent(
+    BuildContext context,
     ThemeColors colors,
+    UpdateState updateState,
   ) {
     if (_checkingUpdates) {
       return (
@@ -102,6 +111,47 @@ class _ProfilePageState extends State<ProfilePage> {
         subtitleColor: null,
         action: null,
       );
+    }
+    switch (updateState.status) {
+      case UpdateStatus.downloading:
+        final percent = (updateState.downloadProgress * 100).round();
+        return (
+          subtitle: 'Downloading update… $percent%',
+          subtitleColor: null,
+          action: null,
+        );
+      case UpdateStatus.readyToInstall:
+        return (
+          subtitle: 'Ready to install.',
+          subtitleColor: null,
+          action: TextButton(
+            onPressed: () => context.read<UpdateCubit>().installUpdate(),
+            child: Text(
+              'Install now',
+              style: AppTypography.body.copyWith(color: colors.accentInk),
+            ),
+          ),
+        );
+      case UpdateStatus.installing:
+        return (
+          subtitle:
+              'Installing… Confirm the install in the system dialog if prompted.',
+          subtitleColor: null,
+          action: null,
+        );
+      case UpdateStatus.installed:
+        return (
+          subtitle: 'Update installed. Restart the app to finish.',
+          subtitleColor: null,
+          action: null,
+        );
+      case UpdateStatus.installFailed:
+        return _installFailedRowContent(context, colors, updateState);
+      case UpdateStatus.idle:
+      case UpdateStatus.checking:
+      case UpdateStatus.available:
+      case UpdateStatus.forced:
+        break;
     }
     return switch (_updateOutcome) {
       null => (subtitle: null, subtitleColor: null, action: null),
@@ -124,6 +174,115 @@ class _ProfilePageState extends State<ProfilePage> {
         action: null,
       ),
     };
+  }
+
+  /// Install-flow failure copy per reason (contract §4) + the reason's
+  /// action: retry, the permission settings route, or the sanctioned manual
+  /// browser download (signatureMismatch).
+  ({String? subtitle, Color? subtitleColor, Widget? action})
+  _installFailedRowContent(
+    BuildContext context,
+    ThemeColors colors,
+    UpdateState updateState,
+  ) {
+    final reason =
+        updateState.installFailureReason ?? InstallFailureReason.unknown;
+    switch (reason) {
+      case InstallFailureReason.permissionDenied:
+        return (
+          subtitle: 'AgentA needs permission to install updates.',
+          subtitleColor: colors.errorText,
+          action: TextButton(
+            onPressed: () =>
+                context.read<UpdateCubit>().openInstallPermissionSettings(),
+            child: Text(
+              'Open settings',
+              style: AppTypography.body.copyWith(color: colors.accentInk),
+            ),
+          ),
+        );
+      case InstallFailureReason.signatureMismatch:
+        return (
+          subtitle:
+              'Update cannot be installed (signature mismatch). Please download manually.',
+          subtitleColor: colors.errorText,
+          action: TextButton(
+            onPressed: () => _launchManualDownload(context, updateState),
+            child: Text(
+              'Download manually',
+              style: AppTypography.body.copyWith(color: colors.accentInk),
+            ),
+          ),
+        );
+      case InstallFailureReason.userCancelled:
+        return (
+          subtitle: 'Installation cancelled.',
+          subtitleColor: colors.errorText,
+          action: TextButton(
+            onPressed: () => context.read<UpdateCubit>().retry(),
+            child: Text(
+              'Try again',
+              style: AppTypography.body.copyWith(color: colors.accentInk),
+            ),
+          ),
+        );
+      case InstallFailureReason.unknown:
+      case InstallFailureReason.download:
+      case InstallFailureReason.network:
+      case InstallFailureReason.timeout:
+      case InstallFailureReason.storage:
+      case InstallFailureReason.sizeMismatch:
+      case InstallFailureReason.checksumMismatch:
+      case InstallFailureReason.invalidPackage:
+        return (
+          subtitle: 'Installation failed. Try again.',
+          subtitleColor: colors.errorText,
+          action: TextButton(
+            onPressed: () => context.read<UpdateCubit>().retry(),
+            child: Text(
+              'Retry',
+              style: AppTypography.body.copyWith(color: colors.accentInk),
+            ),
+          ),
+        );
+    }
+  }
+
+  /// Whether the install-flow UI owns the row right now — a check tap would
+  /// clobber the flow state (the P4 `checkNow` has no flow guard), so the
+  /// row disables checking while visible.
+  bool _installFlowShowing(UpdateState updateState) =>
+      updateState.isFlowActive ||
+      updateState.status == UpdateStatus.installed ||
+      updateState.status == UpdateStatus.installFailed;
+
+  /// The sanctioned browser exception (signatureMismatch): opens the release
+  /// page for a manual download. Never the default path.
+  Future<void> _launchManualDownload(
+    BuildContext context,
+    UpdateState state,
+  ) async {
+    final url = state.remote?.downloadUrl ?? state.remote?.releaseUrl;
+    final uri = url == null || url.isEmpty ? null : Uri.tryParse(url);
+    // H3: https-only launch (defense-in-depth) — a non-https or unparseable
+    // target never opens the browser; the failure snackbar explains instead.
+    var launched = false;
+    if (uri != null && uri.scheme == 'https') {
+      try {
+        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        launched = false;
+      }
+    }
+    if (!context.mounted) return;
+    if (!launched) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open the download page.'),
+          duration: Duration(seconds: 4),
+        ),
+      );
+    }
   }
 
   /// A fresh decision: the host auto-shows the dialog on `available`/`forced`
@@ -178,12 +337,12 @@ class _ProfilePageState extends State<ProfilePage> {
     };
     return (
       subtitle: text,
-      subtitleColor: colors.error,
+      subtitleColor: colors.errorText,
       action: TextButton(
         onPressed: _checkForUpdates,
         child: Text(
           'Retry',
-          style: AppTypography.body.copyWith(color: colors.accent),
+          style: AppTypography.body.copyWith(color: colors.accentInk),
         ),
       ),
     );
@@ -192,12 +351,11 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final colors = context.select((ThemeCubit c) => c.state.colors);
-    final updateRow = _updateRowContent(colors);
 
     return Scaffold(
-      backgroundColor: colors.background,
+      backgroundColor: colors.base,
       appBar: AppBar(
-        backgroundColor: colors.surface,
+        backgroundColor: colors.base,
         title: const Text('Profile'),
         centerTitle: true,
       ),
@@ -209,22 +367,28 @@ class _ProfilePageState extends State<ProfilePage> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const SizedBox(height: 20),
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: colors.accentContainer,
-                    child: Text(
-                      _displayName?.isNotEmpty == true
-                          ? _displayName![0].toUpperCase()
-                          : 'U',
-                      style: AppTypography.display.copyWith(
-                        color: colors.onAccentContainer,
+                  Container(
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: AppShadows.pressed,
+                    ),
+                    child: CircleAvatar(
+                      radius: 50,
+                      backgroundColor: colors.base,
+                      child: Text(
+                        _displayName?.isNotEmpty == true
+                            ? _displayName![0].toUpperCase()
+                            : 'U',
+                        style: AppTypography.display.copyWith(
+                          color: colors.accentInk,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     _displayName ?? 'User',
-                    style: AppTypography.title.copyWith(color: colors.text),
+                    style: AppTypography.title.copyWith(color: colors.ink),
                   ),
                   Text(_email ?? '', style: TextStyle(color: colors.subtext)),
                   const SizedBox(height: 32),
@@ -262,40 +426,53 @@ class _ProfilePageState extends State<ProfilePage> {
                     colors,
                   ),
                   const SizedBox(height: 12),
-                  _tile(
-                    Icons.cloud_queue,
-                    'Check for updates',
-                    _checkingUpdates ? null : _checkForUpdates,
-                    colors,
-                    trailing: _checkingUpdates
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : null,
-                    subtitle: updateRow.subtitle,
-                    subtitleColor: updateRow.subtitleColor,
-                    action: updateRow.action,
+                  BlocBuilder<UpdateCubit, UpdateState>(
+                    builder: (context, updateState) {
+                      final flowShowing = _installFlowShowing(updateState);
+                      final updateRow = _updateRowContent(
+                        context,
+                        colors,
+                        updateState,
+                      );
+                      return _tile(
+                        Icons.cloud_queue,
+                        'Check for updates',
+                        (_checkingUpdates || flowShowing)
+                            ? null
+                            : _checkForUpdates,
+                        colors,
+                        trailing: _checkingUpdates
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : null,
+                        subtitle: updateRow.subtitle,
+                        subtitleColor: updateRow.subtitleColor,
+                        action: updateRow.action,
+                      );
+                    },
                   ),
                   const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: colors.error,
-                        side: BorderSide(color: colors.error),
+                        foregroundColor: colors.errorText,
                       ),
                       onPressed: () async {
                         final colors = context.read<ThemeCubit>().state.colors;
                         final confirmed = await showDialog<bool>(
                           context: context,
                           builder: (ctx) => AlertDialog(
-                            backgroundColor: colors.card,
+                            backgroundColor: colors.base,
                             title: Text(
                               'Sign Out?',
                               style: AppTypography.title.copyWith(
-                                color: colors.text,
+                                color: colors.ink,
                               ),
                             ),
                             content: Text(
@@ -313,7 +490,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 onPressed: () => Navigator.pop(ctx, true),
                                 child: Text(
                                   'Sign Out',
-                                  style: TextStyle(color: colors.error),
+                                  style: TextStyle(color: colors.errorText),
                                 ),
                               ),
                             ],
@@ -362,9 +539,9 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Container(
           padding: const EdgeInsets.all(AppSpacing.base),
           decoration: BoxDecoration(
-            color: colors.card,
+            color: colors.base,
             borderRadius: AppRadius.tileRadius,
-            border: Border.all(color: colors.border),
+            boxShadow: AppShadows.raised,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -377,9 +554,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   Expanded(
                     child: Text(
                       title,
-                      style: AppTypography.subtitle.copyWith(
-                        color: colors.text,
-                      ),
+                      style: AppTypography.subtitle.copyWith(color: colors.ink),
                     ),
                   ),
                   trailing ?? Icon(Icons.chevron_right, color: colors.subtext),

@@ -178,11 +178,15 @@ class GithubReleasesSource implements VersionSource {
         ? DateTime.tryParse(publishedRaw)
         : null;
 
+    final apk = _parseApkAsset(json);
+
     return ReleaseFetched(
       RemoteRelease(
         version: version.toString(),
         minVersion: _parseMinVersion(notes),
-        downloadUrl: _parseDownloadUrl(json, releaseUrl),
+        downloadUrl: apk.url,
+        assetSizeBytes: apk.size,
+        assetSha256: apk.sha256,
         releaseUrl: releaseUrl,
         notes: notes,
         publishedAt: publishedAt,
@@ -208,10 +212,16 @@ class GithubReleasesSource implements VersionSource {
     return null;
   }
 
-  /// First `*.apk` asset's browser_download_url; falls back to [fallback].
-  String? _parseDownloadUrl(Map<String, dynamic> json, String? fallback) {
+  /// First `*.apk` asset: browser_download_url, `size` and `digest` for the
+  /// integrity floor (contract §1, v1.1.1). ASSET-ONLY (P7 F1): when no
+  /// `.apk` asset exists the URL is null — the in-app download never falls
+  /// back to the release page. An unusable digest is treated as absent —
+  /// never as a failure.
+  ({String? url, int? size, String? sha256}) _parseApkAsset(
+    Map<String, dynamic> json,
+  ) {
     final assets = json['assets'];
-    if (assets is! List) return fallback;
+    if (assets is! List) return (url: null, size: null, sha256: null);
     for (final asset in assets) {
       if (asset is! Map<String, dynamic>) continue;
       final name = asset['name'];
@@ -220,10 +230,32 @@ class GithubReleasesSource implements VersionSource {
           name.toLowerCase().endsWith('.apk') &&
           url is String &&
           url.isNotEmpty) {
-        return url;
+        return (
+          url: url,
+          size: _parseAssetSize(asset['size']),
+          sha256: _parseAssetDigest(asset['digest']),
+        );
       }
     }
-    return fallback;
+    return (url: null, size: null, sha256: null);
+  }
+
+  int? _parseAssetSize(dynamic raw) {
+    if (raw is int && raw > 0) return raw;
+    if (raw is num && raw > 0) return raw.toInt();
+    return null;
+  }
+
+  /// A `sha256:<64 hex>` digest string → the lowercase hex, else null
+  /// (checksum skipped — never a failure).
+  String? _parseAssetDigest(dynamic raw) {
+    if (raw is! String) return null;
+    final match = RegExp(r'^sha256:([0-9a-fA-F]{64})$').firstMatch(raw.trim());
+    if (match == null) {
+      _log('[UpdateSource] unusable asset digest "$raw" — checksum skipped');
+      return null;
+    }
+    return match.group(1)!.toLowerCase();
   }
 
   void _log(String msg) {

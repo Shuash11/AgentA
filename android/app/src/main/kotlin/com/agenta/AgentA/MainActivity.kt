@@ -29,6 +29,15 @@ class MainActivity : FlutterActivity() {
                 result.notImplemented()
             }
         }
+        // Cycle-28 in-app update: hand-rolled PackageInstaller bridge
+        // (docs/design/in-app-update-mechanics.md §3).
+        ApkInstaller(
+            applicationContext,
+            MethodChannel(
+                flutterEngine.dartExecutor.binaryMessenger,
+                ApkInstaller.CHANNEL_NAME,
+            ),
+        ).attach()
     }
 
     // Android 13+ requires a runtime POST_NOTIFICATIONS grant for the

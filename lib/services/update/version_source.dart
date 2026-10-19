@@ -73,10 +73,22 @@ class RemoteRelease {
   /// null = no forced update.
   final String? minVersion;
 
-  /// First `*.apk` asset's browser_download_url; falls back to [releaseUrl].
+  /// First `*.apk` asset's browser_download_url — ASSET-ONLY (P7 F1): null
+  /// when the release has no `.apk` asset; the in-app download never targets
+  /// the release page. The page link is [releaseUrl].
   final String? downloadUrl;
 
-  /// `html_url` — the release page.
+  /// First `*.apk` asset's byte size (GitHub asset `size`, contract §1).
+  /// Null when the API did not report it — the download then falls back to
+  /// the response Content-Length.
+  final int? assetSizeBytes;
+
+  /// First `*.apk` asset's SHA-256 hex (GitHub asset `digest`, the
+  /// `sha256:` prefix stripped; contract §1). Null when absent — integrity
+  /// verification is then limited to TLS + size per the P1b floor.
+  final String? assetSha256;
+
+  /// `html_url` — the release page; the UI's sanctioned manual fallback link.
   final String? releaseUrl;
 
   /// Release body (trimmed).
@@ -88,6 +100,8 @@ class RemoteRelease {
     required this.version,
     this.minVersion,
     this.downloadUrl,
+    this.assetSizeBytes,
+    this.assetSha256,
     this.releaseUrl,
     this.notes,
     this.publishedAt,

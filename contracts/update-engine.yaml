@@ -9,9 +9,23 @@
 # P3 mandate; supersedes the pre-contract implicit behaviour ("null for every
 # non-success", which made the private-repo 404 invisible — see the plan's
 # root-cause section). Initial recording, so no version-bump decision applies.
+#
+# Amended 2026-10-18 (cycle-28 P4, middle-end) — v1.0.0 → v1.1.0, additive:
+#  - §1: the .apk asset now also supplies `size` and `digest` (sha256) →
+#    RemoteRelease.assetSizeBytes / assetSha256 (integrity floor, P1b doc);
+#  - §4: the install flow (download → verify → PackageInstaller) recorded
+#    BEFORE its consumer (the cycle-28 P5 updater UI) per contract-first.
+#  - No existing variant, field, or semantic changed.
+#
+# Amended 2026-10-18 (cycle-28 P7 follow-up, middle-end) — v1.1.0 → v1.1.1,
+# clarification (P7 F1): RemoteRelease.downloadUrl is ASSET-ONLY — null when
+# the release has no .apk asset (it never falls back to html_url), so the
+# in-app download can never target a non-asset page; the release page is
+# carried by RemoteRelease.releaseUrl for the UI's manual fallback. No field
+# shapes, variants, or semantics changed otherwise.
 
 contract: update-engine
-version: 1.0.0
+version: 1.1.1
 status: active
 
 # ---------------------------------------------------------------------------
@@ -48,7 +62,7 @@ upstream:
         body: "string|null — release notes; a line 'min-version: x.y.z' maps to RemoteRelease.minVersion"
         html_url: "string|null — release page (fallback download link)"
         published_at: "string|null — ISO-8601"
-        assets: "list — first entry whose name ends in .apk supplies browser_download_url → RemoteRelease.downloadUrl"
+        assets: "list — first entry whose name ends in .apk supplies browser_download_url → RemoteRelease.downloadUrl (ASSET-ONLY: null when no .apk asset exists — never html_url, so the in-app download can never target a non-asset page), size → RemoteRelease.assetSizeBytes, and digest ('sha256:<hex>', stripped) → RemoteRelease.assetSha256; html_url → RemoteRelease.releaseUrl (the UI's manual fallback link)"
     "404":
       description: no release info — no releases published, or the endpoint is not anonymously reachable (private repo/renamed)
       classification: noRelease
@@ -147,5 +161,88 @@ version_check_service:
 # ---------------------------------------------------------------------------
 
 consumers:
-  update_cubit: "maps completed results to dialog state; ignores failed/skipped (idle) — unchanged behaviour"
+  update_cubit: "maps completed results to dialog state; ignores failed/skipped (idle) — unchanged behaviour; §4 adds the user-initiated install-flow states"
   profile_check_affordance: "cycle-27 P4 (frontend) — renders the five outcomes from UpdateCheckOutcome"
+  updater_ui: "cycle-28 P5 (frontend) — renders the §4 install-flow states (downloading/readyToInstall/installing/installed/installFailed) and is the ONLY starter of the flow (explicit user action; e.g. dialog Update button / Profile row)"
+
+# ---------------------------------------------------------------------------
+# 4. Install flow (cycle-28 P4 — additive; user-initiated only)
+# ---------------------------------------------------------------------------
+
+install_flow:
+  scope: >-
+    User-initiated in-app update: download the release APK to app-internal
+    storage, verify integrity, hand it to the Android PackageInstaller via a
+    session, and report the outcome. Automatic update-CHECK paths (§2) are
+    unchanged and stay silent — the install flow is only ever started by an
+    explicit user action from the updater UI (cycle-28 P5).
+  download:
+    owner: lib/services/update/apk_download_service.dart (ApkDownloadService)
+    api:
+      download: "Future<ApkDownloadResult> download(RemoteRelease release, {required void Function(double progress) onProgress})"
+      cancel: "void cancel() — aborts the in-flight download; the pending result resolves as ApkDownloadCancelled"
+    storage:
+      location: "getApplicationSupportDirectory()/updates/ — Android app-internal files dir (no runtime storage permission; not the system-purgeable cache dir)"
+      final_name: "AgentA-<version>.apk"
+      atomicity: "written as <name>.part and renamed only after verification — a partial or unverified download is NEVER installable; the partial file is deleted on every failure/cancel"
+      cleanup: "the updates/ directory is pruned at each download start"
+    integrity:
+      source_url: "RemoteRelease.downloadUrl only — API-derived, asset-only (§1; null cannot enter the flow), https scheme enforced; never a user-supplied URL"
+      size: "compared against RemoteRelease.assetSizeBytes (or the response Content-Length) when present — mismatch → sizeMismatch"
+      sha256: "compared against RemoteRelease.assetSha256 when present (GitHub asset digest); verification is skipped only when the API reports no digest"
+      tls: "HTTPS only — a non-https downloadUrl is rejected as a download failure"
+    result:
+      type: "sealed class ApkDownloadResult (lib/services/update/apk_download_service.dart)"
+      variants:
+        ApkDownloaded: "filePath: String, bytesReceived: int, sha256: String — verified and renamed to the final file"
+        ApkDownloadCancelled: "no fields"
+        ApkDownloadFailed: "reason: InstallFailureReason"
+    progress: "double 0..1 — bytesReceived / expected total (Content-Length or assetSizeBytes); 0.0 until completion when no total is known"
+  install:
+    owner: lib/services/update/apk_install_service.dart (ApkInstallService)
+    android_impl: "hand-rolled PackageInstaller session bridge (Kotlin) over MethodChannel com.agenta.agenta/apk_install — NO third-party package (P1b ruling)"
+    permission: "REQUEST_INSTALL_PACKAGES (manifest) + the per-app 'install unknown apps' user grant; canInstall maps PackageManager.canRequestPackageInstalls()"
+    channel_methods:
+      canInstall: "() -> bool"
+      startInstall: "(apkPath: String, sizeBytes: int?) -> void; PlatformException codes: permissionDenied | invalidFile | sessionFailed | unexpected"
+      openInstallPermissionSettings: "() -> void — routes Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES for package com.agenta.AgentA"
+    channel_events:
+      onInstallStatus: "{status: 'installed'} | {status: 'failed', reason: <InstallFailureReason>, detail: String?} — terminal events only; STATUS_PENDING_USER_ACTION is handled natively (the confirmation intent is launched) and is NOT an event"
+    session:
+      mode: "MODE_FULL_INSTALL; setSize(bytes)"
+      user_action: "default — user action is REQUIRED for REQUEST_INSTALL_PACKAGES installers: exactly one system confirmation per install (plus the one-time per-app grant)"
+      request_update_ownership: "not used — requires ENFORCE_UPDATE_OWNERSHIP; a no-op for this app"
+      abandonment: "Session.abandon() semantics on every failure path; no partial installs"
+    result:
+      type: "sealed class InstallEvent (lib/services/update/apk_install_service.dart)"
+      variants:
+        InstallStarted: "no fields — the session is committed; the system confirmation governs from here (no app-side cancel)"
+        InstallCompleted: "no fields — STATUS_SUCCESS"
+        InstallFailed: "reason: InstallFailureReason, detail: String? (native status message, debug only)"
+  states:
+    type: "InstallFlowState — the UI-visible machine on UpdateCubit (UpdateStatus values)"
+    variants:
+      downloading: "progress: double 0..1"
+      readyToInstall: "apkPath: String (verified file); version = remote.version"
+      installing: "the session is committed; awaiting the system confirmation/result"
+      installed: "terminal success — reliable confirmation is the next launch (installing over the running app kills its process)"
+      installFailed: "reason: InstallFailureReason"
+  failure_reasons: [download, network, timeout, storage, sizeMismatch, checksumMismatch, permissionDenied, userCancelled, signatureMismatch, invalidPackage, unknown]
+  reason_mapping:
+    - "canInstall() == false → permissionDenied — no install attempt; the UI routes openInstallPermissionSettings"
+    - "STATUS_FAILURE_ABORTED → userCancelled (the user declined the system confirmation)"
+    - "STATUS_FAILURE_BLOCKED → permissionDenied (policy/user restriction)"
+    - "STATUS_FAILURE_CONFLICT → signatureMismatch (certificate / update-incompatible class)"
+    - "STATUS_FAILURE_INVALID | STATUS_FAILURE_INCOMPATIBLE → invalidPackage"
+    - "STATUS_FAILURE_STORAGE → storage; STATUS_FAILURE_TIMEOUT → timeout; STATUS_FAILURE → unknown"
+    - "download-phase failures map from ApkDownloadFailed directly"
+    - "PlatformException codes: permissionDenied → permissionDenied; invalidFile → invalidPackage; sessionFailed | unexpected → unknown"
+  transition_rules:
+    - "the flow starts ONLY from an explicit user action; automatic check results never start or alter it"
+    - "a release with no .apk asset (downloadUrl null) cannot enter the flow — the UI offers the release page (releaseUrl) instead"
+    - "while downloading/readyToInstall/installing, completed automatic check results do NOT clobber the state (silence contract preserved)"
+    - "UpdateCubit.dismissUntilNextVersion is a no-op while the install flow is active (downloading/readyToInstall/installing) or forced — a stray dialog close can never dismiss an in-flight install flow; pre-existing idle/available semantics are unchanged"
+    - "app-side cancel exists only while downloading; after InstallStarted the system confirmation governs"
+    - "installFailed is terminal for the attempt: retry() re-enters installing when a verified file is still present, else re-enters downloading"
+  operational:
+    keystore: "the CI release keystore (ANDROID_KEYSTORE_* secrets) is load-bearing: an update installs in place only when the new APK's signing certificate matches the installed app's. Losing the keystore breaks all future in-app updates — operational item, never handled in code."

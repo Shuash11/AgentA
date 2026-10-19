@@ -88,29 +88,34 @@ void main() {
       expect(release.downloadUrl, endsWith('AgentA-v1.2.5.apk'));
     });
 
-    test('downloadUrl falls back to html_url when no *.apk asset', () async {
-      final source = GithubReleasesSource(
-        client: MockClient(
-          (_) async => _releaseResponse(
-            overrides: {
-              'assets': [
-                {
-                  'name': 'checksums.txt',
-                  'browser_download_url': 'https://example.com/checksums.txt',
-                },
-              ],
-            },
+    test(
+      'no *.apk asset → downloadUrl null, releaseUrl carries the page',
+      () async {
+        final source = GithubReleasesSource(
+          client: MockClient(
+            (_) async => _releaseResponse(
+              overrides: {
+                'assets': [
+                  {
+                    'name': 'checksums.txt',
+                    'browser_download_url': 'https://example.com/checksums.txt',
+                  },
+                ],
+              },
+            ),
           ),
-        ),
-      );
+        );
 
-      final release = _releaseOf(await source.fetchLatestRelease());
+        final release = _releaseOf(await source.fetchLatestRelease());
 
-      expect(
-        release.downloadUrl,
-        'https://github.com/Shuash11/AgentA/releases/tag/v1.2.0',
-      );
-    });
+        // Asset-only (P7 F1): the in-app flow must never target a non-APK page.
+        expect(release.downloadUrl, isNull);
+        expect(
+          release.releaseUrl,
+          'https://github.com/Shuash11/AgentA/releases/tag/v1.2.0',
+        );
+      },
+    );
 
     test(
       'draft/prerelease releases → ReleaseUnexpected(200) (defensive)',
@@ -345,6 +350,61 @@ void main() {
 
       expect(result, isA<ReleaseUnexpected>());
       expect((result as ReleaseUnexpected).statusCode, 200);
+    });
+
+    test('asset size + digest parsed per contract v1.1.0 (§1)', () async {
+      final source = GithubReleasesSource(
+        client: MockClient(
+          (_) async => _releaseResponse(
+            overrides: {
+              'assets': [
+                {
+                  'name': 'AgentA-v1.2.5.apk',
+                  'browser_download_url':
+                      'https://github.com/Shuash11/AgentA/releases/download/v1.2.5/AgentA-v1.2.5.apk',
+                  'size': 183012343,
+                  'digest':
+                      'sha256:EB7643C359BC73B3257B49C69425242C1C443DCC17C3AD5261458FEFA1D4D4BD',
+                },
+              ],
+            },
+          ),
+        ),
+      );
+
+      final release = _releaseOf(await source.fetchLatestRelease());
+
+      expect(release.assetSizeBytes, 183012343);
+      // 'sha256:' stripped, hex normalized to lowercase.
+      expect(
+        release.assetSha256,
+        'eb7643c359bc73b3257b49c69425242c1c443dcc17c3ad5261458fefa1d4d4bd',
+      );
+    });
+
+    test('unusable digest → treated as absent (checksum skipped)', () async {
+      final source = GithubReleasesSource(
+        client: MockClient(
+          (_) async => _releaseResponse(
+            overrides: {
+              'assets': [
+                {
+                  'name': 'AgentA-v1.2.5.apk',
+                  'browser_download_url':
+                      'https://github.com/Shuash11/AgentA/releases/download/v1.2.5/AgentA-v1.2.5.apk',
+                  'size': 10,
+                  'digest': 'md5:abc',
+                },
+              ],
+            },
+          ),
+        ),
+      );
+
+      final release = _releaseOf(await source.fetchLatestRelease());
+
+      expect(release.assetSizeBytes, 10);
+      expect(release.assetSha256, isNull);
     });
   });
 }
