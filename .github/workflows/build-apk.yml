@@ -425,7 +425,9 @@ jobs:
       # the just-published release exactly as an anonymous user (tokens
       # explicitly cleared for this step) and FAILS the workflow loudly when
       # the latest release is not anonymously readable (HTTP 200 + strict-
-      # semver tag_name) or the APK asset HEAD is not 200. It is the
+      # semver tag_name), the APK asset HEAD is not 200, or the APK asset
+      # lacks a well-formed sha256 digest (the in-app updater's integrity
+      # field, contract §1). It is the
       # systemic control that would have caught the private-repo 404 at
       # publish time. The channel URL is derived from the config file
       # (single source of truth), so a future mirror-repo channel (B) is
@@ -469,6 +471,13 @@ jobs:
             echo "::error::Anonymous release check FAILED: release ${TAG} has no *.apk asset (received assets: $(python3 -c 'import json,sys; print(", ".join(a.get("name","?") for a in json.load(open(sys.argv[1])).get("assets",[])) or "none")' "$BODY")). The update flow needs the APK asset."
             exit 1
           fi
+
+          APK_DIGEST="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(next((a.get("digest") or "" for a in d.get("assets",[]) if a.get("name","").endswith(".apk")), ""))' "$BODY")"
+          if ! [[ "$APK_DIGEST" =~ ^sha256:[0-9a-fA-F]{64}$ ]]; then
+            echo "::error::Anonymous release check FAILED: the latest *.apk asset has no well-formed sha256 digest (received: '${APK_DIGEST}'). The in-app updater verifies the GitHub API digest (contract §1) — release assets must carry one."
+            exit 1
+          fi
+          echo "Anonymous APK digest OK: ${APK_DIGEST}"
 
           APK_CODE="$(curl -sS --max-time 30 -I -L -o /dev/null -w '%{http_code}' "$APK_URL" || true)"
           APK_CODE="${APK_CODE:-000}"
