@@ -419,73 +419,116 @@ jobs:
           files: dist/*.apk
           generate_release_notes: true
 
-      # P5 anonymous release guard (cycle 27): the update engine checks the
-      # githubLatestReleaseUrl from lib/core/config/app_config.dart with NO
-      # credentials — a release APK cannot hold a secret. This guard tests
-      # the just-published release exactly as an anonymous user (tokens
-      # explicitly cleared for this step) and FAILS the workflow loudly when
-      # the latest release is not anonymously readable (HTTP 200 + strict-
-      # semver tag_name), the APK asset HEAD is not 200, or the APK asset
-      # lacks a well-formed sha256 digest (the in-app updater's integrity
-      # field, contract §1). It is the
-      # systemic control that would have caught the private-repo 404 at
-      # publish time. The channel URL is derived from the config file
-      # (single source of truth), so a future mirror-repo channel (B) is
-      # followed automatically. Skipped on non-tag pushes (same gating as
-      # the release step above).
+      # Release guard (update channel) — cycle-27 P5, re-designed cycle-28 P8.
+      # The update engine checks the githubLatestReleaseUrl from
+      # lib/core/config/app_config.dart (single source of truth — a future
+      # mirror-repo channel B is followed automatically). TWO layers:
+      #   1. PRIMARY (authenticated, ${{ github.token }} — in-context, NOT a
+      #      new secret, ~1,000 req/h): GET must be 200 with a strict-semver
+      #      tag_name; the first .apk asset must exist and carry a well-formed
+      #      sha256 digest (the in-app updater's integrity field, contract §1);
+      #      a HEAD of the asset URL must be 200 (anonymous — the CDN rejects
+      #      forwarded auth headers on the signed hop, and asset fetches are
+      #      not rate-limited by the API quota). Any violation fails the
+      #      workflow loudly. (v1.4.0-cut lesson, 2026-10-19: the
+      #      anonymous-only design failed on the shared-runner-IP anonymous
+      #      rate limit — HTTP 403 — which is NOT the defect this guard
+      #      exists to catch.)
+      #   2. SECONDARY (anonymous probe, tokens cleared — what a credential-
+      #      less client actually sees): classified per the engine's cycle-27
+      #      standard (contract §1): 200 = confirmed; 404 = FAIL (the
+      #      privacy/missing-release regression — the original cycle-27 root
+      #      cause, deterministic, never rate-limit noise); 403 = WARN
+      #      inconclusive (the shared-IP anonymous quota); anything else =
+      #      WARN inconclusive. No retries.
+      # Skipped on non-tag pushes (same gating as the release step above).
       - name: Guard - anonymous release check (update channel)
         if: startsWith(github.ref, 'refs/tags/v')
         env:
-          GH_TOKEN: ""
+          GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ""
         run: |
-          unset GH_TOKEN GITHUB_TOKEN
-          echo "Anonymous release check: GH_TOKEN=${GH_TOKEN:-<unset>} GITHUB_TOKEN=${GITHUB_TOKEN:-<unset>}"
-
           CONFIG="lib/core/config/app_config.dart"
           URL="$(grep -oE 'https://api\.github\.com/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/releases/latest' "$CONFIG" | head -1)"
           if [ -z "$URL" ]; then
-            echo "::error::Anonymous release check FAILED: could not derive the update-channel URL from ${CONFIG}. Expected a https://api.github.com/repos/<owner>/<repo>/releases/latest constant; received none. Keep the config and this guard in sync."
+            echo "::error::Release guard FAILED: could not derive the update-channel URL from ${CONFIG}. Expected a https://api.github.com/repos/<owner>/<repo>/releases/latest constant; received none. Keep the config and this guard in sync."
             exit 1
           fi
           echo "Channel URL (from ${CONFIG}): ${URL}"
 
-          BODY="$(mktemp)"
-          HTTP_CODE="$(curl -sS --max-time 30 -o "$BODY" -w '%{http_code}' "$URL" || true)"
-          HTTP_CODE="${HTTP_CODE:-000}"
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "::error::Anonymous release check FAILED: GET ${URL} returned HTTP ${HTTP_CODE}; expected 200. A 404 here means the repo/release is not publicly readable — credential-less clients (the app's update check) see exactly this response (cycle-27 root cause). Body: $(head -c 300 "$BODY")"
+          # ---- Layer 1: PRIMARY — authenticated content assertions ----------
+          AUTH_BODY="$(mktemp)"
+          AUTH_CODE="$(curl -sS --max-time 30 -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' -o "$AUTH_BODY" -w '%{http_code}' "$URL" || true)"
+          AUTH_CODE="${AUTH_CODE:-000}"
+          if [ "$AUTH_CODE" != "200" ]; then
+            if [ "$AUTH_CODE" = "403" ] && grep -qiE 'not accessible|necessary privileges|admin rights' "$AUTH_BODY"; then
+              echo "::error::STOP (Adviser matter): the authenticated guard received HTTP 403 with a permissions body — the workflow token appears to lack scope for the release API (not a rate limit). Body: $(head -c 300 "$AUTH_BODY")"
+              exit 1
+            fi
+            echo "::error::Release guard FAILED (authenticated layer): GET ${URL} returned HTTP ${AUTH_CODE}; expected 200. Body: $(head -c 300 "$AUTH_BODY")"
             exit 1
           fi
 
-          TAG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("tag_name") or "")' "$BODY")"
+          TAG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("tag_name") or "")' "$AUTH_BODY")"
           SEMVER="${TAG#v}"
           if [ -z "$TAG" ] || ! [[ "$SEMVER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Anonymous release check FAILED: GET ${URL} returned 200, but tag_name '${TAG}' is missing or not strict semver. The update engine ignores non-semver tags — the release would be invisible to every installed app."
+            echo "::error::Release guard FAILED (authenticated layer): GET ${URL} returned 200, but tag_name '${TAG}' is missing or not strict semver. The update engine ignores non-semver tags — the release would be invisible to every installed app."
             exit 1
           fi
-          echo "Anonymous latest release OK: ${TAG} (strict semver)"
+          echo "Authenticated latest release OK: ${TAG} (strict semver)"
 
-          APK_URL="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(next((a["browser_download_url"] for a in d.get("assets",[]) if a.get("name","").endswith(".apk")), ""))' "$BODY")"
+          APK_URL="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(next((a["browser_download_url"] for a in d.get("assets",[]) if a.get("name","").endswith(".apk")), ""))' "$AUTH_BODY")"
           if [ -z "$APK_URL" ]; then
-            echo "::error::Anonymous release check FAILED: release ${TAG} has no *.apk asset (received assets: $(python3 -c 'import json,sys; print(", ".join(a.get("name","?") for a in json.load(open(sys.argv[1])).get("assets",[])) or "none")' "$BODY")). The update flow needs the APK asset."
+            echo "::error::Release guard FAILED (authenticated layer): release ${TAG} has no *.apk asset (received assets: $(python3 -c 'import json,sys; print(", ".join(a.get("name","?") for a in json.load(open(sys.argv[1])).get("assets",[])) or "none")' "$AUTH_BODY")). The update flow needs the APK asset."
             exit 1
           fi
 
-          APK_DIGEST="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(next((a.get("digest") or "" for a in d.get("assets",[]) if a.get("name","").endswith(".apk")), ""))' "$BODY")"
+          APK_DIGEST="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(next((a.get("digest") or "" for a in d.get("assets",[]) if a.get("name","").endswith(".apk")), ""))' "$AUTH_BODY")"
           if ! [[ "$APK_DIGEST" =~ ^sha256:[0-9a-fA-F]{64}$ ]]; then
-            echo "::error::Anonymous release check FAILED: the latest *.apk asset has no well-formed sha256 digest (received: '${APK_DIGEST}'). The in-app updater verifies the GitHub API digest (contract §1) — release assets must carry one."
+            echo "::error::Release guard FAILED (authenticated layer): the latest *.apk asset has no well-formed sha256 digest (received: '${APK_DIGEST}'). The in-app updater verifies the GitHub API digest (contract §1) — release assets must carry one."
             exit 1
           fi
-          echo "Anonymous APK digest OK: ${APK_DIGEST}"
+          echo "Authenticated APK digest OK: ${APK_DIGEST}"
 
+          # Anonymous HEAD (cycle-28 P8 measurement): the download CDN
+          # rejects an Authorization header forwarded across the redirect
+          # (curl -H + -L → github.com hop 302, signed CDN hop 401; identical
+          # for Bearer/token prefixes). Asset downloads are OUTSIDE the
+          # api.github.com rate-limit budget this layer exists to dodge — a
+          # plain HEAD proves the public asset serves (HTTP 200).
           APK_CODE="$(curl -sS --max-time 30 -I -L -o /dev/null -w '%{http_code}' "$APK_URL" || true)"
           APK_CODE="${APK_CODE:-000}"
           if [ "$APK_CODE" != "200" ]; then
-            echo "::error::Anonymous release check FAILED: HEAD ${APK_URL} returned HTTP ${APK_CODE}; expected 200. Anonymous users must be able to download the APK the update flow links to."
+            echo "::error::Release guard FAILED (authenticated layer): HEAD ${APK_URL} returned HTTP ${APK_CODE}; expected 200."
             exit 1
           fi
-          echo "Anonymous APK asset OK: HTTP 200 (${APK_URL})"
+          echo "Authenticated APK asset OK: HTTP 200 (${APK_URL})"
+
+          # ---- Layer 2: SECONDARY — the anonymous privacy probe -------------
+          # Classified per the contract §1 (cycle-27 standard): 404 fails,
+          # 403 warns (shared-IP anonymous quota — inconclusive, never the
+          # channel defect), anything else warns. Tokens are cleared so this
+          # request is byte-for-byte what a credential-less client sees.
+          unset GH_TOKEN GITHUB_TOKEN
+          echo "Anonymous probe: GH_TOKEN=${GH_TOKEN:-<unset>} GITHUB_TOKEN=${GITHUB_TOKEN:-<unset>}"
+          ANON_BODY="$(mktemp)"
+          ANON_CODE="$(curl -sS --max-time 30 -o "$ANON_BODY" -w '%{http_code}' "$URL" || true)"
+          ANON_CODE="${ANON_CODE:-000}"
+          case "$ANON_CODE" in
+            200)
+              echo "Anonymous channel confirmed: ${URL} is reachable without credentials (HTTP 200)"
+              ;;
+            404)
+              echo "::error::Release guard FAILED (anonymous probe): GET ${URL} returned HTTP 404 for a credential-less caller — the privacy/missing-release regression (cycle-27 root-cause class); deterministic, never rate-limit noise. Body: $(head -c 300 "$ANON_BODY")"
+              exit 1
+              ;;
+            403)
+              echo "::warning::Anonymous probe INCONCLUSIVE: GET ${URL} returned HTTP 403 — the shared Actions-runner IP is rate-limited on the unauthenticated quota (60 req/h/IP). Not a channel defect; the authenticated assertions above govern this run. Body: $(head -c 200 "$ANON_BODY")"
+              ;;
+            *)
+              echo "::warning::Anonymous probe INCONCLUSIVE: GET ${URL} returned HTTP ${ANON_CODE} (expected 200/404/403) — a network or server condition; the authenticated assertions above govern this run. Body: $(head -c 200 "$ANON_BODY")"
+              ;;
+          esac
 
       # Short retention: promotion downloads the artifact minutes after the
       # build, so 3 days is plenty. Prevents artifact-storage quota exhaustion
