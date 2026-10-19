@@ -23,9 +23,15 @@
 # in-app download can never target a non-asset page; the release page is
 # carried by RemoteRelease.releaseUrl for the UI's manual fallback. No field
 # shapes, variants, or semantics changed otherwise.
+#
+# Amended 2026-10-19 (cycle-29, middle-end) — v1.1.1 → v1.1.2,
+# documentation-only: the §4 close/defer rule now names the snooze API
+# UpdateCubit.snoozeFor24Hours (the cycle-29 24-hour snooze, which replaced
+# the per-version dismissal method with an identical active-flow/forced
+# guard; tested). No field shapes, variants, states, or semantics changed.
 
 contract: update-engine
-version: 1.1.1
+version: 1.1.2
 status: active
 
 # ---------------------------------------------------------------------------
@@ -241,7 +247,7 @@ install_flow:
     - "the flow starts ONLY from an explicit user action; automatic check results never start or alter it"
     - "a release with no .apk asset (downloadUrl null) cannot enter the flow — the UI offers the release page (releaseUrl) instead"
     - "while downloading/readyToInstall/installing, completed automatic check results do NOT clobber the state (silence contract preserved)"
-    - "UpdateCubit.dismissUntilNextVersion is a no-op while the install flow is active (downloading/readyToInstall/installing) or forced — a stray dialog close can never dismiss an in-flight install flow; pre-existing idle/available semantics are unchanged"
+    - "UpdateCubit.snoozeFor24Hours (the dialog close path) is a no-op while the install flow is active (downloading/readyToInstall/installing) or forced — a stray dialog close can never dismiss an in-flight install flow"
     - "app-side cancel exists only while downloading; after InstallStarted the system confirmation governs"
     - "installFailed is terminal for the attempt: retry() re-enters installing when a verified file is still present, else re-enters downloading"
   operational:
