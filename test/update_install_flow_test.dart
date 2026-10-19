@@ -414,7 +414,7 @@ void main() {
     await settle();
   });
 
-  test('dismissUntilNextVersion is a no-op during an active flow', () async {
+  test('snoozeFor24Hours is a no-op during an active flow', () async {
     final source = FakeVersionSource(release: makeRelease());
     final downloader = FakeDownloadService();
     final cubit = await makeAvailable(source, downloader);
@@ -423,7 +423,7 @@ void main() {
     await settle();
     expect(cubit.state.status, UpdateStatus.downloading);
 
-    await cubit.dismissUntilNextVersion();
+    await cubit.snoozeFor24Hours();
 
     expect(cubit.state.status, UpdateStatus.downloading);
     downloader.complete(const ApkDownloadCancelled());

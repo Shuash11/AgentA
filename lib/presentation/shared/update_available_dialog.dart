@@ -6,17 +6,23 @@ import '../../cubit/theme/theme_cubit.dart';
 import '../../cubit/update/update_cubit.dart';
 import '../../services/update/install_failure_reason.dart';
 import '../../theme/app_theme.dart';
+import 'release_notes_parser.dart';
 
 /// App-level update dialog (Adviser contract; cycle-28 P5):
-///  - available/forced → release info + [Update] / [Later];
+///  - available/forced → release info + [Update] / [Remind me later];
 ///  - [Update] starts the IN-APP flow (contract §4: download → verify →
 ///    PackageInstaller) and the dialog morphs through downloading →
 ///    readyToInstall → installing → installed, with per-reason failure copy;
 ///  - the browser survives ONLY as the manual fallback (signatureMismatch /
 ///    a release without an in-app download URL) — the sanctioned exception,
 ///    never the default path;
-///  - Later → only when available (forced = non-dismissible). The host's
-///    post-close dismissal is a no-op while the flow is active (§4).
+///  - Remind me later → only when available (forced = non-dismissible); the
+///    host's post-close 24-hour snooze makes it a temporary reminder, not a
+///    permanent dismissal (cycle-29 P1). The host's post-close dismissal is
+///    a no-op while the flow is active (§4).
+///  - release notes render as a structured changelog (cycle-29 P2, ruling 2):
+///    version + date header, sections with icons, bullets, Show more; bodies
+///    without H3 structure fall back to the raw inset-well text dump.
 class UpdateAvailableDialog extends StatelessWidget {
   const UpdateAvailableDialog({super.key});
 
@@ -61,7 +67,7 @@ class UpdateAvailableDialog extends StatelessWidget {
   }
 
   // ---------------------------------------------------------------------------
-  // State: available / forced — release info + Update / Later.
+  // State: available / forced — release info + Update / Remind me later.
   // ---------------------------------------------------------------------------
 
   Widget _availableState(
@@ -99,7 +105,16 @@ class UpdateAvailableDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          _ReleaseNotes(notes: remote?.notes, colors: colors),
+          // Structured changelog (cycle-29 P2): sections + Show more, or the
+          // raw fallback. Keyed by version so expansion state resets when a
+          // newer release updates the content live.
+          _ChangelogNotes(
+            key: ValueKey(remote?.version),
+            notes: remote?.notes,
+            version: remote?.version ?? '',
+            publishedAt: remote?.publishedAt,
+            colors: colors,
+          ),
           const SizedBox(height: 24),
           _primaryButton(
             Text(canDownloadInApp ? 'Update' : 'Download manually'),
@@ -112,7 +127,7 @@ class UpdateAvailableDialog extends StatelessWidget {
             Center(
               child: TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Later'),
+                child: const Text('Remind me later'),
               ),
             ),
           ],
@@ -440,32 +455,246 @@ class UpdateAvailableDialog extends StatelessWidget {
   }
 }
 
-/// Release notes — trimmed, scrollable when long (capped height).
-class _ReleaseNotes extends StatelessWidget {
+/// Month abbreviations for the release-date header (zero-dependency format;
+/// `intl` is not pulled in for one label).
+const List<String> _monthAbbreviations = <String>[
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/// ISO-8601 [DateTime] → e.g. "Oct 19, 2026" (Keep a Changelog 1.1.0: the
+/// release date is displayed per version; the delegation pins this format).
+String _formatReleaseDate(DateTime date) =>
+    '${_monthAbbreviations[date.month - 1]} ${date.day}, ${date.year}';
+
+/// Changelog (cycle-29 P2, ruling 2) — the structured rendering of the
+/// release notes inside the inset well:
+///  - header line: version + release date (date omitted when `publishedAt`
+///    is null);
+///  - one row per section: Material icon (spec §5 second channel) + heading
+///    label, items as bullets under it;
+///  - sections with more than [_collapsedItemCount] items collapse behind an
+///    `accentInk` "Show more" TextButton (local state only — never
+///    persisted; a new release resets it via the widget's ValueKey);
+///  - no H3 structure → the raw-notes fallback, byte-identical to the
+///    cycle-26 treatment (trimmed text dump, same well styling);
+///  - tokens only; scrollable under the same 160px height cap as before.
+class _ChangelogNotes extends StatefulWidget {
   final String? notes;
+  final String version;
+  final DateTime? publishedAt;
   final ThemeColors colors;
 
-  const _ReleaseNotes({required this.notes, required this.colors});
+  const _ChangelogNotes({
+    super.key,
+    required this.notes,
+    required this.version,
+    required this.publishedAt,
+    required this.colors,
+  });
+
+  @override
+  State<_ChangelogNotes> createState() => _ChangelogNotesState();
+}
+
+class _ChangelogNotesState extends State<_ChangelogNotes> {
+  /// Indices of sections the user expanded. Local expansion state (ruling 2
+  /// — no persistence).
+  final Set<int> _expandedSections = <int>{};
+
+  /// Items shown before a section collapses behind "Show more" (spec: 5).
+  static const int _collapsedItemCount = 5;
 
   @override
   Widget build(BuildContext context) {
-    final text = (notes ?? '').trim();
+    final text = (widget.notes ?? '').trim();
     if (text.isEmpty) return const SizedBox.shrink();
+
+    final model = parseReleaseNotes(widget.notes);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       constraints: const BoxConstraints(maxHeight: 160),
       decoration: BoxDecoration(
-        color: colors.base,
+        color: widget.colors.base,
         borderRadius: AppRadius.bannerRadius,
         boxShadow: AppShadows.well,
       ),
       child: SingleChildScrollView(
-        child: Text(
-          text,
-          style: AppTypography.body.copyWith(color: colors.ink),
-        ),
+        child: switch (model) {
+          ParsedReleaseNotes(:final preamble, :final sections) =>
+            _buildSections(preamble, sections),
+          RawReleaseNotes(:final text) => Text(
+            text,
+            style: AppTypography.body.copyWith(color: widget.colors.ink),
+          ),
+        },
       ),
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Structured rendering.
+  // ---------------------------------------------------------------------------
+
+  Widget _buildSections(String? preamble, List<ReleaseNotesSection> sections) {
+    final children = <Widget>[];
+
+    final header = _headerLine();
+    if (header != null) {
+      children.add(
+        Text(
+          header,
+          style: AppTypography.labelSm.copyWith(color: AppColors.subtext),
+        ),
+      );
+      children.add(const SizedBox(height: AppSpacing.sm));
+    }
+
+    if (preamble != null && preamble.isNotEmpty) {
+      children.add(
+        Text(
+          preamble,
+          style: AppTypography.body.copyWith(color: AppColors.ink),
+        ),
+      );
+      children.add(const SizedBox(height: AppSpacing.sm));
+    }
+
+    // A heading with no items renders nothing — an empty section row would
+    // only be noise. (The parser keeps such sections; presentation hides.)
+    for (var i = 0; i < sections.length; i++) {
+      final section = sections[i];
+      if (section.items.isEmpty) continue;
+      if (children.isNotEmpty) {
+        children.add(const SizedBox(height: AppSpacing.md));
+      }
+      children.add(_sectionHeading(section));
+      children.add(const SizedBox(height: AppSpacing.xs));
+      children.addAll(_sectionItems(i, section.items));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    );
+  }
+
+  /// "Version 1.2.0 · Oct 19, 2026" — the date part is omitted gracefully
+  /// when `publishedAt` is null; the whole line when both are absent.
+  String? _headerLine() {
+    final version = widget.version.trim();
+    final buffer = StringBuffer();
+    if (version.isNotEmpty) buffer.write('Version $version');
+    final published = widget.publishedAt;
+    if (published != null) {
+      final date = _formatReleaseDate(published);
+      if (buffer.isEmpty) {
+        buffer.write(date);
+      } else {
+        buffer.write(' · $date');
+      }
+    }
+    return buffer.isEmpty ? null : buffer.toString();
+  }
+
+  /// Heading row: icon + label, both `ink` (N6 — icons default to ink, never
+  /// accent; the icon is the §5 second channel next to the label).
+  Widget _sectionHeading(ReleaseNotesSection section) {
+    return Row(
+      children: [
+        Icon(_sectionIcon(section.kind), size: 16, color: AppColors.ink),
+        const SizedBox(width: AppSpacing.sm),
+        Text(
+          section.heading,
+          style: AppTypography.label.copyWith(
+            fontWeight: FontWeight.w600,
+            color: AppColors.ink,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Bullet rows under a heading (indent aligned with the heading label),
+  /// collapsing behind "Show more"/"Show less" when the section is long.
+  List<Widget> _sectionItems(int sectionIndex, List<String> items) {
+    final expanded = _expandedSections.contains(sectionIndex);
+    final visible = expanded
+        ? items
+        : items.take(_collapsedItemCount).toList(growable: false);
+
+    final rows = <Widget>[
+      for (final item in visible)
+        Padding(
+          padding: const EdgeInsets.only(left: 24, bottom: AppSpacing.xs),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '•',
+                style: AppTypography.body.copyWith(color: AppColors.subtext),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  item,
+                  style: AppTypography.body.copyWith(color: AppColors.ink),
+                ),
+              ),
+            ],
+          ),
+        ),
+    ];
+
+    if (items.length > _collapsedItemCount) {
+      rows.add(
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            // The theme renders TextButtons in `accentInk` (§3 — the
+            // AA-correct accent TEXT form; never `accent` as small text).
+            onPressed: () {
+              setState(() {
+                if (expanded) {
+                  _expandedSections.remove(sectionIndex);
+                } else {
+                  _expandedSections.add(sectionIndex);
+                }
+              });
+            },
+            child: Text(expanded ? 'Show less' : 'Show more'),
+          ),
+        ),
+      );
+    }
+    return rows;
+  }
+
+  /// Per-kind section icon (delegation, cycle-29 P2; the `_rounded` family
+  /// matches the dialog's existing icon language).
+  IconData _sectionIcon(NotesSectionKind kind) {
+    switch (kind) {
+      case NotesSectionKind.added:
+        return Icons.new_releases_rounded;
+      case NotesSectionKind.improved:
+        return Icons.trending_up_rounded;
+      case NotesSectionKind.fixed:
+        return Icons.build_circle_rounded;
+      case NotesSectionKind.generic:
+        return Icons.notes_rounded;
+    }
   }
 }

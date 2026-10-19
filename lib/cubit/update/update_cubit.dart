@@ -66,17 +66,27 @@ class UpdateState {
       status == UpdateStatus.readyToInstall ||
       status == UpdateStatus.installing;
 
-  /// Whether the dialog should be shown for this state (Adviser show rules):
-  ///  - forced → always show, no dismiss;
-  ///  - available → show only if [dismissedVersion] != remote.version
-  ///    (a newer release automatically re-triggers the dialog).
-  bool shouldShow(String? dismissedVersion) {
+  /// Whether the dialog should be shown for this state (Adviser show rules,
+  /// cycle-29 P1 — the 24-hour snooze):
+  ///  - forced (min-version) updates ALWAYS show;
+  ///  - available shows iff the snooze has expired, or a NEWER version
+  ///    overrides it (the snoozed version differs from the offered one);
+  ///  - no snooze → show.
+  bool shouldShow({
+    required int? snoozedUntilEpochMs,
+    required String? snoozedVersion,
+  }) {
     if (status == UpdateStatus.forced) return true;
-    if (status == UpdateStatus.available) {
-      final version = remote?.version;
-      return version == null || dismissedVersion != version;
-    }
-    return false;
+    if (status != UpdateStatus.available) return false;
+    final version = remote?.version;
+    if (version == null) return true;
+    // A newer version always overrides the snooze.
+    if (snoozedVersion != null && snoozedVersion != version) return true;
+    // Same version (or no version stored): show iff the snooze has expired.
+    if (snoozedUntilEpochMs == null) return true;
+    return DateTime.now().isAfter(
+      DateTime.fromMillisecondsSinceEpoch(snoozedUntilEpochMs),
+    );
   }
 
   UpdateState copyWith({
@@ -111,16 +121,26 @@ class UpdateState {
 ///
 /// Wires to [VersionCheckService.instance] (injectable for tests): subscribes
 /// to `resultStream` (cancelled in [close]), maps service levels →
-/// [UpdateStatus], and persists dismissals via the NEW `SharedPreferencesAsync`
-/// API under [dismissedVersionKey] (not the legacy singleton).
+/// [UpdateStatus], and persists the 24-hour snooze via the
+/// `SharedPreferencesAsync` API (cycle-29 P1).
 ///
-/// Show rules (Adviser): forced → always show, no dismiss; available → show
-/// only if the persisted dismissal != remote.version — a newer release
-/// automatically re-triggers the dialog. Results arriving before the persisted
-/// dismissal loads are buffered and applied once it does, so an already
-/// dismissed version can never flash the dialog.
+/// Show rules (Adviser, cycle-29): forced (min-version) → always show, and
+/// the snooze refuses it; available → show only after the 24-hour "Later"
+/// snooze has expired — "Later" persists a snooze deadline + the snoozed
+/// version, and a newer release always overrides the snooze immediately.
+/// Results arriving before the persisted snooze loads are buffered and
+/// applied once it does, so a snoozed version can never flash the dialog.
+/// The legacy per-version dismissal key is cleared once on migration and
+/// never read.
 class UpdateCubit extends Cubit<UpdateState> {
-  /// shared_preferences key = the remote version the user dismissed.
+  /// The 24-hour snooze (cycle-29 P1): persisted deadline (epoch ms) + the
+  /// version it was snoozed for — a newer release overrides the snooze.
+  static const String snoozedUntilEpochMsKey = 'update_snoozed_until_epoch_ms';
+  static const String snoozedVersionKey = 'update_snoozed_version';
+  static const Duration snoozeDuration = Duration(hours: 24);
+
+  /// LEGACY (cycle-27): the per-version dismissal key — dead data since the
+  /// snooze; cleared once on migration, never read into behavior.
   static const String dismissedVersionKey = 'update_dismissed_version';
 
   final VersionCheckService _service;
@@ -128,9 +148,10 @@ class UpdateCubit extends Cubit<UpdateState> {
   final ApkInstallService _installService;
   StreamSubscription<UpdateCheckResult>? _subscription;
   StreamSubscription<InstallEvent>? _installSubscription;
-  String? _dismissedVersion;
-  bool _dismissalLoaded = false;
-  UpdateCheckResult? _pendingResult; // result seen before the dismissal loaded
+  int? _snoozedUntilEpochMs;
+  String? _snoozedVersion;
+  bool _snoozeLoaded = false;
+  UpdateCheckResult? _pendingResult; // result seen before the snooze loaded
   UpdateStatus? _flowOrigin; // status before the install flow started
 
   UpdateCubit({
@@ -144,8 +165,11 @@ class UpdateCubit extends Cubit<UpdateState> {
     _init();
   }
 
-  /// The remote version the user dismissed (null = none).
-  String? get dismissedVersion => _dismissedVersion;
+  /// The snooze deadline (epoch ms) — null when no snooze is set.
+  int? get snoozedUntilEpochMs => _snoozedUntilEpochMs;
+
+  /// The version the snooze was set for — null when no snooze is set.
+  String? get snoozedVersion => _snoozedVersion;
 
   void _init() {
     _subscription = _service.resultStream.listen(_onResult);
@@ -154,26 +178,34 @@ class UpdateCubit extends Cubit<UpdateState> {
     // ran before this cubit was created).
     final last = _service.lastResult;
     if (last != null) _onResult(last);
-    unawaited(_loadDismissal());
+    unawaited(_loadSnooze());
   }
 
-  Future<void> _loadDismissal() async {
+  Future<void> _loadSnooze() async {
     try {
       // SharedPreferencesAsync (new API, not the legacy singleton). Its
       // constructor throws StateError when the platform is unset (unit tests),
       // so construction is covered by the same defensive guard.
       final prefs = SharedPreferencesAsync();
-      final dismissed = await prefs.getString(dismissedVersionKey);
-      _dismissedVersion = (dismissed == null || dismissed.isEmpty)
-          ? null
-          : dismissed;
+      // Migration (cycle-29 P1): the old per-version dismissal key is dead
+      // data — cleared once when present, never read into behavior.
+      final legacy = await prefs.getString(dismissedVersionKey);
+      if (legacy != null) {
+        await prefs.remove(dismissedVersionKey);
+        _log('[UpdateCubit] legacy dismissal key cleared');
+      }
+      final until = await prefs.getInt(snoozedUntilEpochMsKey);
+      final version = await prefs.getString(snoozedVersionKey);
+      _snoozedUntilEpochMs = until;
+      _snoozedVersion = (version == null || version.isEmpty) ? null : version;
     } catch (e) {
       // Defensive: unreadable prefs must never block the feature.
-      _dismissedVersion = null;
-      _log('[UpdateCubit] dismissal load failed: $e');
+      _snoozedUntilEpochMs = null;
+      _snoozedVersion = null;
+      _log('[UpdateCubit] snooze load failed: $e');
     } finally {
-      _dismissalLoaded = true;
-      // Apply a result that arrived while the persisted value was loading.
+      _snoozeLoaded = true;
+      // Apply a result that arrived while the snooze was loading.
       final pending = _pendingResult;
       _pendingResult = null;
       if (pending != null) _applyResult(pending);
@@ -181,7 +213,7 @@ class UpdateCubit extends Cubit<UpdateState> {
   }
 
   void _onResult(UpdateCheckResult result) {
-    if (!_dismissalLoaded) {
+    if (!_snoozeLoaded) {
       _pendingResult = result;
       return;
     }
@@ -202,13 +234,10 @@ class UpdateCubit extends Cubit<UpdateState> {
       case UpdateLevel.forced:
         emit(_fromResult(result, UpdateStatus.forced));
       case UpdateLevel.available:
-        if (_dismissedVersion == result.remote?.version) {
-          // Dismissed for exactly this version — stay idle; a NEWER release
-          // re-triggers the dialog.
-          emit(_fromResult(result, UpdateStatus.idle));
-        } else {
-          emit(_fromResult(result, UpdateStatus.available));
-        }
+        // The snooze is applied at [UpdateState.shouldShow] (cycle-29 P1):
+        // the state carries `available`; the host consults the persisted
+        // snooze (deadline + version) when deciding to show.
+        emit(_fromResult(result, UpdateStatus.available));
       case UpdateLevel.none:
         emit(_fromResult(result, UpdateStatus.idle));
     }
@@ -230,28 +259,35 @@ class UpdateCubit extends Cubit<UpdateState> {
     // adds the result before returning; applying again is idempotent).
   }
 
-  /// Dismisses the dialog for the currently-shown remote version: persists
-  /// [dismissedVersionKey] via `SharedPreferencesAsync` and returns to idle.
-  /// A newer release automatically re-triggers the dialog (the dismissal only
-  /// suppresses the exact version). Forced updates cannot be dismissed.
-  Future<void> dismissUntilNextVersion() async {
+  /// Snoozes the update prompt for 24 hours (cycle-29 P1): persists
+  /// now + 24h and the current remote version, and returns to idle. A newer
+  /// release overrides the snooze immediately ([UpdateState.shouldShow]);
+  /// forced updates are never snoozed, and the install flow's in-flight
+  /// states must never be snoozed by a stray dialog close (contract §4).
+  Future<void> snoozeFor24Hours() async {
     final remote = state.remote;
-    // Forced flows refuse (existing rule). The install flow's in-flight
-    // states must never be dismissed by a stray dialog close (contract §4
-    // `transition_rules`); idle/available semantics are unchanged.
     if (state.isFlowActive ||
         state.status == UpdateStatus.forced ||
         remote == null) {
       return;
     }
     final version = remote.version;
+    final untilEpochMs = DateTime.now()
+        .add(snoozeDuration)
+        .millisecondsSinceEpoch;
     try {
-      await SharedPreferencesAsync().setString(dismissedVersionKey, version);
-      _dismissedVersion = version;
+      await SharedPreferencesAsync().setInt(
+        snoozedUntilEpochMsKey,
+        untilEpochMs,
+      );
+      await SharedPreferencesAsync().setString(snoozedVersionKey, version);
+      _snoozedUntilEpochMs = untilEpochMs;
+      _snoozedVersion = version;
     } catch (e) {
-      // Persist failure — still dismiss in memory for this session.
-      _dismissedVersion = version;
-      _log('[UpdateCubit] dismissal persist failed: $e');
+      // Persist failure — still snooze in memory for this session.
+      _snoozedUntilEpochMs = untilEpochMs;
+      _snoozedVersion = version;
+      _log('[UpdateCubit] snooze persist failed: $e');
     }
     emit(state.copyWith(status: UpdateStatus.idle));
   }

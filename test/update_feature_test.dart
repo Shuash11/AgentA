@@ -138,12 +138,15 @@ RemoteRelease makeRelease(
   String version, {
   String? minVersion,
   String? downloadUrl,
+  String? notes,
+  DateTime? publishedAt,
 }) => RemoteRelease(
   version: version,
   minVersion: minVersion,
   downloadUrl: downloadUrl,
   releaseUrl: 'https://github.com/Shuash11/AgentA/releases/tag/v$version',
-  notes: 'Bug fixes and improvements',
+  notes: notes ?? 'Bug fixes and improvements',
+  publishedAt: publishedAt,
 );
 
 /// Lets the cubit's async dismissal load settle (in-memory prefs respond in
@@ -269,15 +272,20 @@ void main() {
       expect(cubit.state.status, UpdateStatus.forced);
       expect(cubit.state.isForced, isTrue);
 
-      // Forced: dismissUntilNextVersion refuses — status unchanged, nothing persisted.
-      await cubit.dismissUntilNextVersion();
+      // Forced: snoozeFor24Hours refuses — status unchanged, nothing persisted.
+      await cubit.snoozeFor24Hours();
       await settle();
       expect(cubit.state.status, UpdateStatus.forced);
-      expect(cubit.dismissedVersion, isNull);
-      final persisted = await SharedPreferencesAsync().getString(
-        UpdateCubit.dismissedVersionKey,
+      expect(cubit.snoozedVersion, isNull);
+      expect(cubit.snoozedUntilEpochMs, isNull);
+      final persistedUntil = await SharedPreferencesAsync().getInt(
+        UpdateCubit.snoozedUntilEpochMsKey,
       );
-      expect(persisted, isNull);
+      final persistedVersion = await SharedPreferencesAsync().getString(
+        UpdateCubit.snoozedVersionKey,
+      );
+      expect(persistedUntil, isNull);
+      expect(persistedVersion, isNull);
     });
 
     test('checkNow delegates to the service (checking → available)', () async {
@@ -294,9 +302,9 @@ void main() {
     });
   });
 
-  group('UpdateCubit dismissal (SharedPreferencesAsync, show rules)', () {
+  group('UpdateCubit snooze (24h remind-me-later, SharedPreferencesAsync)', () {
     test(
-      'dismissed version suppressed for the same version; newer re-triggers',
+      'same version suppressed while snoozed; a newer version overrides immediately',
       () async {
         // Remote NEWER than current → dialog shows as available.
         final source = FakeVersionSource(release: makeRelease('1.1.5'));
@@ -309,26 +317,71 @@ void main() {
         await settle();
         expect(cubit.state.status, UpdateStatus.available);
 
-        await cubit.dismissUntilNextVersion();
+        await cubit.snoozeFor24Hours();
         await settle();
         expect(cubit.state.status, UpdateStatus.idle);
-        expect(cubit.dismissedVersion, '1.1.5');
+        expect(cubit.snoozedVersion, '1.1.5');
+        expect(cubit.snoozedUntilEpochMs, isNotNull);
 
-        // Same version again → stays suppressed.
+        // Same version again → still inside the snooze window; shouldShow false.
         await service.checkNow();
         await settle();
-        expect(cubit.state.status, UpdateStatus.idle);
+        expect(cubit.state.status, UpdateStatus.available);
+        expect(
+          cubit.state.shouldShow(
+            snoozedUntilEpochMs: cubit.snoozedUntilEpochMs,
+            snoozedVersion: cubit.snoozedVersion,
+          ),
+          isFalse,
+        );
 
-        // A newer release automatically re-triggers.
+        // A newer version overrides the snooze immediately.
         source.release = makeRelease('1.2.0');
         await service.checkNow();
         await settle();
         expect(cubit.state.status, UpdateStatus.available);
+        expect(
+          cubit.state.shouldShow(
+            snoozedUntilEpochMs: cubit.snoozedUntilEpochMs,
+            snoozedVersion: cubit.snoozedVersion,
+          ),
+          isTrue,
+        );
       },
     );
 
-    test('dismissal persists and a fresh cubit loads it (roundtrip)', () async {
-      final source = FakeVersionSource(release: makeRelease('1.1.0'));
+    test('the snooze expires → the dialog re-shows (time travel)', () async {
+      // Seed an EXPIRED snooze (set 25h ago for the offered version).
+      final prefs = SharedPreferencesAsync();
+      await prefs.setInt(
+        UpdateCubit.snoozedUntilEpochMsKey,
+        DateTime.now()
+            .subtract(const Duration(hours: 25))
+            .millisecondsSinceEpoch,
+      );
+      await prefs.setString(UpdateCubit.snoozedVersionKey, '1.2.0');
+
+      final source = FakeVersionSource(release: makeRelease('1.2.0'));
+      final service = makeService(source);
+      service.setCurrentVersionForTest(version: '1.1.0', build: '2');
+      final cubit = makeCubit(service);
+      await settle();
+      expect(cubit.snoozedVersion, '1.2.0'); // loaded
+
+      await service.checkNow();
+      await settle();
+      expect(cubit.state.status, UpdateStatus.available);
+      expect(
+        cubit.state.shouldShow(
+          snoozedUntilEpochMs: cubit.snoozedUntilEpochMs,
+          snoozedVersion: cubit.snoozedVersion,
+        ),
+        isTrue, // expired → re-shows
+      );
+    });
+
+    test('snooze persists and a fresh cubit loads it (roundtrip)', () async {
+      final source = FakeVersionSource(release: makeRelease('1.1.5'));
       final service = makeService(source);
       service.setCurrentVersionForTest(version: '1.1.0', build: '2');
       final cubit = makeCubit(service);
@@ -336,21 +389,62 @@ void main() {
 
       await service.checkNow();
       await settle();
-      await cubit.dismissUntilNextVersion();
+      await cubit.snoozeFor24Hours();
       await settle();
 
-      final persisted = await SharedPreferencesAsync().getString(
-        UpdateCubit.dismissedVersionKey,
+      final persistedUntil = await SharedPreferencesAsync().getInt(
+        UpdateCubit.snoozedUntilEpochMsKey,
       );
-      expect(persisted, '1.1.0');
+      final persistedVersion = await SharedPreferencesAsync().getString(
+        UpdateCubit.snoozedVersionKey,
+      );
+      expect(persistedUntil, isNotNull);
+      expect(persistedVersion, '1.1.5');
 
-      // Fresh cubit (same store) loads the persisted dismissal and suppresses.
+      // Fresh cubit (same store) loads the snooze and suppresses the same
+      // version while the window is open.
       final cubit2 = makeCubit(service);
       await settle();
-      expect(cubit2.dismissedVersion, '1.1.0');
+      expect(cubit2.snoozedVersion, '1.1.5');
+      expect(cubit2.snoozedUntilEpochMs, persistedUntil);
       await service.checkNow();
       await settle();
-      expect(cubit2.state.status, UpdateStatus.idle);
+      expect(cubit2.state.status, UpdateStatus.available);
+      expect(
+        cubit2.state.shouldShow(
+          snoozedUntilEpochMs: cubit2.snoozedUntilEpochMs,
+          snoozedVersion: cubit2.snoozedVersion,
+        ),
+        isFalse,
+      );
+    });
+
+    test('migration clears the legacy dismissal key (never read)', () async {
+      // Seed the cycle-27 dead key.
+      final prefs = SharedPreferencesAsync();
+      await prefs.setString(UpdateCubit.dismissedVersionKey, '1.0.9');
+
+      final source = FakeVersionSource(release: makeRelease('1.2.0'));
+      final service = makeService(source);
+      service.setCurrentVersionForTest(version: '1.1.0', build: '2');
+      final cubit = makeCubit(service);
+      await settle();
+
+      // Cleared once on migration.
+      final legacy = await prefs.getString(UpdateCubit.dismissedVersionKey);
+      expect(legacy, isNull);
+
+      // And the dead key never suppressed anything: no snooze → shows.
+      await service.checkNow();
+      await settle();
+      expect(cubit.state.status, UpdateStatus.available);
+      expect(
+        cubit.state.shouldShow(
+          snoozedUntilEpochMs: cubit.snoozedUntilEpochMs,
+          snoozedVersion: cubit.snoozedVersion,
+        ),
+        isTrue,
+      );
     });
   });
 
@@ -370,12 +464,12 @@ void main() {
       expect(find.text('New version available'), findsOneWidget);
       expect(find.text('1.1.0 → 1.2.0'), findsOneWidget);
       expect(find.text('Update'), findsOneWidget);
-      expect(find.text('Later'), findsOneWidget);
+      expect(find.text('Remind me later'), findsOneWidget);
       expect(find.text('AgentA'), findsOneWidget); // app still beneath
     });
 
     testWidgets(
-      'not shown after dismissUntilNextVersion for the same version',
+      'Remind me later snoozes 24h: same version suppressed, newer re-triggers',
       (tester) async {
         // Remote NEWER than current → dialog shows as available.
         final source = FakeVersionSource(release: makeRelease('1.2.0'));
@@ -388,21 +482,23 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('New version available'), findsOneWidget);
 
-        await tester.tap(find.text('Later'));
-        await tester.pumpAndSettle(); // dialog closes + dismissal persisted
+        await tester.tap(find.text('Remind me later'));
+        await tester.pumpAndSettle(); // dialog closes + 24h snooze persisted
         expect(find.text('New version available'), findsNothing);
+        expect(cubit.snoozedVersion, '1.2.0');
 
-        // Same version again → no dialog.
+        // Same version again → still inside the snooze window → no dialog.
         await service.checkNow();
         await tester.pumpAndSettle();
         expect(find.text('New version available'), findsNothing);
       },
     );
 
-    testWidgets('shown again for a newer version after dismissal', (
+    testWidgets('a newer version overrides the snooze immediately', (
       tester,
     ) async {
-      // Remote NEWER than current → dialog shows, then is dismissed.
+      // Remote NEWER than current → dialog shows, then is snoozed via
+      // Remind me later.
       final source = FakeVersionSource(release: makeRelease('1.2.0'));
       final service = makeService(source);
       service.setCurrentVersionForTest(version: '1.1.0', build: '2');
@@ -411,11 +507,11 @@ void main() {
       await pumpApp(tester, cubit);
       await service.checkNow();
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Later'));
+      await tester.tap(find.text('Remind me later'));
       await tester.pumpAndSettle();
       expect(find.text('New version available'), findsNothing);
 
-      // Newer release → dialog re-triggers automatically.
+      // A newer release overrides the snooze → dialog re-triggers immediately.
       source.release = makeRelease('1.3.0');
       await service.checkNow();
       await tester.pumpAndSettle();
@@ -441,7 +537,10 @@ void main() {
 
       expect(find.text('Update required'), findsOneWidget);
       expect(find.text('Update'), findsOneWidget);
-      expect(find.text('Later'), findsNothing); // forced: no dismiss button
+      expect(
+        find.text('Remind me later'),
+        findsNothing,
+      ); // forced: no dismiss button
     });
 
     testWidgets('Update tap starts the in-app download (no browser launch)', (
@@ -753,6 +852,152 @@ void main() {
 
       expect(find.byType(UpdateAvailableDialog), findsOneWidget); // still one
       expect(find.text('1.1.0 → 1.3.0'), findsOneWidget); // live content update
+    });
+  });
+
+  group('Structured changelog UI (cycle-29 P2)', () {
+    testWidgets('structured notes render header, sections, icons and items', (
+      tester,
+    ) async {
+      final source = FakeVersionSource(
+        release: makeRelease(
+          '1.2.0',
+          notes: '### New\n- Chat search\n### Fixed\n- Crash on launch',
+          publishedAt: DateTime(2026, 10, 19),
+        ),
+      );
+      final service = makeService(source);
+      service.setCurrentVersionForTest(version: '1.1.0', build: '2');
+      final cubit = makeCubit(service);
+
+      await pumpApp(tester, cubit);
+      await service.checkNow();
+      await tester.pumpAndSettle();
+
+      // Header line: version + formatted release date.
+      expect(find.text('Version 1.2.0 · Oct 19, 2026'), findsOneWidget);
+      // Section rows: icon + heading + bullet items.
+      expect(find.text('New'), findsOneWidget);
+      expect(find.text('Chat search'), findsOneWidget);
+      expect(find.text('Fixed'), findsOneWidget);
+      expect(find.text('Crash on launch'), findsOneWidget);
+      expect(find.byIcon(Icons.new_releases_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.build_circle_rounded), findsOneWidget);
+      // The raw dump is gone — structured rendering replaced it.
+      expect(find.text('Bug fixes and improvements'), findsNothing);
+    });
+
+    testWidgets('unknown H3 sections render generically (never dropped)', (
+      tester,
+    ) async {
+      final source = FakeVersionSource(
+        release: makeRelease(
+          '1.2.0',
+          notes: '### Security\n- Hardened key storage',
+        ),
+      );
+      final service = makeService(source);
+      service.setCurrentVersionForTest(version: '1.1.0', build: '2');
+      final cubit = makeCubit(service);
+
+      await pumpApp(tester, cubit);
+      await service.checkNow();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Security'), findsOneWidget);
+      expect(find.byIcon(Icons.notes_rounded), findsOneWidget);
+      expect(find.text('Hardened key storage'), findsOneWidget);
+    });
+
+    testWidgets('sections with >5 items collapse behind Show more', (
+      tester,
+    ) async {
+      final source = FakeVersionSource(
+        release: makeRelease(
+          '1.2.0',
+          notes:
+              '### New\n'
+              '- item one\n'
+              '- item two\n'
+              '- item three\n'
+              '- item four\n'
+              '- item five\n'
+              '- item six\n'
+              '- item seven',
+        ),
+      );
+      final service = makeService(source);
+      service.setCurrentVersionForTest(version: '1.1.0', build: '2');
+      final cubit = makeCubit(service);
+
+      await pumpApp(tester, cubit);
+      await service.checkNow();
+      await tester.pumpAndSettle();
+
+      // Collapsed: the first 5 items render, the rest sit behind the toggle.
+      expect(find.text('item one'), findsOneWidget);
+      expect(find.text('item five'), findsOneWidget);
+      expect(find.text('item six'), findsNothing);
+      expect(find.text('item seven'), findsNothing);
+      expect(find.text('Show more'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Show more'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Show more'));
+      await tester.pumpAndSettle();
+
+      // Expanded: every item is visible; the toggle flips to Show less.
+      expect(find.text('item six'), findsOneWidget);
+      expect(find.text('item seven'), findsOneWidget);
+      expect(find.text('Show less'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Show less'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Show less'));
+      await tester.pumpAndSettle();
+
+      // Collapsed again.
+      expect(find.text('item six'), findsNothing);
+      expect(find.text('Show more'), findsOneWidget);
+    });
+
+    testWidgets('unstructured notes fall back to the raw text dump', (
+      tester,
+    ) async {
+      // makeRelease's default body carries no headings.
+      final source = FakeVersionSource(release: makeRelease('1.2.0'));
+      final service = makeService(source);
+      service.setCurrentVersionForTest(version: '1.1.0', build: '2');
+      final cubit = makeCubit(service);
+
+      await pumpApp(tester, cubit);
+      await service.checkNow();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bug fixes and improvements'), findsOneWidget);
+      // No structured chrome in the fallback: no header line, no sections,
+      // no toggle.
+      expect(find.text('Version 1.2.0'), findsNothing);
+      expect(find.byIcon(Icons.notes_rounded), findsNothing);
+      expect(find.text('Show more'), findsNothing);
+    });
+
+    testWidgets('null publishedAt omits the date part of the header', (
+      tester,
+    ) async {
+      final source = FakeVersionSource(
+        release: makeRelease('1.2.0', notes: '### Fixed\n- Crash on launch'),
+      );
+      final service = makeService(source);
+      service.setCurrentVersionForTest(version: '1.1.0', build: '2');
+      final cubit = makeCubit(service);
+
+      await pumpApp(tester, cubit);
+      await service.checkNow();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Version 1.2.0'), findsOneWidget);
+      expect(find.textContaining('Oct 19, 2026'), findsNothing);
     });
   });
 }

@@ -10,15 +10,17 @@ import 'update_available_dialog.dart';
 /// builder:` so the dialog overlays EVERY screen (login, model-download gate,
 /// shell).
 ///
-/// Shows the dialog per the Adviser show rules:
-///  - status == available AND the shown version was not dismissed, OR
+/// Shows the dialog per the Adviser show rules (cycle-29 P1 — the 24-hour
+/// snooze):
+///  - status == available AND the 24-hour snooze has expired (a newer version
+///    overrides the snooze immediately), OR
 ///  - status == forced.
 ///
 /// A duplicate-dialog guard (a flag while showing) prevents stacking; after
-/// the dialog closes, a newer version re-triggers it automatically. Any close
-/// path of a non-forced dialog (Update, Later, barrier tap) dismisses the
-/// shown version; forced dialogs are non-dismissible and never close by
-/// design ([UpdateCubit.dismissUntilNextVersion] refuses forced updates).
+/// the dialog closes, a newer version re-triggers it immediately. Any close
+/// path of a non-forced dialog (Update, Later, barrier tap) snoozes the
+/// shown version for 24 hours; forced dialogs are non-dismissible and never
+/// close by design ([UpdateCubit.snoozeFor24Hours] refuses forced updates).
 class UpdateDialogHost extends StatefulWidget {
   final Widget child;
 
@@ -62,7 +64,12 @@ class _UpdateDialogHostState extends State<UpdateDialogHost> {
     if (!mounted || _isShowing) return;
     final cubit = context.read<UpdateCubit>();
     final state = cubit.state;
-    if (!state.shouldShow(cubit.dismissedVersion)) return;
+    if (!state.shouldShow(
+      snoozedUntilEpochMs: cubit.snoozedUntilEpochMs,
+      snoozedVersion: cubit.snoozedVersion,
+    )) {
+      return;
+    }
 
     // The host sits above the navigator — push the dialog route through the
     // root navigator key directly.
@@ -90,10 +97,11 @@ class _UpdateDialogHostState extends State<UpdateDialogHost> {
           .then((_) async {
             _isShowing = false;
             if (!wasForced) {
-              // Dismiss the shown version; a newer one re-triggers automatically.
-              // Awaited: _showIfDue must not run while the state is still
-              // "available" (pre-dismissal), or the dialog would instantly re-show.
-              await cubit.dismissUntilNextVersion();
+              // Snooze the shown version for 24 hours (cycle-29 P1); a newer
+              // release re-triggers immediately. Awaited: _showIfDue must not
+              // run while the state is still "available" (pre-snooze), or the
+              // dialog would instantly re-show.
+              await cubit.snoozeFor24Hours();
             }
             // A newer release (or a state change while closed) re-evaluates.
             _showIfDue();
