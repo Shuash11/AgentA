@@ -149,7 +149,6 @@ Copy/labels/Semantics are unaffected by the aesthetic (screen-reader experience 
 - `profile/change_pass_page.dart` — fields = wells; error inline `errorText`; Save = PrimaryButton.
 - `profile/securitypage.dart` — tiles raised, icons `subtext`, delete row `errorText`; dialogs raised.
 - `profile/securityservice.dart` — no visual surface.
-- `profile/confirmation.dart` — `key` icon `accent` 48 plain; field = well; Verify = PrimaryButton.
 - `ai/download_prompt_screen.dart` — title `display`; `smart_toy_outlined` `subtext` 56; size chip = inset well; progress = `accent` on inset track; completion `check_circle` `successText` 48; slow/no-connection = raised + `warningText`/`errorText` icon+text.
 - `shared/app_shell.dart` — no change beyond tokens.
 - `shared/bottomnavbar.dart` — `base` bar, NO shadow line; selected = inset pill + `accent` icon + `accentInk` w600 label; unselected flat `subtext`; ≥48dp targets.
