@@ -15,7 +15,7 @@ import '../../theme/app_theme.dart';
 import '../../presentation/auth/login.dart';
 import '../shared/bottomnavbar.dart';
 import 'editprofile.dart';
-import 'confirmation.dart';
+import 'change_pass_page.dart';
 import 'securitypage.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -410,7 +410,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const RecoveryCodePage(),
+                        builder: (_) => const ChangePasswordPage(),
                       ),
                     ),
                     colors,

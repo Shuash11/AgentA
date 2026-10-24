@@ -618,7 +618,7 @@ class _RecoveryCodeDialog extends StatelessWidget {
           const Icon(Icons.key_rounded, color: AppColors.accent, size: 28),
           const SizedBox(height: AppSpacing.md),
           Text(
-            "Store this code somewhere safe.\nYou'll need it to change your password.",
+            "Store this code somewhere safe.\nIt is not used to change your password.",
             textAlign: TextAlign.center,
             style: AppTypography.body.copyWith(color: colors.subtext),
           ),

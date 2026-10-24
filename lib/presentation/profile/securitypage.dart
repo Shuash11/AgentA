@@ -31,7 +31,7 @@ class SecurityPage extends StatelessWidget {
               const Icon(Icons.key_off, color: AppColors.subtext, size: 28),
               const SizedBox(height: 16),
               Text(
-                'For your security, the raw code was shown once at sign-up and only its hash is stored. Use it on the recovery screen — it cannot be displayed again.',
+                'For your security, the raw code was shown once at sign-up and only its hash is stored. It cannot be displayed again.',
                 style: AppTypography.body.copyWith(color: colors.subtext),
                 textAlign: TextAlign.center,
               ),
