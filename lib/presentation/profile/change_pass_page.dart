@@ -26,8 +26,9 @@ class PasswordChangeSession {
 
   /// True when the account holds an email/password identity, i.e. the OWASP
   /// baseline reauthentication has a current password to verify. A
-  /// Google-only account has none, so the Google factor replaces that step
-  /// and the current-password field is hidden (cycle-31 plan, matrix row).
+  /// Google-only account has none, so the current-password field is hidden
+  /// and the mandatory emailed code is that class's only verifier
+  /// (cycle-34 ruling 3; cycle-31 plan, matrix row).
   final bool hasPassword;
 }
 
@@ -72,10 +73,12 @@ class PasswordChangeFactorGate {
   /// Google factor — true only when the device-confirmed Google account is
   /// the session account.
   ///
-  /// Fail-closed (Adviser ruling): a typed [GoogleSignInFailure] (canceled /
-  /// unsupported / email mismatch / plugin error — the P1 fallback triggers)
-  /// or a null return (test seam only) is never a satisfied factor; the
-  /// caller automatically falls back to the emailed OTP.
+  /// Retained by cycle-34 ruling 3: the change flow no longer invokes this
+  /// factor (the emailed code is now mandatory for every online class), so
+  /// it has zero invocation sites in `lib/presentation/`. Fail-closed
+  /// semantics are kept: a typed [GoogleSignInFailure] (canceled /
+  /// unsupported / email mismatch / plugin error) or a null return (test
+  /// seam only) is never a satisfied factor.
   Future<bool> verifyGoogleReauth(String expectedEmail) async {
     try {
       final account = await AuthService.verifyGoogleReauth(expectedEmail);
@@ -90,7 +93,8 @@ class PasswordChangeFactorGate {
   Future<void> reauthenticate(String email, String password) =>
       AuthService.reauthenticate(email, password);
 
-  /// Emails the step-up code to the session account (automatic fallback).
+  /// Emails the step-up code to the session account — the mandatory online
+  /// factor step for both account classes since cycle-34 (ruling 3).
   Future<void> sendOtpStepUp(String email) =>
       AuthService.sendOtpForStepUp(email);
 
@@ -144,7 +148,8 @@ class ChangePasswordPage extends StatefulWidget {
   State<ChangePasswordPage> createState() => _ChangePasswordPageState();
 }
 
-/// UI stage of the change flow — the OTP fallback pauses on [otpCode].
+/// UI stage of the change flow — the mandatory emailed-code step pauses on
+/// [otpCode].
 enum _ChangeStage { form, otpCode }
 
 class _ChangePasswordPageState extends State<ChangePasswordPage> {
@@ -163,8 +168,8 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
   /// Session facts captured when the page opens.
   PasswordChangeSession? _session;
 
-  /// The session behind the pending OTP step-up (set when the fallback
-  /// starts; cleared when the user goes back to the form).
+  /// The session behind the pending OTP step-up (set when the emailed-code
+  /// step starts; cleared when the user goes back to the form).
   PasswordChangeSession? _otpSession;
 
   bool _isSaving = false;
@@ -237,18 +242,13 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
           _currentPasswordController.text,
         );
       }
-      if (session.isGoogleLinked) {
-        final googleVerified = await widget.factorGate.verifyGoogleReauth(
-          session.email,
-        );
-        if (!googleVerified) {
-          // P1 triggers (typed failure / account mismatch / null) →
-          // automatic OTP fallback; the flow pauses on code entry.
-          await _startOtpFallback(session);
-          return;
-        }
-      }
-      await _confirmDeviceThenUpdate();
+      // Device credential first (one prompt per submit, OWASP friction
+      // rule): a canceled attempt must never consume an email send.
+      await _confirmDeviceOrAbort();
+      // The emailed 6-digit code is the mandatory final verifier for BOTH
+      // online classes and is sent unconditionally (cycle-34, Ruling 3);
+      // the flow pauses on code entry.
+      await _sendOtpAndAdvanceStage(session);
     } on _FactorAborted catch (abort) {
       if (mounted) setState(() => _errorMessage = abort.message);
     } catch (e) {
@@ -330,15 +330,17 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     }
   }
 
-  /// Automatic fallback: emails the step-up code to the SESSION account's
-  /// address and advances to code entry. A send failure aborts with a
-  /// retryable message — no password update, no session change.
-  Future<void> _startOtpFallback(PasswordChangeSession session) async {
+  /// The mandatory emailed-code step for both online classes (cycle-34
+  /// Ruling 3): emails the step-up code to the SESSION account's address and
+  /// advances to code entry. A send failure aborts with a retryable,
+  /// cause-honest message — no password update, no stage advance, and no
+  /// fallback to a weaker factor (Ruling 8: no silent path, no skip).
+  Future<void> _sendOtpAndAdvanceStage(PasswordChangeSession session) async {
     try {
       await widget.factorGate.sendOtpStepUp(session.email);
     } catch (_) {
       throw const _FactorAborted(
-        "We couldn't send the code to your email. Check your connection and try again.",
+        "We couldn't send the code right now — try again in a bit",
       );
     }
     if (!mounted) return;
@@ -348,7 +350,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       _otpController.clear();
       _errorMessage = null;
       _noticeMessage =
-          "We couldn't verify with Google. Instead, we emailed a 6-digit code to ${session.email}.";
+          'We emailed a 6-digit code to ${session.email}. Enter it below to finish.';
     });
   }
 
@@ -388,7 +390,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
         }
         return;
       }
-      await _confirmDeviceThenUpdate();
+      await _writeNewPassword();
     } on _FactorAborted catch (abort) {
       if (mounted) setState(() => _errorMessage = abort.message);
     } catch (e) {
@@ -398,14 +400,12 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     }
   }
 
-  /// Device-credential step, then the actual password write.
+  /// Device-credential step — runs ONCE per submit, BEFORE the OTP send.
   ///
   /// Plan policy: no screen lock → degrade (skip + notice), never block; a
-  /// canceled prompt aborts with no password update. On success the session
-  /// is KEPT — the fresh session the OTP step-up issued is OWASP's
-  /// password-change token renewal; no sign-out on this path (Adviser
-  /// ruling).
-  Future<void> _confirmDeviceThenUpdate() async {
+  /// canceled prompt aborts with no password update and no email consumed
+  /// (the send happens only after this step passes — cycle-34, Ruling 3).
+  Future<void> _confirmDeviceOrAbort() async {
     if (await widget.factorGate.deviceCredentialPromptAvailable()) {
       final confirmed = await widget.factorGate.confirmDeviceCredential(
         _devicePromptReason,
@@ -421,7 +421,15 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
             "This phone has no screen lock, so it can't confirm it's you. Continuing with the check you already passed.";
       });
     }
+  }
 
+  /// The password write tail — runs only after the emailed code verified;
+  /// no second device prompt (cycle-34, Ruling 3).
+  ///
+  /// On success the session is KEPT — the fresh session the OTP step-up
+  /// issued is OWASP's password-change token renewal; no sign-out on this
+  /// path (Adviser ruling).
+  Future<void> _writeNewPassword() async {
     await widget.factorGate.updatePassword(_newPasswordController.text);
 
     if (!mounted) return;
@@ -432,7 +440,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
   }
 
   /// Leaves the code-entry stage without any state change (canceling the
-  /// fallback factor aborts the change).
+  /// emailed-code factor aborts the change).
   void _backToForm() {
     setState(() {
       _stage = _ChangeStage.form;
@@ -497,12 +505,23 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
 
   /// The password form: baseline current-password field (only when the
   /// account has a password), the new password, and the submit button.
+  ///
+  /// A Google-linked session gets one extra helper line: the emailed code is
+  /// its decisive verifier (cycle-34 ruling 3).
   Widget _buildFormStage(ThemeColors colors) {
+    final session = _session;
     return Form(
       key: _formKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (session != null && session.isGoogleLinked) ...[
+            Text(
+              "We'll email a 6-digit code to ${session.email} to confirm this change.",
+              style: AppTypography.body.copyWith(color: colors.subtext),
+            ),
+            const SizedBox(height: 24),
+          ],
           if (_showCurrentPassword) ...[
             Text(
               'Current Password',
@@ -600,8 +619,9 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     );
   }
 
-  /// The OTP fallback stage: code entry for the emailed step-up code. The
-  /// copy states which factor is being requested.
+  /// The emailed-code stage: code entry for the step-up code — now the
+  /// NORMAL step for both online classes (cycle-34 ruling 3), not a
+  /// fallback. The copy states exactly which address received the code.
   Widget _buildOtpStage(ThemeColors colors) {
     final email = _otpSession?.email ?? '';
     return Column(
@@ -705,7 +725,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     );
   }
 
-  /// Explanatory notice (automatic OTP fallback / degraded device step).
+  /// Explanatory notice (emailed-code step / degraded device step).
   /// Status ink only — icon + text, never surface decoration.
   Widget _noticeBox(ThemeColors colors) {
     final message = _noticeMessage;

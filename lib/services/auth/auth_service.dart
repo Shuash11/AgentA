@@ -619,9 +619,14 @@ class AuthService {
   /// that owns the current session — the Google factor of the cycle-31
   /// account-class matrix.
   ///
+  /// Retained by cycle-34 ruling 3: the password-change flow no longer
+  /// invokes this factor (the mandatory emailed code is its own visible
+  /// step), so this method has zero call sites in the change flow. Kept
+  /// unchanged for its option value.
+  ///
   /// Returns the authenticated [GoogleSignInAccount] on success. Every other
-  /// outcome is a typed [GoogleSignInFailure] the caller can map to a
-  /// fallback trigger:
+  /// outcome is a typed [GoogleSignInFailure] the caller can map to an
+  /// unsatisfied factor:
   ///  * `canceled` — the user dismissed the account chooser;
   ///  * `unknownError` (this also covers "no credential returned"),
   ///    `interrupted`, `clientConfigurationError`,
@@ -711,14 +716,15 @@ class AuthService {
     }
   }
 
-  // ── Email-OTP step-up (the fallback factor) ──────────────────────────
+  // ── Email-OTP step-up (mandatory online factor since cycle-34) ───────
 
   /// Sends a one-time code to [email] for the password-change step-up.
   ///
-  /// Fallback factor of the cycle-31 matrix: used when the Google factor is
-  /// unavailable (plugin failure, unsupported platform, or an account-email
-  /// mismatch). [shouldCreateUser] must stay `false` — a step-up code must
-  /// never create an account (same rule as [sendOtpForReset]).
+  /// Since cycle-34 ruling 3 this is the MANDATORY final factor when the
+  /// password changes online — sent unconditionally for both account classes
+  /// (email/password and Google-linked); the cycle-31 "fallback factor"
+  /// framing is superseded. [shouldCreateUser] must stay `false` — a step-up
+  /// code must never create an account (same rule as [sendOtpForReset]).
   ///
   /// The code is delivered to the inbox and verified by [verifyOtpStepUp]; it
   /// never passes through the app's logs.

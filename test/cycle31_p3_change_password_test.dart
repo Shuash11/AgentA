@@ -8,9 +8,9 @@
 //    seam (PasswordChangeFactorGate): the page never calls AuthService /
 //    BiometricAuthService statics directly, so a fake subclass drives every
 //    account class and every factor outcome.
-//  * The real gate's fail-closed mapping for verifyGoogleReauth — a null
-//    return (P2 test seam) and every typed failure are treated as an
-//    unsatisfied factor (OTP-fallback triggers).
+//  * The real gate's fail-closed mapping for verifyGoogleReauth — retained
+//    with zero invocation sites since cycle-34 ruling 3; a null return
+//    (P2 test seam) and every typed failure stay unsatisfied.
 //  * The offline-connectivity block kept from the pre-cycle-31 flow for
 //    online sessions (the no-Supabase-user class routes to the P4 offline
 //    flow, covered by cycle31_p4_offline_password_test.dart).
@@ -59,7 +59,7 @@ class _FakeGate extends PasswordChangeFactorGate {
 
   PasswordChangeSession? session;
 
-  /// Call order, e.g. ['reauthenticate', 'verifyGoogleReauth', ...].
+  /// Call order, e.g. ['reauthenticate', 'sendOtpStepUp', ...].
   final List<String> calls = <String>[];
 
   bool googleVerified = false;
@@ -185,30 +185,58 @@ void main() {
   });
 
   group('ChangePasswordPage — Google-linked session (cycle-31 P3)', () {
-    testWidgets('Google-only: Google factor + device prompt run before '
-        'updatePassword', (tester) async {
+    testWidgets('Google-only: device prompt then the emailed code sent '
+        'unconditionally (no Google call); verify → updatePassword', (
+      tester,
+    ) async {
       final gate = _FakeGate(
         session: _session(google: true, hasPassword: false),
-      )..googleVerified = true;
+      );
       await _pumpPage(tester, gate);
 
-      // A Google-only account has no password: the baseline field is hidden.
+      // A Google-only account has no password: the baseline field is
+      // hidden and the form announces the emailed-code step (cycle-34).
       expect(find.text('Current Password'), findsNothing);
       expect(find.byType(TextFormField), findsOneWidget);
+      expect(
+        find.textContaining("We'll email a 6-digit code to user@example.com"),
+        findsOneWidget,
+      );
 
       await _fillForm(tester);
       await _tapSubmit(tester, 'Change Password');
       await tester.pumpAndSettle();
 
+      // Device credential first, then the mandatory send — the Google
+      // factor is NEVER invoked (cycle-34 ruling 3).
       expect(gate.calls, [
-        'verifyGoogleReauth',
         'deviceCredentialPromptAvailable',
         'confirmDeviceCredential',
-        'updatePassword',
+        'sendOtpStepUp',
       ]);
+      expect(gate.calls, isNot(contains('verifyGoogleReauth')));
       expect(
         gate.deviceReasonSeen,
         'Confirm your identity to change your password',
+      );
+      expect(find.text('Verify & Change Password'), findsOneWidget);
+      expect(
+        find.textContaining('emailed a 6-digit code to user@example.com'),
+        findsOneWidget,
+      );
+
+      // Correct code: the write tail only — no second device prompt.
+      gate.otpVerified = true;
+      await tester.enterText(find.byType(TextFormField), '222222');
+      await _tapSubmit(tester, 'Verify & Change Password');
+      await tester.pumpAndSettle();
+      expect(gate.calls.sublist(gate.calls.length - 2), [
+        'verifyOtpStepUp',
+        'updatePassword',
+      ]);
+      expect(
+        gate.calls.where((c) => c == 'confirmDeviceCredential'),
+        hasLength(1),
       );
       expect(find.text('Password changed!'), findsOneWidget);
       // Let the snackbar's auto-dismiss timer fire.
@@ -216,9 +244,9 @@ void main() {
     });
 
     testWidgets(
-      'dual-provider: baseline reauth, then an unsatisfied Google factor '
-      'falls back to the emailed OTP; a failed code is a retryable no-op and '
-      'a correct code completes the change',
+      'dual-provider: baseline reauth, device prompt, then the mandatory '
+      'emailed code; a failed code is a retryable no-op and a correct code '
+      'completes the change',
       (tester) async {
         final gate = _FakeGate(session: _session(google: true));
         await _pumpPage(tester, gate);
@@ -229,11 +257,12 @@ void main() {
         await _tapSubmit(tester, 'Change Password');
         await tester.pumpAndSettle();
 
-        // Baseline first, then the Google factor, then the automatic
-        // fallback to the session account's email.
+        // Baseline, device credential, then the unconditional send to the
+        // session account's email (cycle-34 ruling 3: no Google call).
         expect(gate.calls, [
           'reauthenticate',
-          'verifyGoogleReauth',
+          'deviceCredentialPromptAvailable',
+          'confirmDeviceCredential',
           'sendOtpStepUp',
         ]);
         expect(find.text('Verify & Change Password'), findsOneWidget);
@@ -256,17 +285,20 @@ void main() {
         expect(gate.calls, isNot(contains('updatePassword')));
         expect(find.text('Verify & Change Password'), findsOneWidget);
 
-        // Correct code: device prompt, then the password write.
+        // Correct code: the write tail only — no second device prompt.
         gate.otpVerified = true;
         await tester.enterText(find.byType(TextFormField), '222222');
         await _tapSubmit(tester, 'Verify & Change Password');
         await tester.pumpAndSettle();
         expect(gate.otpCodeSeen, '222222');
-        expect(gate.calls.sublist(gate.calls.length - 3), [
-          'deviceCredentialPromptAvailable',
-          'confirmDeviceCredential',
+        expect(gate.calls.sublist(gate.calls.length - 2), [
+          'verifyOtpStepUp',
           'updatePassword',
         ]);
+        expect(
+          gate.calls.where((c) => c == 'confirmDeviceCredential'),
+          hasLength(1),
+        );
         expect(find.text('Password changed!'), findsOneWidget);
         await tester.pump(const Duration(seconds: 5));
       },
@@ -274,33 +306,46 @@ void main() {
   });
 
   group('ChangePasswordPage — email/password session (cycle-31 P3)', () {
-    testWidgets('baseline reauth + device prompt run in plan order', (
-      tester,
-    ) async {
-      final gate = _FakeGate(session: _session());
-      await _pumpPage(tester, gate);
+    testWidgets(
+      'baseline reauth + device prompt + emailed code run in plan order',
+      (tester) async {
+        final gate = _FakeGate(session: _session());
+        await _pumpPage(tester, gate);
 
-      // Section label + the field's own label.
-      expect(find.text('Current Password'), findsWidgets);
-      expect(find.byType(TextFormField), findsNWidgets(2));
+        // Section label + the field's own label.
+        expect(find.text('Current Password'), findsWidgets);
+        expect(find.byType(TextFormField), findsNWidgets(2));
 
-      await _fillForm(tester);
-      await _tapSubmit(tester, 'Change Password');
-      await tester.pumpAndSettle();
+        await _fillForm(tester);
+        await _tapSubmit(tester, 'Change Password');
+        await tester.pumpAndSettle();
 
-      expect(gate.calls, [
-        'reauthenticate',
-        'deviceCredentialPromptAvailable',
-        'confirmDeviceCredential',
-        'updatePassword',
-      ]);
-      expect(
-        gate.deviceReasonSeen,
-        'Confirm your identity to change your password',
-      );
-      expect(find.text('Password changed!'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 5));
-    });
+        // Current password → device credential → OTP send → code entry →
+        // update (cycle-34 ruling 3 matrix row).
+        expect(gate.calls, [
+          'reauthenticate',
+          'deviceCredentialPromptAvailable',
+          'confirmDeviceCredential',
+          'sendOtpStepUp',
+        ]);
+        expect(
+          gate.deviceReasonSeen,
+          'Confirm your identity to change your password',
+        );
+        expect(find.text('Verify & Change Password'), findsOneWidget);
+
+        gate.otpVerified = true;
+        await tester.enterText(find.byType(TextFormField), '123456');
+        await _tapSubmit(tester, 'Verify & Change Password');
+        await tester.pumpAndSettle();
+        expect(gate.calls.sublist(gate.calls.length - 2), [
+          'verifyOtpStepUp',
+          'updatePassword',
+        ]);
+        expect(find.text('Password changed!'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 5));
+      },
+    );
 
     testWidgets('canceling the device prompt aborts with no password update', (
       tester,
@@ -318,6 +363,10 @@ void main() {
         'confirmDeviceCredential',
       ]);
       expect(gate.calls, isNot(contains('updatePassword')));
+      // Quota discipline (cycle-34 P2): a canceled device prompt must NOT
+      // consume an email send — no sendOtpStepUp, no stage advance.
+      expect(gate.calls, isNot(contains('sendOtpStepUp')));
+      expect(find.text('Verify & Change Password'), findsNothing);
       expect(
         find.text(
           'Device confirmation was canceled. Your password was not changed.',
@@ -346,30 +395,67 @@ void main() {
     });
 
     testWidgets(
-      'no screen lock degrades with a notice and the change still completes',
+      'no screen lock degrades (no prompt) and the change still completes '
+      'after the emailed code',
       (tester) async {
         final gate = _FakeGate(session: _session())..deviceAvailable = false;
-        gate.updateHold = Completer<void>();
         await _pumpPage(tester, gate);
 
         await _fillForm(tester);
         await _tapSubmit(tester, 'Change Password');
-        await tester.pump();
+        await tester.pumpAndSettle();
 
-        // The device step was skipped (no prompt call) — fail-open.
+        // The device step was skipped (no prompt call) — fail-open — and the
+        // mandatory send still ran.
         expect(gate.calls, [
           'reauthenticate',
           'deviceCredentialPromptAvailable',
+          'sendOtpStepUp',
+        ]);
+        expect(gate.calls, isNot(contains('confirmDeviceCredential')));
+
+        gate.otpVerified = true;
+        await tester.enterText(find.byType(TextFormField), '123456');
+        await _tapSubmit(tester, 'Verify & Change Password');
+        await tester.pumpAndSettle();
+        expect(gate.calls.sublist(gate.calls.length - 2), [
+          'verifyOtpStepUp',
           'updatePassword',
         ]);
-        expect(find.textContaining('no screen lock'), findsOneWidget);
-
-        gate.updateHold!.complete();
-        await tester.pumpAndSettle();
         expect(find.text('Password changed!'), findsOneWidget);
         await tester.pump(const Duration(seconds: 5));
       },
     );
+
+    testWidgets('a send failure aborts retryably: no password update, no stage '
+        'advance, no weaker-factor fallback', (tester) async {
+      final gate = _FakeGate(session: _session())
+        ..sendOtpError = Exception('send failed');
+      await _pumpPage(tester, gate);
+
+      await _fillForm(tester);
+      await _tapSubmit(tester, 'Change Password');
+      await tester.pumpAndSettle();
+
+      // The send was attempted exactly once, after the device step.
+      expect(gate.calls, [
+        'reauthenticate',
+        'deviceCredentialPromptAvailable',
+        'confirmDeviceCredential',
+        'sendOtpStepUp',
+      ]);
+      expect(gate.calls, isNot(contains('updatePassword')));
+      expect(gate.calls, isNot(contains('verifyOtpStepUp')));
+      // Cause-honest, retryable copy (cycle-34 ruling 8).
+      expect(
+        find.text("We couldn't send the code right now — try again in a bit"),
+        findsOneWidget,
+      );
+      // Still on the form — the OTP stage never opened.
+      expect(find.text('Verify & Change Password'), findsNothing);
+      expect(find.text('Change Password'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   group('ChangePasswordPage — routing and offline (cycle-31 P3)', () {

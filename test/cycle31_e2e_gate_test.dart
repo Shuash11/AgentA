@@ -434,7 +434,9 @@ void main() {
 
   group('ONLINE — second-factor matrix', () {
     testWidgets('S1 password-provider: reauth (exact typed check) → device '
-        'prompt (exact wording) → change; plan order', (tester) async {
+        'prompt (exact wording) → emailed code → change; plan order', (
+      tester,
+    ) async {
       final gate = _RecordingGate(
         session: const PasswordChangeSession(
           email: 'user@example.com',
@@ -451,11 +453,19 @@ void main() {
         'reauthenticate',
         'deviceCredentialPromptAvailable',
         'confirmDeviceCredential',
-        'updatePassword',
+        'sendOtpStepUp',
       ]);
       expect(gate.reauthEmailSeen, 'user@example.com');
       expect(gate.reauthPasswordSeen, 'OldPass123!');
       expect(gate.deviceReasonSeen, _promptReason);
+
+      // The mandatory emailed code (cycle-34 ruling 3) gates the write.
+      gate.otpVerified = true;
+      await tester.enterText(find.byType(TextFormField), '246810');
+      await _tapSubmit(tester, 'Verify & Change Password');
+      await tester.pumpAndSettle();
+
+      expect(gate.otpCodeSeen, '246810');
       expect(gate.newPasswordSeen, 'NewPass456!');
       expect(find.text('Password changed!'), findsOneWidget);
       await _shot(tester, 's01_password_provider_success');
@@ -465,10 +475,9 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
     });
 
-    testWidgets('S2 google-linked: google factor fails → AUTOMATIC OTP '
-        'fallback (session email) → correct code → change; session KEPT', (
-      tester,
-    ) async {
+    testWidgets('S2 google-linked: mandatory emailed code sent '
+        'unconditionally (no Google call) → correct code → change; session '
+        'KEPT', (tester) async {
       final gate = _RecordingGate(
         session: const PasswordChangeSession(
           email: 'user@example.com',
@@ -481,33 +490,37 @@ void main() {
       await _tapChangePassword(tester);
       await tester.pumpAndSettle();
 
+      // No Google factor anywhere in the decisive chain (cycle-34 ruling 3);
+      // device credential first, then the unconditional send.
       expect(gate.calls, [
         'reauthenticate',
-        'verifyGoogleReauth',
+        'deviceCredentialPromptAvailable',
+        'confirmDeviceCredential',
         'sendOtpStepUp',
       ]);
+      expect(gate.calls, isNot(contains('verifyGoogleReauth')));
       expect(gate.otpEmailSeen, 'user@example.com');
       expect(
         find.text(
-          "We couldn't verify with Google. Instead, we emailed a 6-digit "
-          'code to user@example.com.',
+          'We emailed a 6-digit code to user@example.com. '
+          'Enter it below to finish.',
         ),
         findsOneWidget,
       );
-      await _shot(tester, 's02_otp_fallback_code_entry');
+      await _shot(tester, 's02_otp_code_entry');
 
       gate.otpVerified = true;
       await tester.enterText(find.byType(TextFormField), '654321');
       await _tapSubmit(tester, 'Verify & Change Password');
       await tester.pumpAndSettle();
 
+      // One device prompt per submit; the write tail runs after the code.
       expect(gate.calls, [
         'reauthenticate',
-        'verifyGoogleReauth',
-        'sendOtpStepUp',
-        'verifyOtpStepUp',
         'deviceCredentialPromptAvailable',
         'confirmDeviceCredential',
+        'sendOtpStepUp',
+        'verifyOtpStepUp',
         'updatePassword',
       ]);
       expect(gate.otpCodeSeen, '654321');
@@ -595,36 +608,45 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
     });
 
-    testWidgets('S5 google factor satisfied BEFORE updatePassword (order '
-        'assert)', (tester) async {
+    testWidgets('S5 google-only: emailed code REQUIRED before updatePassword '
+        '(order assert)', (tester) async {
       final gate = _RecordingGate(
         session: const PasswordChangeSession(
           email: 'user@example.com',
           isGoogleLinked: true,
           hasPassword: false,
         ),
-      )..googleVerified = true;
+      );
       await _pushPage(tester, online: true, gate: gate);
       expect(find.text('Current Password'), findsNothing);
       await _fillForm(tester);
       await _tapChangePassword(tester);
       await tester.pumpAndSettle();
 
+      // Device then the unconditional send; the Google factor is gone.
       expect(gate.calls, [
-        'verifyGoogleReauth',
         'deviceCredentialPromptAvailable',
         'confirmDeviceCredential',
-        'updatePassword',
+        'sendOtpStepUp',
       ]);
+      expect(gate.calls, isNot(contains('verifyGoogleReauth')));
+      // The write cannot happen before the code verifies.
+      expect(gate.calls, isNot(contains('updatePassword')));
+
+      gate.otpVerified = true;
+      await tester.enterText(find.byType(TextFormField), '135792');
+      await _tapSubmit(tester, 'Verify & Change Password');
+      await tester.pumpAndSettle();
+
       expect(
-        gate.calls.indexOf('verifyGoogleReauth'),
+        gate.calls.indexOf('verifyOtpStepUp'),
         lessThan(gate.calls.indexOf('updatePassword')),
       );
       expect(find.text('Password changed!'), findsOneWidget);
-      await _shot(tester, 's05_google_before_update');
+      await _shot(tester, 's05_otp_before_update');
       _runLog.add(
-        'S5 PASS googleBeforeUpdate='
-        '${gate.calls.indexOf('verifyGoogleReauth')}'
+        'S5 PASS otpBeforeUpdate='
+        '${gate.calls.indexOf('verifyOtpStepUp')}'
         '<${gate.calls.indexOf('updatePassword')}',
       );
       await tester.pump(const Duration(seconds: 5));

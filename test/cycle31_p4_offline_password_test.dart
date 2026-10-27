@@ -148,6 +148,19 @@ class _FakeGate extends PasswordChangeFactorGate {
     return true;
   }
 
+  // Cycle-34 ruling 12: the online control case runs the mandatory
+  // emailed-code step, so the fake gate records it (p3's stub shape).
+  @override
+  Future<void> sendOtpStepUp(String email) async {
+    calls.add('sendOtpStepUp');
+  }
+
+  @override
+  Future<bool> verifyOtpStepUp(String email, String code) async {
+    calls.add('verifyOtpStepUp');
+    return true;
+  }
+
   @override
   Future<void> updatePassword(String newPassword) async {
     calls.add('updatePassword');
@@ -789,10 +802,23 @@ void main() {
         await _tapSubmit(tester);
         await tester.pumpAndSettle();
 
+        // Cycle-34 ruling 3: the emailed 6-digit code is the mandatory final
+        // verifier for every online class — the flow pauses on code entry.
+        expect(find.text('Verify & Change Password'), findsOneWidget);
+        await tester.enterText(find.byType(TextFormField), '123456');
+        await tester.tap(
+          find.widgetWithText(ElevatedButton, 'Verify & Change Password'),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        await tester.pumpAndSettle();
+
         expect(gate.calls, [
           'reauthenticate',
           'deviceCredentialPromptAvailable',
           'confirmDeviceCredential',
+          'sendOtpStepUp',
+          'verifyOtpStepUp',
           'updatePassword',
         ]);
         expect(service.calls, isEmpty);
