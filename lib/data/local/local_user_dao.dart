@@ -106,6 +106,29 @@ class LocalUserDao {
     }
   }
 
+  /// Compare-and-swap password-hash update for a never-synced offline
+  /// account (cycle-31 P4), mirroring [upgradePasswordHash] with one extra
+  /// invariant in the guard: the row must still be `is_synced = 0`.
+  ///
+  /// A concurrent sync flips `is_synced` (and remaps `local_id`), so this
+  /// update can never overwrite the credential of a row that no longer lives
+  /// on the device alone. Returns the number of rows updated (0 = row
+  /// absent, synced, or its hash no longer equals [expectedHash] — the
+  /// caller must not claim success).
+  Future<int> updateUnsyncedPasswordHash({
+    required String localId,
+    required String expectedHash,
+    required String newHash,
+  }) async {
+    final db = await _dbHelper.database;
+    return db.update(
+      'pending_signups',
+      {'password': newHash, 'password_salt': ''},
+      where: 'local_id = ? AND password = ? AND is_synced = 0',
+      whereArgs: [localId, expectedHash],
+    );
+  }
+
   Future<List<Map<String, dynamic>>> getPendingSignups() async {
     final db = await _dbHelper.database;
     return await db.query(

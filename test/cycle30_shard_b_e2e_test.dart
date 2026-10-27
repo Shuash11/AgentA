@@ -60,6 +60,21 @@ Future<void> _createSchema(Database db) async {
   ''');
 }
 
+/// Minimal session gate for this shard: simulates the signed-in user the
+/// cycle-30 state asserts. The offline block fires before any factor call,
+/// so no other gate method is exercised (cycle-31 P4 changed the page's
+/// routing: only a session-bearing submit reaches the connectivity block).
+class _SignedInGate extends PasswordChangeFactorGate {
+  const _SignedInGate();
+
+  @override
+  PasswordChangeSession? loadSession() => const PasswordChangeSession(
+    email: 'user@example.com',
+    isGoogleLinked: false,
+    hasPassword: true,
+  );
+}
+
 Widget _wrap({required Widget home, required ConnectivityCubit cubit}) {
   return MultiBlocProvider(
     providers: [
@@ -148,7 +163,10 @@ void main() {
       );
 
       await tester.pumpWidget(
-        _wrap(home: const ChangePasswordPage(), cubit: cubit),
+        _wrap(
+          home: const ChangePasswordPage(factorGate: _SignedInGate()),
+          cubit: cubit,
+        ),
       );
       await tester.pump();
 
@@ -162,7 +180,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      // Exact notice copy from change_pass_page.dart:35-36.
+      // Exact copy of the kept offline-connectivity block in the page.
       expect(
         find.text(
           'Changing password needs internet. Your current password still works offline.',

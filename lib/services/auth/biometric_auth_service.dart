@@ -105,6 +105,47 @@ class BiometricAuthService {
     }
   }
 
+  /// Confirms the device credential (biometric, or the device PIN/pattern/
+  /// passcode) before a sensitive step-up action.
+  ///
+  /// local_auth 3.x: `biometricOnly: false` lets the platform fall back to
+  /// the device credential — the "phone's password" factor — and
+  /// `persistAcrossBackgrounding` keeps the prompt alive when the app is
+  /// backgrounded (the same shape [enroll] and [unlock] use).
+  ///
+  /// [localizedReason] is the wording shown in the system prompt; callers
+  /// pass step-up wording that is distinct from the enroll/unlock strings
+  /// (e.g. "Confirm your identity to change your password").
+  ///
+  /// Returns true only when the device confirmed the user. Nothing is
+  /// persisted: no token, no secret, no enrollment state — the method asks
+  /// the platform and reports the outcome. A platform error degrades to
+  /// false; the caller owns the fail-open policy.
+  static Future<bool> confirmDeviceCredential({
+    required String localizedReason,
+  }) async {
+    try {
+      final ok = await _auth.authenticate(
+        localizedReason: localizedReason,
+        biometricOnly: false,
+        persistAcrossBackgrounding: true,
+      );
+      return ok;
+    } on LocalAuthException catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+          '[Biometric] confirmDeviceCredential unavailable: ${e.code}',
+        );
+      }
+      return false;
+    } catch (e, stack) {
+      if (kDebugMode) {
+        debugPrint('[Biometric] confirmDeviceCredential failed: $e | $stack');
+      }
+      return false;
+    }
+  }
+
   static Future<void> disable() async {
     try {
       await _storage.delete(key: _enabledKey);

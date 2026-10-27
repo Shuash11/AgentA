@@ -570,6 +570,204 @@ class AuthService {
     return login(email, password);
   }
 
+  // ── Second-factor layer for password change (cycle-31 · phase P2) ─────
+  //
+  // Service-layer building blocks for the account-class matrix in
+  // plans/cycle-31-second-factor-password-change.md. No UI here: phase P3
+  // wires these into the change-password flow.
+
+  /// Provider id of a Google-linked Supabase identity.
+  static const String _googleProvider = 'google';
+
+  /// True when [user] is linked to a Google account.
+  ///
+  /// Detection rule (P1-verified, binding):
+  ///  * primary — [User.identities] holds an identity whose provider is
+  ///    `google`;
+  ///  * secondary — [User.appMetadata]['provider'] is `google`.
+  ///
+  /// Known failure mode (documented, not hidden): when an account that was
+  /// registered with email/password later signs in with Google, Supabase can
+  /// create a SECOND user instead of linking the identities. Such a session
+  /// carries no Google identity and classifies as email/password here, which
+  /// selects the STRONGER factor set (current password + device credential).
+  /// The failure direction is safe; it is still reported, not hidden.
+  static bool isGoogleLinked(User user) {
+    final identities = user.identities;
+    if (identities != null) {
+      for (final identity in identities) {
+        if (identity.provider == _googleProvider) return true;
+      }
+    }
+    return user.appMetadata['provider'] == _googleProvider;
+  }
+
+  /// Test seam for [verifyGoogleReauth].
+  ///
+  /// When set, the email of the account that confirmed the device comes from
+  /// this callback instead of the google_sign_in plugin. The plugin's account
+  /// type has a private constructor, so the plugin call itself cannot be
+  /// faked without adding a dev dependency. Production leaves this null.
+  @visibleForTesting
+  static set googleAccountEmailForTest(Future<String?> Function()? value) {
+    _googleAccountEmailForTest = value;
+  }
+
+  static Future<String?> Function()? _googleAccountEmailForTest;
+
+  /// Verifies that the Google account confirming this device is the account
+  /// that owns the current session — the Google factor of the cycle-31
+  /// account-class matrix.
+  ///
+  /// Returns the authenticated [GoogleSignInAccount] on success. Every other
+  /// outcome is a typed [GoogleSignInFailure] the caller can map to a
+  /// fallback trigger:
+  ///  * `canceled` — the user dismissed the account chooser;
+  ///  * `unknownError` (this also covers "no credential returned"),
+  ///    `interrupted`, `clientConfigurationError`,
+  ///    `providerConfigurationError`, `uiUnavailable` — the platform refused
+  ///    the request;
+  ///  * `unsupported` — the platform cannot show the interactive prompt;
+  ///  * `not_configured` / `init_failed` — the Google client is unusable;
+  ///  * `email_mismatch` — the confirmed account is not the session account.
+  ///
+  /// google_sign_in 7.x throws for every non-success outcome ("or throws a
+  /// GoogleSignInException for any other outcome"), so a canceled or silent
+  /// result can never be read as a satisfied factor.
+  ///
+  /// The production path never returns null: success returns the account and
+  /// every failure throws. The nullable type belongs to the P1-fixed
+  /// signature; the only null comes from the test seam, which has no plugin
+  /// account object to hand back.
+  static Future<GoogleSignInAccount?> verifyGoogleReauth(
+    String expectedEmail,
+  ) async {
+    final injectedEmail = _googleAccountEmailForTest;
+    if (injectedEmail != null) {
+      final email = await injectedEmail();
+      if (email == null) return null;
+      _assertGoogleAccountEmail(email, expectedEmail);
+      return null;
+    }
+
+    final GoogleSignInAccount account;
+    try {
+      await ensureGoogleInitialized();
+      if (!GoogleSignIn.instance.supportsAuthenticate()) {
+        throw const GoogleSignInFailure(
+          code: 'unsupported',
+          detail: 'Google cannot show the verify-it\'s-you prompt here',
+          hint:
+              'Google re-authentication is unavailable on this platform. Use the emailed OTP step-up instead.',
+        );
+      }
+      account = await _authenticateWithGoogle();
+    } on GoogleSignInFailure {
+      rethrow;
+    } on UnsupportedError catch (e) {
+      _log('[AuthService] verifyGoogleReauth unsupported: $e');
+      throw const GoogleSignInFailure(
+        code: 'unsupported',
+        detail: 'Google re-authentication is not supported on this platform',
+        hint:
+            'Google re-authentication is unavailable on this platform. Use the emailed OTP step-up instead.',
+      );
+    } catch (e, stack) {
+      _log('[AuthService] verifyGoogleReauth failed: $e | $stack');
+      throw GoogleSignInFailure(
+        code: 'unknownError',
+        detail: GoogleSignInFailure.truncateDetail(e.toString()),
+        hint:
+            'Google re-authentication failed. Use the emailed OTP step-up instead.',
+      );
+    }
+
+    _assertGoogleAccountEmail(account.email, expectedEmail);
+    return account;
+  }
+
+  /// Throws a typed failure when the confirmed Google account is not the
+  /// account that owns the current session.
+  ///
+  /// Email values are never logged (identity data) — only the outcome.
+  static void _assertGoogleAccountEmail(
+    String accountEmail,
+    String expectedEmail,
+  ) {
+    final actual = accountEmail.trim().toLowerCase();
+    final expected = expectedEmail.trim().toLowerCase();
+    if (actual.isEmpty || actual != expected) {
+      _log(
+        '[AuthService] verifyGoogleReauth rejected: the confirmed Google '
+        'account is not the signed-in account',
+      );
+      throw const GoogleSignInFailure(
+        code: 'email_mismatch',
+        detail:
+            'Google re-authentication confirmed a different account than the signed-in one',
+        hint:
+            'The Google account that confirmed this device does not match the account you are signed in to. Sign in with the matching Google account, or use the emailed OTP step-up.',
+      );
+    }
+  }
+
+  // ── Email-OTP step-up (the fallback factor) ──────────────────────────
+
+  /// Sends a one-time code to [email] for the password-change step-up.
+  ///
+  /// Fallback factor of the cycle-31 matrix: used when the Google factor is
+  /// unavailable (plugin failure, unsupported platform, or an account-email
+  /// mismatch). [shouldCreateUser] must stay `false` — a step-up code must
+  /// never create an account (same rule as [sendOtpForReset]).
+  ///
+  /// The code is delivered to the inbox and verified by [verifyOtpStepUp]; it
+  /// never passes through the app's logs.
+  static Future<void> sendOtpForStepUp(
+    String email, {
+    bool shouldCreateUser = false,
+  }) async {
+    _guardBackendReady('sendOtpForStepUp');
+    await _auth.signInWithOtp(
+      email: email.trim(),
+      shouldCreateUser: shouldCreateUser,
+    );
+  }
+
+  /// Verifies the emailed step-up code for [email].
+  ///
+  /// Returns true when Supabase accepted the code (a session was returned for
+  /// the account); a rejected or expired code returns false so the caller
+  /// aborts the password change. The code value is never logged — only the
+  /// Supabase error code.
+  ///
+  /// Note: `verifyOTP` with [OtpType.email] also signs the account in. The
+  /// user already holds a session in this flow; phase P3 decides whether the
+  /// refreshed session is kept (plan cycle-31, phase P3).
+  static Future<bool> verifyOtpStepUp(String email, String token) async {
+    _guardBackendReady('verifyOtpStepUp');
+    if (token.trim().isEmpty) {
+      _log('[AuthService] verifyOtpStepUp rejected: empty code');
+      return false;
+    }
+    try {
+      final res = await _auth.verifyOTP(
+        type: OtpType.email,
+        email: email.trim(),
+        token: token.trim(),
+      );
+      if (res.user == null) {
+        _log('[AuthService] verifyOtpStepUp failed: no user returned');
+        return false;
+      }
+      return true;
+    } on AuthException catch (e) {
+      // Log the error CODE only — never the message (it can echo the input)
+      // and never the code itself.
+      _log('[AuthService] verifyOtpStepUp rejected: code=${e.code}');
+      return false;
+    }
+  }
+
   static final RegExp _emailPattern = RegExp(
     r"^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$",
   );
