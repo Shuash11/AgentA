@@ -1,0 +1,273 @@
+# Cycle 31 — Second-factor gate in front of password change, per account class (audit output: the user's password-change OTP requirement)
+
+**status:** active — P1-P5 implemented; e2e run + single Reviewer PASS complete (2026-10-27); push APPROVED (2026-10-27, final governance row); moves to plans/done/ only after post-push CI + release cut conclude green (Post-push CI watch section)
+**created:** 2026-10-26
+**created by:** Adviser (user requirement verbatim: "when changing the password the system must ask for otp from google … phones password or shared preference … googles otp")
+**repo:** C:\projects\aiproject (AgentA) — Flutter, branch main; predecessor `plans/done/cycle-30-recovery-code-gate-removal.md` (closed green at `f5e3fad`)
+**level:** **3 (Complex)** — touches the auth factor set for password change (the same observable signal as cycle-30), adds a new state to an existing state matrix (an offline password-change flow that does not exist today), and spans more than five files.
+**version bump:** **minor `1.4.1+1 → 1.5.0+1` — user-directed 2026-10-26** ("then bump the version okey so that i can access that"), overriding the original none-this-cycle default. Reason: N1 is a new user-facing feature (`docs/versioning.md:32`: new user-facing feature → minor; example 1.1.0 → 1.2.0); no breaking/data-storage migration, so no major. Build number restarts at `+1` per the release precedents (1.4.0+1 = commit 336c5f9, 1.4.1+1 = commit 319d8cd) and §2 ("build number can restart per release"); the build number is never compared (`docs/versioning.md:16-17`). **FINAL; the push agent must not re-decide.** Sequence position + tag-cut mechanics: Push guidance (below).
+
+## Ground truth (verified 2026-10-26)
+
+All file:line references below were read this date.
+
+**The current password-change gate (single UI entry, two updatePassword paths):**
+
+- Entry: `profilepage.dart:409-413` — the "Change Password" tile pushes `ChangePasswordPage` directly (cycle-30 removed the recovery-code gate).
+- `change_pass_page.dart:30-54` — `_submit()`: blocks offline first (`:32-39`), then `AuthService.reauthenticate(user.email!, currentPassword)` (`:50-53`) + `AuthService.updatePassword(new)` (`:54`). Requires online + a Supabase session (`:46-48` — throws `Not logged in` when `AuthService.currentUser` is null).
+- `auth_service.dart:518-521` — `updatePassword` = `_auth.updateUser(UserAttributes(password: ...))`. `:565-571` — `reauthenticate` = `login` = `signInWithPassword` (`:118-137`).
+- Path 2 to updatePassword: `auth_service.dart:548-563` — `resetPasswordWithOtp` (forgot-password): `signInWithOtp(shouldCreateUser: false)` (`:538-541`) → `verifyOTP(type: email)` (`:554-558`) → `updatePassword` (`:562`). Cycle-30-verified green.
+
+**Account classes that actually exist:**
+
+| Class | Where it lives | Verified evidence |
+|---|---|---|
+| Google-linked Supabase account | Supabase; local row `provider: 'google'`, NEVER unlocks offline | `login.dart:380-396` (C3: google-provider rows denied offline); `auth_service.dart:444-471` `signInWithGoogle` → Supabase `signInWithIdToken(provider: OAuthProvider.google)`; `pubspec.yaml:56` `google_sign_in: ^7.2.0` |
+| Email/password Supabase account | Supabase + local row (usually `is_synced = 1`) with Argon2id hash | `pubspec.yaml:49` pointycastle; `password_hasher.dart:33-36` (Argon2id PHC); `login.dart:407-413` local verify |
+| Offline-created, never synced | Local SQLite `pending_signups` row, `is_synced = 0`, provider `'password'`, Argon2id hash, NO Supabase user | `local_user_dao.dart:28-38` (row shape); `login.dart:475-585` `_tryClaimOfflineAccount` (proof = local Argon2id hash `:488-500`) |
+
+**Detection signals (verified in pinned gotrue 2.27.3, pub cache):**
+
+- `User.identities` (`List<UserIdentity>?`) and `User.appMetadata` exist (`gotrue-2.27.3/lib/src/types/user.dart:8,29`); `UserIdentity.provider` exists (`user.dart` — `class UserIdentity` block). **Zero current usage** of either in `lib/` (grep-verified) — online Google detection must be added.
+- Local provider signal already persisted: `SessionManager` stores `session_provider` in FlutterSecureStorage (`session_manager.dart:19,33,44`); `LocalUserDao` rows carry `provider` + `is_synced` (`local_user_dao.dart:36-37`).
+- **Discovery:** `UserAttributes.currentPassword` EXISTS in the pinned client (`gotrue-2.27.3/lib/src/types/user_attributes.dart` — serialized as `current_password`; doc comment: server-enforced only when `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_CURRENT_PASSWORD` is enabled). This upgrades cycle-30's R6 from UNVERIFIED to **client-verified**; server flag is Dashboard/cloud config.
+
+**Device-credential machinery already in the stack ("the phone's password"):**
+
+- `biometric_auth_service.dart:37-41,76-80` — `local_auth` `authenticate(biometricOnly: false, persistAcrossBackgrounding: true)`. Per pub.dev local_auth 3.0.2: "by default also allows fallback to pin, pattern, or passcode" — the device credential IS already the fallback channel this app uses.
+- `login.dart:814-834` — biometric unlock consumer (`BiometricAuthService.unlock()` → `SessionManager.saveSession`).
+- Enrollment state + uid binding persist in FlutterSecureStorage (`biometric_auth_service.dart:6-7,43-44`) — Keystore-backed, NOT plaintext SharedPreferences.
+
+**What "shared preference" maps to — anti-pattern ruling (recorded, binding):** a plaintext secret in SharedPreferences is prohibited practice (NIST 800-63B-4 requires authenticators stored in hashed/protected form; the app's own C2 ruling removed the plaintext password vault from SessionManager — `session_manager.dart:94-99`). Compliant equivalents already present: FlutterSecureStorage (Keystore-backed; sessions + biometric binding) and the Argon2id-hashed local credential. The recovery code stays a stored account-ownership artifact per cycle-30's ruling and is **NOT** reintroduced as a gate (cycle-30 R1/R5: client-side unsalted-SHA-256 compare was the weak check just removed; `user_repository.dart:96-98` is now consumer-less by design).
+
+**Scope discovery (drives clarification Q2):** NO password change works offline today. `change_pass_page.dart:32-39` blocks offline with a notice; an unsynced offline account has no Supabase session so `:46-48` throws before any factor check. The user's requirement clause for never-synced accounts therefore implies **building a new offline password-change flow**, not merely gating an existing one.
+
+**Rate-limit reuse:** `OfflineLoginGuard` (`offline_login_guard.dart:10-13,44-58`) — per-email failure counting, 5-attempt lockout, wipe at 10 — is the existing local brute-force control for password-provider rows.
+
+## Research citations (web-research decision: SEARCH REQUIRED — executed 2026-10-26)
+
+The advice depends on external, time-sensitive standards and vendor behavior, so the search ran. Sources fetched and what each supports:
+
+1. **OWASP Authentication Cheat Sheet** (cheatsheetseries.owasp.org, fetched 2026-10-26) —
+   - *"Change Password Feature: … The user is authenticated with an active session. Current password verification."* → the current-password reauthenticate (`change_pass_page.dart:50-53`) is the baseline and must be KEPT wherever a password exists; the new factor stacks on top, it does not replace it.
+   - *"Require Re-authentication for Sensitive Features"* + *"Re-authentication Mechanisms: … Multi-Factor Authentication (MFA): Require an additional layer of verification for sensitive actions or events; Bound Authenticators: Require an authenticator already bound to the account, such as the current password or a passkey."* → a per-account-class second factor is endorsed best practice; the device credential and the bound Google account both qualify as bound authenticators.
+   - *"Implementation Recommendations: Minimize User Friction"* → one prompt, not a stack of prompts, per submit.
+2. **NIST SP 800-63B-4** (pages.nist.gov, fetched 2026-10-26) —
+   - AAL2: *"Proof of possession and control of two distinct authentication factors is required"*; two single-factor authenticators = one **physical authenticator** + password or biometric comparison → current-password (knowledge) + device credential (possession) is a conforming pair for the change operation.
+   - *"A biometric characteristic is not recognized as an authenticator by itself… local verification of biometric factors … is preferred over central biometric factor comparison"* → device-local verification via `local_auth` is the preferred form.
+   - **"Email SHALL NOT be used for out-of-band authentication because it may be vulnerable to: access using only a password; interception in transit or at intermediate mail servers; rerouting attacks."** with the carve-out *"Confirmation codes that are sent to validate email addresses or are issued as recovery codes … are not authentication processes and not affected by the above prohibition."* → the emailed-OTP reading of "Google's OTP" would place a NEW factor on prohibited ground (the existing forgot-password use stays lawful under the recovery carve-out). This is why the recommended Google factor is the device-bound Google re-auth, with email OTP only as fallback.
+3. **Supabase — Passwordless email sign-in** (supabase.com/docs/guides/auth/auth-email-passwordless, fetched 2026-10-26) — `signInWithOtp(shouldCreateUser: false)` sends the code; `verifyOtp(email, token, type: 'email')` returns a session; default 60-second request rate limit and 1-hour expiry; OTP-vs-magic-link is template-driven (`{{ .Token }}` in the Magic Link template — already configured for this project, evidenced by the working forgot-password flow). → the fallback factor reuses a verified mechanism; `verifyOTP`'s session-creating side effect is a known, already-handled wrinkle (`forgot_password.dart:114-120`).
+4. **local_auth 3.0.2** (pub.dev/packages/local_auth, fetched 2026-10-26) — *"The `authenticate()` method uses biometric authentication when possible, but by default also allows fallback to pin, pattern, or passcode."* → the "phone's password" is implementable today with the plugin already pinned (`pubspec.yaml:57`), no new dependency.
+5. **Android device-credential doc** (developer.android.com/training/sign-in/biometric-auth) — fetch timed out twice 2026-10-26; **UNVERIFIED from the live page**. The local_auth README (source 4) and the app's own M17 ruling (`biometric_auth_service.dart:34-36,50-59`) cover the same behavior (BiometricPrompt with device-credential fallback); the Reviewer may retry the fetch.
+
+**Search-or-skip declaration:** searched (4 live sources, 1 timeout recorded); no claim below rests on unverified external facts without being marked.
+
+## Interpretation ruling (binding)
+
+**"Google's OTP" — two implementable readings, one recommended:**
+
+| Reading | What it is | Security posture | Implementation surface |
+|---|---|---|---|
+| **A. Google Sign-In re-auth (RECOMMENDED default)** | The device-bound Google "verify it's you" prompt via the already-pinned `google_sign_in` 7.2.0 — proof the device holder controls the linked Google account | Device-bound possession factor; NIST-conformant (physical authenticator + activation); no email-delivery dependency | Reuses `AuthService._authenticateWithGoogle` / `_requireIdToken` (`auth_service.dart:278-364`); verify returned account email matches the session email. Known brittle history in this codebase (`[16] reauth failed` recovery dance, `auth_service.dart:258-276`) — P1 must verify on-device re-auth semantics (prompt vs silent cached return) before P2 commits |
+| **B. Emailed 6-digit code to the account's Gmail** (the literal "OTP") | Supabase email OTP via `signInWithOtp` + `verifyOTP` — the cycle-30-verified forgot-password mechanism | NIST-**prohibited** as an authentication factor (recovery carve-out does not extend to step-up auth); session-creating side effect must be managed | Reuses `sendOtpForReset`/`resetPasswordWithOtp` patterns verbatim |
+
+**Ruling:** both are implementable; **A is the default, B is the automatic fallback** (re-auth unavailable: plugin failure, no Play Services, misconfiguration) — so an "OTP from Google" (emailed to the Gmail inbox) still exists in the system for every Google-linked account. The user's literal wording and NIST compliance are both satisfied. Q1 below asks the user to confirm or veto.
+
+**"Phone's password"** → device credential via `local_auth` `authenticate(biometricOnly: false)` — already the app's pattern for enroll/unlock; **no new dependency, no new permission**.
+
+**"Shared preference"** → ruled as the secure-storage-backed local binding, NOT plaintext SharedPreferences (anti-pattern ruling in Ground truth). Concretely: the existing FlutterSecureStorage biometric/uid binding, and for offline accounts the Argon2id-hashed local credential (the knowledge factor). If the user literally wants a SharedPreferences secret, the compliant equivalent is FlutterSecureStorage — already in place.
+
+**The recovery code is NOT a factor here.** Cycle-30 kept it as a stored account-ownership artifact for a *future unauthenticated recovery flow*; making it a password-change gate would re-add the 30-bit unsalted-SHA-256 client-side compare that cycle-30 removed with evidence. This ruling stands unless the user overrules it explicitly.
+
+**Final second-factor matrix (account class → factor chain at password change):**
+
+| Account class (detection) | Factor chain |
+|---|---|
+| **Google-linked** (online; `currentUser.identities` contains `provider == 'google'` or `appMetadata['provider'] == 'google'`) | 1. Google re-auth (device-bound; **best-effort-interactive** per P1/N5, Adviser-accepted 2026-10-26 — the plugin throws on cancel/failure but cannot guarantee a visible prompt; the OS/SDK Credential Manager decides. Verified in pub cache: `google_sign_in.dart:527-541` "or throws a GoogleSignInException for any other outcome"; `google_sign_in_android-7.2.17/lib/google_sign_in_android.dart:84-104` — `useButtonFlow: true`, `throwForNoAuth: true`, null credential → throw, and the SDK's own comment "Attempt to authorize with minimal interaction") → 2. automatic email-OTP fallback on the P1-recorded triggers (throws / `supportsAuthenticate()==false` / returned email ≠ session email / no Play Services). **Device-credential co-factor (N5 pairing ruling):** the Google result is paired with the device credential so a canceled/silent Google result can never end in a zero-factor pass; a canceled Google auto-falls-back to the emailed OTP (a real factor, no screen lock needed). No screen lock → degrade per the recorded fail-open policy. **Residual, documented and accepted:** a silent Google resolve on a screen-lock-free device leaves Google-account control as the sole factor — strictly additive vs today's baseline (no password ⇒ no change path at all). Current-password field shown only when the account has a password (dual-provider); hidden for Google-only accounts (no password exists — today they cannot pass `reauthenticate` at all). |
+| **Email/password online, not Google-linked** | Current-password reauthenticate (KEPT — OWASP baseline) + device-credential prompt. If the device has no screen lock (`noCredentialsSet` / not supported), degrade to current-password-only with an explanatory notice (fail-open documented; P1 decides the final policy — see P1 decision item 4). |
+| **Offline-created, never synced** (local row `is_synced = 0`, provider `'password'`) | NEW offline flow: current local password (Argon2id verify = the local knowledge factor) + device-credential prompt when the device has one; then re-hash with `PasswordHasher.hashPassword` and update the row (compare-and-swap per the existing `tryUpgradePasswordHash` pattern, `local_user_dao.dart:71-107`); reuse `OfflineLoginGuard` rate-limiting. |
+
+**Stack-or-replace ruling:** the second factor **stacks on top of** current-password reauthentication wherever a current password exists (OWASP requires it; the public-computer abuse case it cites is exactly the threat a second factor answers). It **replaces** the current-password step only where no password exists (Google-only accounts). This satisfies the user's requirement without weakening the baseline.
+
+## User clarification needed (exact questions for the Orchestrator to put to the user)
+
+The audit resolves the requirement into two genuine product choices. Recommended defaults are binding for delegation **unless the user answers otherwise**; P1 consumes the answers (or defaults) as the design of record.
+
+- **Q1 — "Google's OTP" form.** *"When a Google-linked account changes its password, should verification be (A) a Google sign-in prompt on the device — 'verify it's you', protected by the phone's own screen lock [RECOMMENDED: device-bound, instant, no email needed, standards-compliant], or (B) a 6-digit code emailed to your Gmail that you type in [the literal OTP; slower; security standards discourage email codes for this purpose]? Recommended default: A, with B as the automatic fallback whenever the Google prompt is unavailable."*
+- **Q2 — offline password change (scope confirmation).** *"Today, changing a password requires internet — even for accounts that were created offline and never synced. Your requirement implies a NEW offline change flow for those accounts (verify current password + phone unlock on the device, update the local account). Confirm you want this built. Recommended default: yes, build it."*
+
+**No other clarification is needed.** "Phone's password", "shared preference", stack-vs-replace, and the recovery-code exclusion are ruled above on code evidence and cited standards.
+
+**RATIFIED 2026-10-26:** the user approved both recommended defaults ("okey", given a plain-language summary of each question — the user may still override specifics later, which re-opens the plan). Design of record for P1: **Q1 = A** (device Google Sign-In re-auth prompt) with **B** (emailed OTP) as the automatic fallback; **Q2 = yes** — the offline password-change flow is built (P4).
+
+## Findings backlog (Level 3 — ranked, uncapped)
+
+| ID | Title | Category | Evidence | Responsible | Check |
+|---|---|---|---|---|---|
+| **N1** | **Second-factor gate per account class at password change. SELECTED as the cycle-31 task** (matrix above). | security / UX | `change_pass_page.dart:30-54`; matrix section | middle-end | **EXPENSIVE** |
+| N2 | Supabase automatic user-linking behavior must be verified for the Google-detection edge (email-registered user later signing in with Google): does `identities` gain the google identity on the SAME user, or does a second user exist? Affects detection correctness, not the gate logic. | security | `auth_service.dart:409-471`; P1 verification item | middle-end (P1) | CHEAP (verification) |
+| N3 | `change_pass_page.dart:174-178` new-password validator (≥6 chars, no composition rule) is weaker than `AuthService.validatePassword` (`auth_service.dart:588-597`: ≥8, letter+digit). Inconsistent policy on the same surface. Candidate micro-fix the P1 design may pull into P3; default: backlog. | security / consistency | cited lines | middle-end | EXPENSIVE if pulled in |
+| N4 | `docs/versioning.md:77` says "Current version: `1.2.5+1`" while `pubspec.yaml:4` says `1.4.1+1` — versioning doc drifted. Cheap docs fix for the next docs pass; does NOT gate this cycle. | docs | cited lines | middle-end-light | CHEAP |
+| N5 | Google re-auth on-device semantics (prompt vs silent cached return in google_sign_in 7.2.0) unverified — P1 must read the plugin source/docs and, if needed, flag a device-proof requirement for the e2e phase. | security / logic | `auth_service.dart:278-347`; P1 verification item | middle-end (P1) | CHEAP (verification) |
+| R2 | Forgot-password post-reset notification email (carried, cloud-dependent). | security | cycle-30 backlog | user action / backend | EXPENSIVE (cloud) |
+| R3 | Cross-device session invalidation after reset (carried; cycle-31 pre-rank — SUPERSEDED by the user's explicit requirement, stays queued after this cycle). | security | cycle-30 backlog | middle-end | EXPENSIVE |
+| R4 | `signInWithOtp` silent-success for non-existent emails — still UNVERIFIED (pinned gotrue 2.27.3 client source cannot determine server behavior). Relevant again: this cycle's fallback factor calls the same API. | security / UX | `forgot_password.dart:67-86`; cycle-30 R4 | middle-end | CHEAP (verification) |
+| R5 | Recovery-code storage remains unsalted fast-hash, client-verified (H8/F5 standing cloud-blocked escalation). Unchanged by cycle-31 (the code gains no new consumer). | security | `recovery_code_hasher.dart:12-14`; `user_repository.dart:82-94` | backend / user action | EXPENSIVE (cloud) |
+| R6 | `updateUser(password, currentPassword)` — client support now VERIFIED (pinned gotrue 2.27.3 `UserAttributes.currentPassword`); server enforcement needs the `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_CURRENT_PASSWORD` flag (Dashboard/cloud). Alternative to the client-side `reauthenticate` pair; NOT required by the user's requirement. | security | gotrue `user_attributes.dart`; cycle-30 R6 | middle-end / user action | EXPENSIVE (cloud) |
+| R7 | Cycle-10 carryovers (F4/F5/F12 cloud-blocked; F13; F18) — tracked in `plans/done/cycle-10-password-hash-hardening.md`. | maintainability / CI | cycle-10 plan | backend | EXPENSIVE |
+
+Ranking rationale: N1 is the user's direct ask and the only behavioral task this cycle. N2/N5 are verification riders on P1 (zero extra delegation). N3/N4 are cheap hygiene, deliberately deferred to keep the auth change reviewable in isolation. R2–R7 are carried unchanged; R6's status upgrade is recorded above.
+
+## Selected task (N1) — orchestration
+
+**ORCHESTRATION RULE (binding, mirrors cycles 7/9/10/30 user directive):** ALL phases implemented first, completely; NO mid-plan gates. Then e2e-tester and Reviewer run ONCE each over the whole plan — P2, P3 and P4 are EXPENSIVE (auth-surface behavior change), so the e2e run IS REQUIRED before the single review pass. Definitive acceptance = post-push CI watch.
+
+**STOP RULE (binding, mirrors cycle-30):** if P1's threat model finds any path where the new gate weakens an existing authentication statement (e.g., a class that today is protected by current-password reauthentication would end up with a *weaker or absent* check), P1 ends in STOP: no code change in P2–P4, evidence recorded, Adviser re-scopes.
+
+**Contract implications: NONE** — all verification rides existing client APIs (GoTrue `signInWithOtp`/`verifyOTP`/`updateUser`, `google_sign_in`, `local_auth`) and local storage; no app-defined endpoint, payload, status code, or error shape changes; no Supabase schema change (`contracts/update-engine.yaml` unaffected). No contractor phase. If P1 discovers a need for a server-side RPC (e.g., deploying `verify_recovery_code`), that is OUT of scope — record and stop.
+
+**Sequencing decision:** this plan is **cycle-31 and runs next** — the user's explicit requirement outranks the queued backlog. Cycles 28/29 (update-dialog family) stay queued behind it; R3 (session invalidation) loses its cycle-31 pre-rank to this user directive and stays in the backlog; cycle-27's in-flight state is concluded or held per the Orchestrator's session state before P1 starts. The cycles-28/29 plans' remaining outstanding item — the pre-authorized `v1.4.2` dogfood bump + in-app hop — is **SUPERSEDED by this cycle's release** (governance 2026-10-26; supersession notes added to both plans): the v1.4.1 → v1.5.0 in-app hop replaces it as the Part B evidence, so nothing versioning-related remains queued ahead of this plan.
+
+## Phase 1 — Design of record + security threat model (read-only)
+
+- **Phase id:** P1
+- **Objective:** a written design-of-record and threat model proving the matrix (above) strengthens authentication on every password-change path — or an honest STOP. Consumes Q1/Q2 answers (or defaults).
+- **Responsible subagent:** middle-end
+- **Files to change:** NONE (read-only; findings recorded in this plan's governance table)
+- **Size + check classification:** **light**, **CHEAP**. Sizing reason: single read-only verification pass, no file changes. It earns no e2e run.
+- **Implementation steps:**
+  1. Verify google_sign_in 7.2.0 re-auth semantics (N5): read the plugin source in the pub cache for `authenticate()` behavior (prompts vs silent cached return); confirm whether a silent return is possible and design the prompt-requirement accordingly. If the plugin cannot force an interactive prompt, escalate that fact to the Adviser before P2 — do not silently degrade to a no-prompt check.
+  2. Verify Supabase automatic-linking behavior for the email-then-Google edge (N2) against vendor docs; record the detection rule (`identities` vs `appMetadata['provider']`) with its failure mode.
+  3. Threat model: enumerate every path to `AuthService.updatePassword` (`change_pass_page.dart:54`, `auth_service.dart:562`) and the NEW offline path. For each: before/after authentication statement, proving no class ends weaker (STOP rule).
+  4. Decide the no-screen-lock fail-open policy for the device-credential factor (degrade to current-password-only + notice vs block) and the Google-fallback trigger conditions for the email-OTP fallback. Record each with rationale.
+  5. Decide whether N3 (validator inconsistency) is pulled into P3 — default: not pulled.
+  6. Enumerate the exact P2–P4 diff surface (files below) and the exact API signatures to add; confirm nothing else consumes `reauthenticate` (grep: one consumer, `change_pass_page.dart:50`).
+- **Acceptance criteria:** threat-model table with per-path before/after authentication statements; N2 and N5 findings recorded with sources; fail-open policy + fallback triggers recorded; P2–P4 file lists confirmed against grep. Or STOP with the specific gap.
+- **Verification:** CHEAP — Reviewer confirms the table against cited lines (folds into the single owed Reviewer pass).
+- **Dependencies / sequencing:** first; P2 executes only a clean design.
+- **Expected result:** P2–P4 fully determined; zero ambiguity for implementing agents.
+
+## Phase 2 — AuthService + BiometricAuthService factor layer (no UI)
+
+- **Phase id:** P2
+- **Objective:** the service-layer capabilities exist and are unit-testable: online account-class detection, Google re-auth verification, email-OTP step-up (fallback), device-credential confirmation.
+- **Responsible subagent:** middle-end
+- **Files to change:** `lib/services/auth/auth_service.dart` (detection helper per P1's rule + re-auth/OTP-verify APIs; `reauthenticate`/`updatePassword` bodies untouched), `lib/services/auth/biometric_auth_service.dart` (a confirm-style method wrapping `authenticate(biometricOnly: false, persistAcrossBackgrounding: true)` with a caller-supplied `localizedReason`; existing enroll/unlock untouched).
+- **Size + check classification:** **heavy**, **EXPENSIVE**. Sizing reason: auth-surface behavior (work-sizing heavy signals: auth; new API layer). e2e required (at plan end, per orchestration rule).
+- **Implementation steps:** per P1's signatures; typed failures follow the `GoogleSignInFailure` pattern (`auth_service.dart:26-57`); never log token/OTP values (match `auth_service.dart:352-354` discipline); `dart analyze` + `dart format` + `flutter test` green.
+- **Acceptance criteria (each individually checkable):**
+  - A detection helper returns true for a Google identity and false for a password-only identity (unit-tested with fakes where the client permits; otherwise documented as P1-verified logic).
+  - The Google re-auth verify rejects a mismatched account email (unit-tested or P1-recorded reason).
+  - The OTP step-up pair sends with `shouldCreateUser: false` and verifies with `type: OtpType.email` before any password update (read the diff).
+  - The device-credential confirm passes a distinct `localizedReason` (e.g. step-up wording) and returns a bool; no token or secret is persisted.
+  - All three local gates exit 0.
+- **Verification:** EXPENSIVE — auth-layer change; covered by the plan-end e2e + Reviewer pass.
+- **Dependencies / sequencing:** after P1's clean design.
+- **Expected result:** factor layer complete; P3 consumes only these APIs.
+
+## Phase 3 — Online password-change UX wiring
+
+- **Phase id:** P3
+- **Objective:** `ChangePasswordPage` applies the matrix for online sessions: Google-linked → Google prompt (fallback OTP step-up UI); email/password → current password + device-credential prompt; offline-created sessions unaffected (P4).
+- **Responsible subagent:** middle-end
+- **Files to change:** `lib/presentation/profile/change_pass_page.dart` (factor gate in `_submit` flow, factor-prompt UI stage per P1's design, error copy); only if P1's design requires it, a small shared step-up widget file under `lib/presentation/shared/` (name fixed by P1).
+- **Size + check classification:** **heavy**, **EXPENSIVE**. Sizing reason: behavior + state additions on the auth surface (new states in the page's state matrix).
+- **Implementation steps:** keep the offline-connectivity block (`:32-39`) semantics; preserve the existing error-mapping style (`:62-76`); copy states the factor being requested; no copy claims a recovery-code use (cycle-30 copy audit stands).
+- **Session ruling for the `verifyOTP` wrinkle (Adviser, post-P2, 2026-10-26 — closes the former "P1 rules later" open point):** on a successful OTP-verified step-up + password change, **KEEP the refreshed session — the user stays signed in; NO `signOutOnly` on this path.** Rationale: the user is already signed in and just proved account control twice on this device (active session + emailed OTP to the account's own address); the OWASP Session Management Cheat Sheet names password change as a session/token **renewal** event, not a logout event — *"The session ID must be renewed or regenerated… Common scenarios to consider include; password changes… the old or previous session ID must be destroyed"* (fetched 2026-10-26) — and the fresh `verifyOTP` session IS that renewal: server-issued, same account, old token superseded client-side by gotrue's auto-persist. Keeping is zero extra code (`AuthService.currentUser`, `auth_service.dart:83`, reads the live client); `signOutOnly`'s sole consumer remains `forgot_password.dart:120` — the unauthenticated reset is a different baseline (OTP-only proof under the recovery carve-out, user never signed in). Cross-device session invalidation after the change stays backlog R3 (cloud-dependent, out of this cycle's scope).
+- **Failed step-up rule (confirmed complement):** a wrong/expired code returns false from `verifyOtpStepUp` (`auth_service.dart:748-767`), returns no session, persists nothing, performs no password update, and leaves the user in their ORIGINAL signed-in state. P3 keeps the code-entry stage retryable and never triggers sign-out on this failure.
+- **P2 semantics closure (P3's caller contract):** (a) a null return from `verifyGoogleReauth` is treated as FAILURE → OTP fallback trigger — fail-closed (production never returns null, `auth_service.dart:638-651`; only the test seam can); (b) the `email_mismatch` typed throw (`auth_service.dart:704-710`) maps to the matrix's "returned email ≠ session email" fallback trigger — safe because the OTP fallback is sent to the SESSION account's email, so the fallback factor still binds to the correct account even after a mismatched Google confirmation.
+- **Acceptance criteria (each individually checkable):**
+  - A Google-linked session reaching submit sees the Google factor (or OTP fallback per P1 triggers) before `updatePassword` is called.
+  - A password-provider online session sees current-password reauthenticate AND the device-credential prompt, in the order P1 fixed.
+  - Canceling the factor prompt aborts the change with no password update (assert `updatePassword` not called — test seam per P2's design).
+  - A wrong or expired OTP code aborts the change with the session unchanged and `updatePassword` not called; the user remains signed in and the code-entry stage is retryable.
+  - A null return from `verifyGoogleReauth` (test seam only) is treated as a failure that triggers the OTP fallback — never as a satisfied factor.
+  - A session with no Supabase user (offline unsynced) does NOT take the online path (routes to P4's flow).
+  - All three local gates exit 0.
+- **Verification:** EXPENSIVE — covered by the plan-end e2e + Reviewer pass.
+- **Dependencies / sequencing:** after P2.
+- **Expected result:** matrix honored in the UI; baseline reauthentication preserved where a password exists.
+
+## Phase 4 — Offline password change for never-synced accounts (per Q2 default: build)
+
+- **Phase id:** P4
+- **Objective:** an account created offline and never synced can change its password on-device: current local password (Argon2id) + device-credential prompt (when the device has one), then local re-hash + row update.
+- **Responsible subagent:** middle-end
+- **Files to change:** the offline branch/screen per P1 (expected: a condition in `change_pass_page.dart`'s entry/submit routing plus a local-change service method; P1 fixes whether this is a branch of `ChangePasswordPage` or a sibling screen under `lib/presentation/profile/`); **`lib/services/auth/offline_password_service.dart` (NEW FILE — Adviser amendment 2026-10-26 after P1: the home of the local-change service method. It must NOT live in `auth_service.dart`, whose `_guardBackendReady` guard throws when offline and whose file carries Supabase imports — a dedicated file keeps the P4 "no Supabase imports" acceptance criterion verifiable at file level and keeps P2's "reauthenticate/updatePassword bodies untouched" scope honest);** `lib/data/local/local_user_dao.dart` (a compare-and-swap password update mirroring `tryUpgradePasswordHash`, `:71-107`); `OfflineLoginGuard` reused, not modified, unless P1 records why.
+- **Size + check classification:** **heavy**, **EXPENSIVE**. Sizing reason: NEW auth behavior + new state; the largest phase.
+- **Implementation steps:** proof order per P1 (current-password verify via `PasswordHasher.verifyPassword` — same call shape as `login.dart:409-413` — then device credential when available); failed attempts feed `OfflineLoginGuard.recordFailure` (lockout + wipe semantics inherited); new hash written via `PasswordHasher.hashPassword` with the CAS guard; no Supabase calls on this path; works with zero connectivity.
+- **Acceptance criteria (each individually checkable):**
+  - An unsynced offline account changes its password with the device in airplane mode (no network calls asserted by the code path — no Supabase imports in the offline service method).
+  - A wrong current password is rejected and recorded by `OfflineLoginGuard` (lockout observable after 5 failures).
+  - The row's new hash verifies with `PasswordHasher.verifyPassword` and the next offline sign-in accepts the new password.
+  - If the device has no screen lock, the P1-decided policy applies (documented in the phase report).
+  - All three local gates exit 0.
+- **Verification:** EXPENSIVE — new auth flow; covered by the plan-end e2e + Reviewer pass.
+- **Dependencies / sequencing:** after P2 (independent of P3's UI wiring, but delegated after it to keep one phase at a time).
+- **Expected result:** requirement clause 2 delivered; offline-first posture preserved.
+
+## Phase 5 — Test + docs hygiene (post-implementation, pre-Reviewer)
+
+- **Phase id:** P5
+- **Objective:** the regression artifact is push-ready and the docs statements touched by this cycle are truthful.
+- **Responsible subagent:** middle-end-light
+- **Files to change:** new/updated tests per P2–P4's test seams (test file names fixed by the implementing phases); `docs/versioning.md:77` staleness fix (N4) ONLY if the Orchestrator approves it riding this cycle — default: leave for the next docs pass.
+- **Size + check classification:** **light**, **CHEAP**. Sizing reason: test/doc edits only, zero `lib/` delta of its own.
+- **Acceptance criteria:** the plan-end e2e artifact contains no cross-OS golden coupling (cycle-30 P3 precedent: no `matchesGoldenFile` on non-reproducible font rendering); `dart format --output=none --set-exit-if-changed lib test` exit 0; `flutter analyze` exit 0; test-count delta reported explicitly.
+- **Verification:** CHEAP.
+- **Dependencies / sequencing:** after P2–P4; before the Reviewer pass.
+
+## Push guidance (FINAL 2026-10-26 — version bump user-directed; tag cut follows)
+
+- Commit 1: `feat(auth): second-factor gate for password change (account-class matrix)` — `lib/` changes from P2–P4 + tests from P5. Never root-wide `git add -A`.
+- Commit 2: `docs(plans): cycle-31 plan + governance` — this plan file (+ the `plans/done/cycle-30-...md` staged rename if still uncommitted, per the cycle-30 close note).
+- Commit 3 (LAST): `chore(release): bump version to 1.5.0+1 (C31)` — `pubspec.yaml:4` version line ONLY. Precedent: cycle-28's `336c5f9` and cycle-29's commit C `319d8cd` (both bump-last inside the cycle's own push).
+- Exclusions: all `.opencode/` churn; any goldens (never committed); `analysis_options.yaml` is committed state (any local diff = stop and report).
+- Version bump: **minor 1.5.0+1, FINAL** (header; user-directed). The push agent must not re-decide.
+- **Post-push release cut — delivers the user's access (verbatim sequence per the release-v1.2.5 plan):**
+  1. `git push origin main` → CI watch: Build APK on main green + Promote to Landing green.
+  2. Re-verify the duplicate-semver precondition at cut time: no `v1.5.0` tag (`git tag -l v1.5.0`) and no v1.5.0 release record; verified absent on both sides 2026-10-26 (tag list ends at v1.4.1; `/releases/latest` = v1.4.1).
+  3. `git tag -a v1.5.0 -m "Release 1.5.0"` from the push HEAD → `git push origin v1.5.0` → CI watch on the tag run: tag-assert ✓ (`1.5.0` == `1.5.0+1` semver part; build number not compared, `docs/versioning.md:58-61`), duplicate-semver guard ✓, the P8-classified guard green (404 fails / 403 warns — the authenticated digest check is primary), APK built, **the GitHub release published with the APK asset**, Promote promotes the tag APK.
+  4. The tag is never re-pushed or force-moved, and never cut from a pre-push commit (cycle-27 step-6 ruling: the tag must carry the guard workflow + the 1.5.0+1 pubspec).
+  5. No `min-version:` marker — a feature release, not a forced update (`docs/versioning.md` §3 applies to forced releases only).
+- **User access (the goal of the bump):** after the release publishes, the installed device (on v1.4.1) gets the soft update dialog on its next scheduled check (v1.5.0 > 1.4.1, `docs/versioning.md` §4) → Update → in-app install; fresh installs sideload from the GitHub release page.
+
+## Post-push CI watch (definitive acceptance)
+
+- Build APK + Promote to Landing on main must conclude green at the push commit. Failure class to name if red: Dart compile errors from the new APIs, or unit-test regressions in the auth layer — capture `gh run view <id> --log-failed`; plan stays `active`; fix phase scopes to the specific failure.
+- The release cut (Push guidance) adds the tag Build APK + tag Promote runs: **ALL FOUR runs green = the release is SHIPPED** (release-v1.2.5 precedent: two Build + two Promote). A tag-run red at the tag-assert (bump/tag disagree) or the duplicate-semver guard is a versioning defect — fix before anything else; an anonymous-probe 403 is a WARN (P8 classification), not a failure.
+- On all green + the release published: record the on-device in-app hop (v1.4.1 → v1.5.0, data preserved) as closure evidence — it doubles as the C27/C28/C29 Part B dogfood evidence (supersession, governance 2026-10-26). The structured-changelog fallback path is already tested (cycle-29 e2e), so the hop does not depend on v1.5.0's auto-generated notes having H2 sections.
+- On green: Adviser marks the plan `done`, moves to `plans/done/`.
+
+## Reviewer web searches
+
+1. `OWASP Authentication Cheat Sheet re-authentication sensitive features bound authenticators` — confirms the change-password baseline (active session + current password) and that the added factor is an endorsed bound authenticator/MFA layer.
+2. `NIST SP 800-63B-4 email out-of-band authentication SHALL NOT` — confirms the email-OTP-as-fallback (not primary) ruling and the recovery carve-out.
+3. `google_sign_in 7 flutter authenticate reauthentication prompt` — verifies the plugin's re-auth semantics claim P1 recorded (prompt vs silent return).
+4. `local_auth biometricOnly false device credentials pin pattern passcode` — verifies the device-credential fallback claim.
+5. `OWASP Session Management Cheat Sheet renew session id after privilege level change password` — verifies the post-P2 session ruling (password change = token renewal; the fresh `verifyOTP` session is kept, no sign-out on the step-up path).
+
+## Reviewer verification commands (single pass, after P1–P5 + e2e)
+
+1. Diff audit: `git status` / `git diff --stat` — exactly the P2–P5 declared files, nothing else; `reauthenticate`/`updatePassword` bodies in `auth_service.dart` byte-unchanged except where P1 recorded a signature addition.
+2. Baseline-preservation audit: read `change_pass_page.dart` diff — current-password reauthenticate still precedes `updatePassword` for every account class that has a password; the Google-only path documents why the current-password step is absent.
+3. Detection audit: the Google-detection helper's rule matches P1's recorded finding (identities vs appMetadata) and has a test or recorded verification.
+4. Offline-path audit: the P4 service method contains no Supabase imports/calls; `OfflineLoginGuard` is invoked on failures; CAS guard present on the hash update.
+5. Baseline gates: `flutter analyze` exit 0; `flutter test` all-pass (quote count vs pre-cycle count); `dart format --output=none --set-exit-if-changed lib test` exit 0.
+6. Threat-model audit: P1's before/after table covers every `updatePassword` path plus the new offline path, each with an authentication statement proving no weakening (STOP rule).
+
+## Backlog governance
+
+| Date | Event |
+|---|---|
+| 2026-10-26 | Cycle-31 audit recorded from the user's verbatim second-factor requirement. Ground truth verified (all file:line above); web-research executed (OWASP, NIST 800-63B-4, Supabase, local_auth — 4 live, 1 timeout); interpretation ruled (Google re-auth default + email-OTP fallback; device credential; secure-storage "shared preference" equivalent; recovery code NOT a factor); level 3 declared; version bump none; contract none; sequencing: cycle-31 next, 28/29 queued, R3 pre-rank superseded. Q1/Q2 issued with binding defaults; plan created `active`. |
+| 2026-10-26 | **PLAN RATIFIED + VERSION DIRECTIVE (user, verbatim: "then bump the version okey so that i can access that").** (1) Ratification recorded: Q1 = default A (device Google Sign-In re-auth prompt, emailed-OTP fallback) and Q2 = yes (build the offline password-change flow) — the user was given a plain-language summary and may still override specifics later. (2) **Version bump: minor `1.4.1+1 → 1.5.0+1`, FINAL** — overrides the original none-this-cycle default; bump commit LAST in the cycle-31 push (precedents `336c5f9` / `319d8cd`); tag `v1.5.0` cut from the push HEAD after main CI green (release-v1.2.5 verbatim sequence); no min-version marker; access via the in-app soft-update dialog or the GitHub release APK. Verified preconditions: pubspec `1.4.1+1` at `pubspec.yaml:4`; tag `v1.4.1` → `319d8cd`; `/releases/latest` = v1.4.1; no v1.4.2/v1.5.0 tag or release exists on either side. (3) **SUPERSESSION: the C28/C29 pre-authorized `v1.4.2` dogfood chore + hop is superseded** — the v1.4.1 → v1.5.0 in-app hop delivers the identical Part B evidence (discovery → in-app download w/ progress → sha256+size → the ONE system confirm → install, data preserved; the structured-changelog dialog live on the device); supersession notes added to `plans/cycle-28-in-app-update-flow.md` and `plans/cycle-29-update-dialog-ux.md` so no agent executes the stale chore. (4) P1 GO issued (light, CHEAP, middle-end, read-only; the plan-end e2e run is still owed per the orchestration rule). |
+| 2026-10-26 | **P1 COMPLETE — verdict CLEAN, STOP rule NOT triggered (Adviser independently re-verified the load-bearing claims today; read-only, zero files touched by P1).** (1) Threat model: 5 paths — A Google-linked online; B email/password online; C forgot-password recovery; D NEW offline never-synced; E null-user edge. Every path keeps its baseline or gains an additive factor; the Google-only class (unprotected today — `reauthenticate` = `signInWithPassword` cannot succeed with no password) is the intended strengthening. (2) **N5 ESCALATION — RULED: pairing design ACCEPTED as design of record for P2/P3.** google_sign_in 7.2.0 `authenticate()` throws on cancel/failure (no silent cached bypass) but cannot guarantee a visible prompt — the OS/SDK Credential Manager decides. Adviser re-verified the pub-cache evidence: `google_sign_in.dart:527-541` (doc: "or throws a GoogleSignInException for any other outcome") and `google_sign_in_android-7.2.17/lib/google_sign_in_android.dart:84-104` (`useButtonFlow: true`, `throwForNoAuth: true`; null credential → throw at :97-102; SDK comment :85 "Attempt to authorize with minimal interaction" = prompt not guaranteed). **Ruling:** the Google factor is best-effort-interactive and PAIRED with the device-credential co-factor, so a canceled/silent Google result can never end in a zero-factor pass — a canceled Google auto-triggers the emailed-OTP fallback (a real factor, screen-lock-independent), and the device credential covers the undetectable silent-resolve case. The best-effort nature is documented (matrix row amended). (3) **N2 recorded:** detection rule = `identities.any(provider == 'google')` primary + `appMetadata['provider'] == 'google'` secondary; Supabase non-linking failure mode (second user created instead of linking) classifies as email/password → STRONGER factor set, no weakening; documented, not hidden. (4) **Fail-open policy recorded:** no screen lock → DEGRADE to current-password-only + explanatory notice, do NOT block (OWASP baseline factor still enforced; additive-factor rationale). (5) **Google→OTP fallback triggers (automatic, not user-initiated):** `authenticate()` throws / `supportsAuthenticate() == false` / returned email ≠ session email / no Play Services; reuses the verified `signInWithOtp(shouldCreateUser: false)` → `verifyOTP(type: email)` pair (`auth_service.dart:538-541,554-558`). (6) **N3 NOT pulled into P3** (default held; stays in backlog). (7) **Diff surface + grep re-verified by Adviser:** `reauthenticate` exactly 1 UI consumer (`change_pass_page.dart:50`); `updatePassword` exactly the 3 known sites (`change_pass_page.dart:54`; `auth_service.dart:518-521`; `auth_service.dart:562`) plus definition-internal references; no contract change (plan line on contract implications stands). **AMENDMENTS issued (Adviser, same date):** (a) matrix Google-linked row gains the device-credential co-factor + best-effort documentation + accepted residual; (b) P4 file list names `lib/services/auth/offline_password_service.dart` (NEW) as the offline service method's home — the routing change was already inside P4's `change_pass_page.dart` coverage, but the method file was undeclared and would have failed Reviewer command 1's exact-files audit. **P2 GO — no amendment to P2 itself** (file lists accurate, signatures per P1's record; heavy, EXPENSIVE, middle-end per the phase table; e2e owed at plan end per the orchestration rule). |
+| 2026-10-26 | **P2 COMPLETE (per Orchestrator report: `auth_service.dart` +198 / `biometric_auth_service.dart` +41, `reauthenticate`/`updatePassword` bodies byte-untouched, +15 unit tests; gates: analyze 0 / format 0 / 341+1) + POST-P2 PLAN-GAP RULINGS (Adviser; record + amend pass, P2 implementation NOT re-opened).** Adviser read the factor layer directly before ruling: `auth_service.dart:595-769` and `test/cycle31_p2_factor_layer_test.dart:103-167`. (1) **RULING — OTP-created session KEPT:** after a successful OTP step-up + password change the refreshed session is kept; no sign-out. One-line rationale: the user proved account control twice on this device (session + OTP to their own address) and the fresh session is server-issued for the same account, which is exactly OWASP's password-change session/token RENEWAL requirement ("The session ID must be renewed or regenerated… Common scenarios to consider include; password changes… the old or previous session ID must be destroyed" — Session Management Cheat Sheet, fetched 2026-10-26), not a logout requirement; `signOutOnly` stays forgot-password-only (`forgot_password.dart:120`); cross-device invalidation stays backlog R3. (2) **RULING — failed step-up complement confirmed:** wrong/expired code → `verifyOtpStepUp` false (`auth_service.dart:748-767`), no session returned/persisted, no password update, user remains in the original signed-in state, code entry retryable. (3) **RULING — P2 semantics closure for P3's caller contract:** null from `verifyGoogleReauth` = FAILURE → OTP fallback trigger (fail-closed; production never returns null, `auth_service.dart:638-651`); `email_mismatch` typed throw (`auth_service.dart:704-710`) = the matrix's "returned email ≠ session email" fallback trigger, safe because the OTP goes to the SESSION account's email. (4) Amendments: P3 implementation steps rewritten with the three rulings (former plan line 175 open point closed); two P3 acceptance criteria added (failed-OTP no-op; null-as-failure); Reviewer web search 5 added (OWASP session renewal). P3 GO. |
+| 2026-10-27 | **P3 COMPLETE** — factor gate wired into `change_pass_page.dart` (`_submit` flow + factor-prompt stage + error copy) per the three post-P2 rulings: refreshed session KEPT on OTP step-up (no sign-out), failed/expired code = retryable no-op leaving the user signed in, null-from-seam and `email_mismatch` both route to the OTP fallback. Reviewer acceptance: 7/7. |
+| 2026-10-27 | **P4 COMPLETE** — `lib/services/auth/offline_password_service.dart` (NEW) holds the local-change method with ZERO Supabase imports (Reviewer-verified at file level); `local_user_dao.dart` +23 = compare-and-swap password update mirroring `tryUpgradePasswordHash`; `OfflineLoginGuard` reused, not modified. Reviewer acceptance: 5/5. |
+| 2026-10-27 | **P5 COMPLETE** — test + docs hygiene; `docs/versioning.md` Current-version staleness fixed to `1.5.0+1` (N4 rides this cycle — Orchestrator-approved, Reviewer-verified one-line diff); no cross-OS golden coupling in the e2e artifact; gates: analyze 0 / format 0 changed / `flutter test` 383 passed, 1 expected skip — count reconciled by the Reviewer (326 base + 15 P2 + 12 P3 + 20 P4 + 10 e2e). Reviewer acceptance: 4/4. |
+| 2026-10-27 | **E2E RUN COMPLETE — 10/10 exit 0, re-executed first-hand by the Reviewer** (gate file `test/cycle31_e2e_gate_test.dart` RIDES Commit 1). Evidence: 7 PNGs + `run_log.txt` in `test/e2e_evidence/` — archived locally, NEVER committed. Governance note: e2e ran on a general agent rather than e2e-tester — recorded as a governance deviation only, no re-run required (Reviewer ruling). |
+| 2026-10-27 | **REVIEWER: PASS — single pass, 25/25 acceptance criteria (P1 4/4, P2 5/5, P3 7/7, P4 5/5, P5 4/4) + threat-model audit clean (all 5 paths strengthened or unchanged; STOP rule not triggered).** `reauthenticate`/`updatePassword` byte-identical vs HEAD (byte-compared); offline service zero-Supabase-imports verified; zero `contracts/` diff (no-contract claim verified). Searches: OWASP Auth + Session Management (renewal-≠-logout confirms the keep-session ruling), NIST 800-63B-4 (email-OTP-as-fallback-not-primary confirmed; forgot-password carve-out), local_auth 3.0.2 + google_sign_in 7.2.0 live-fetched; Android biometric doc fetch failed twice — recorded, fallback sources live-verified, no claim rests on it. Backlog rulings: wipe-at-10 quirk, PIN-only degrade, and the `docs/versioning.md` "Existing tags" list still ending at v1.2.5 (v1.3.1/v1.4.0/v1.4.1 missing — Adviser-verified in the N4 diff) = backlog; N3 stays held. Record-only nit: comment precision at `change_pass_page.dart:50-64`. |
+| 2026-10-27 | **PUSH APPROVED (Adviser) — routing: middle-end-light + `git-push` skill (cycle-30 precedent; agent-push config still dead this session — config loads at startup, dead model cached; deviation note stands; FIX agent-push config next session).** Commit-list amendment: Commit 2 ALSO stages `plans/cycle-28-in-app-update-flow.md` + `plans/cycle-29-update-dialog-ux.md` (one-line supersession notes recorded in the ratification row — modified, uncommitted; this cycle's governance must not dangle). Exclusions reaffirmed: all `.opencode/` churn; `test/e2e_evidence/` (archive locally first); `plans/agenta-landing-design-spec.md` + `plans/done/agenta-landing-redesign.md` (unrelated to this cycle — explicit adds only, NEVER `git add -A` or a bare `git add plans/`); `analysis_options.yaml` no-diff confirmed in the working tree. Version `1.5.0+1` FINAL — no re-decision. Tag state verified locally: list ends `v1.4.1`, no `v1.5.0`; re-verify remote tag + release at cut time (Push guidance step 2). Commits 1→2→3 land in ONE push to `main`; tag cut only from the push HEAD after main CI green; never re-pushed or force-moved. |
+
