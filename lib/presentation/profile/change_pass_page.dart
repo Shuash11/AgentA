@@ -103,11 +103,12 @@ class PasswordChangeFactorGate {
       AuthService.updatePassword(newPassword);
 
   /// True when this device can show a device-credential prompt (biometric or
-  /// the phone's PIN/pattern/passcode). Uses the project's existing
-  /// device-prompt gate; false → the device step degrades (plan policy: no
-  /// screen lock is fail-open, never a block).
+  /// the phone's PIN/pattern/passcode). Uses the device-credential OR
+  /// predicate (biometrics OR any secure lock, so PIN-only devices pass);
+  /// false → the device step degrades (plan policy: no screen lock is
+  /// fail-open, never a block).
   Future<bool> deviceCredentialPromptAvailable() =>
-      BiometricAuthService.isSupported();
+      BiometricAuthService.isDeviceCredentialPromptAvailable();
 
   /// The device-credential factor ("the phone's password"); false = not
   /// confirmed (cancel or platform error) → the caller aborts.

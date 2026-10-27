@@ -645,7 +645,9 @@ void main() {
     // evidence rule) — no widget render, no PNG.
     test('S6 no screen lock: degrade → change succeeds via Argon2id + CAS; '
         'never prompted; new hash verifies', () async {
-      _enrolledBiometrics = <String>[]; // no screen lock on this device
+      // No screen lock: neither probe of the cycle-32 OR gate is available.
+      _deviceSupported = false;
+      _enrolledBiometrics = <String>[];
       await seed(); // real Argon2id hash
 
       await OfflinePasswordService().updateLocalPassword(

@@ -18,6 +18,34 @@ class BiometricAuthService {
     }
   }
 
+  /// True when the device can show a device-credential prompt — biometrics
+  /// or the device PIN/pattern/passcode ("the phone's password").
+  ///
+  /// Vendor-recommended OR gate (local_auth README):
+  /// `canCheckBiometrics || isDeviceSupported()`. The OR is what makes
+  /// PIN-only devices work: with no biometric hardware/enrollment
+  /// `canCheckBiometrics` is false, but `isDeviceSupported()` is true when
+  /// the device has any secure lock, and [confirmDeviceCredential]
+  /// (`biometricOnly: false`) then shows the PIN prompt. [isSupported] keeps
+  /// its AND semantics for the login biometric surface (enroll/unlock bind
+  /// to actual biometrics).
+  static Future<bool> isDeviceCredentialPromptAvailable() async {
+    try {
+      // Both probes are awaited before the OR (no short-circuit): a throw on
+      // either platform call degrades to false the same way.
+      final canCheckBiometrics = await _auth.canCheckBiometrics;
+      final deviceSupported = await _auth.isDeviceSupported();
+      return canCheckBiometrics || deviceSupported;
+    } catch (e, stack) {
+      if (kDebugMode) {
+        debugPrint(
+          '[Biometric] isDeviceCredentialPromptAvailable failed: $e | $stack',
+        );
+      }
+      return false;
+    }
+  }
+
   static Future<bool> isEnrolled() async {
     try {
       final flag = await _storage.read(key: _enabledKey);

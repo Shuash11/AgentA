@@ -76,12 +76,14 @@ class OfflinePasswordService {
   final LocalUserDao _userDao;
 
   /// True when this device can show a device-credential prompt (biometric or
-  /// the phone's PIN/pattern/passcode). False → the device step degrades
-  /// (fail-open) and the caller shows the explanatory notice. The pre-probe
-  /// runs before any prompt call (P3 pattern): its `false` collapses
-  /// "no screen lock" and "prompt unavailable" into the degrade path.
+  /// the phone's PIN/pattern/passcode). Uses the device-credential OR
+  /// predicate (biometrics OR any secure lock, so PIN-only devices pass);
+  /// false → the device step degrades (fail-open) and the caller shows the
+  /// explanatory notice. The pre-probe runs before any prompt call (P3
+  /// pattern): its `false` collapses "no prompt can be shown" into the
+  /// degrade path.
   Future<bool> deviceCredentialPromptAvailable() =>
-      BiometricAuthService.isSupported();
+      BiometricAuthService.isDeviceCredentialPromptAvailable();
 
   /// Changes the signed-in never-synced account's local password.
   ///

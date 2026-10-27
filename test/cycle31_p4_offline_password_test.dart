@@ -404,7 +404,10 @@ void main() {
     test('no screen lock degrades: the change completes with no prompt '
         'call', () async {
       await seed(legacy: true);
-      // No enrolled biometrics: the pre-probe degrades (fail-open).
+      // No screen lock: neither probe of the cycle-32 OR gate is available
+      // (no enrolled biometrics AND no device credential) — the pre-probe
+      // degrades (fail-open).
+      _deviceSupported = false;
       _enrolledBiometrics = <String>[];
 
       await OfflinePasswordService().updateLocalPassword(
