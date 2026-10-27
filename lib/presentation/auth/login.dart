@@ -394,8 +394,10 @@ class _LoginPageState extends State<LoginPage> {
           });
           return;
         }
-        // C3: rate-limit offline password attempts; wipe the local
-        // credential on sustained failures (possible brute force).
+        // C3: rate-limit offline password attempts. The lockout checked
+        // below is the active control; the wipe branch further down is the
+        // guard's intentionally-defensive backstop, unreachable through this
+        // gated path (see OfflineLoginGuard).
         if (OfflineLoginGuard.isLockedOut(email)) {
           if (!mounted) return;
           setState(() {
@@ -438,6 +440,8 @@ class _LoginPageState extends State<LoginPage> {
           _goToDashboard(isOnline: false);
           return;
         }
+        // Defensive backstop only: the gate above locks out at 5, so the
+        // count never reaches the wipe threshold through this path.
         final shouldWipe = OfflineLoginGuard.recordFailure(email);
         if (shouldWipe) {
           try {

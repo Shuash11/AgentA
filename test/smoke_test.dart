@@ -123,6 +123,10 @@ void main() {
       expect(OfflineLoginGuard.failureCountForTest('a@b.com'), 0);
     });
 
+    // Deliberately exercises the guard's defensive wipe backstop by calling
+    // recordFailure past the production gate (both production callers check
+    // isLockedOut first, which caps the count at 5) — the only path that
+    // reaches maxFailuresBeforeWipe.
     test('signals wipe after maxFailuresBeforeWipe', () {
       var wipe = false;
       for (var i = 0; i < OfflineLoginGuard.maxFailuresBeforeWipe; i++) {

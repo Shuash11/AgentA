@@ -4,12 +4,20 @@ import 'package:flutter/foundation.dart';
 ///
 /// Never grants a session without proof (salted-hash verification happens in
 /// the caller). This guard adds:
-/// - per-email failure counting with a lockout window (rate-limit),
-/// - credential wipe trigger after [maxFailuresBeforeWipe] failures,
+/// - per-email failure counting with a lockout window (rate-limit — the
+///   active protection: lockout at [maxAttempts] plus the window prune),
+/// - an intentionally-defensive wipe signal after [maxFailuresBeforeWipe]
+///   failures: a backstop for a caller that bypasses [isLockedOut],
+///   unreachable through the gated production callers,
 /// - a regression-test hook ([resetForTest], [failureCountForTest]).
 class OfflineLoginGuard {
   static const int maxAttempts = 5;
   static const Duration lockoutWindow = Duration(minutes: 5);
+  // Defensive backstop threshold for the wipe signal in recordFailure: an
+  // intentional second layer of defense for a caller that records failures
+  // without first checking isLockedOut. Unreachable through the production
+  // callers — both gate before recording and the lockoutWindow prune caps
+  // the count at maxAttempts — so the count never reaches 10.
   static const int maxFailuresBeforeWipe = 10;
 
   static final Map<String, List<DateTime>> _failures = {};
@@ -41,6 +49,12 @@ class OfflineLoginGuard {
 
   /// Record a failed offline attempt. Returns true when the caller should
   /// wipe the local credential (too many failures — possible brute force).
+  ///
+  /// That return is the intentionally-defensive backstop, dormant through
+  /// production callers: both gate on [isLockedOut] before recording and the
+  /// window prune below caps the count at [maxAttempts], so they lock out at
+  /// 5 first and never reach [maxFailuresBeforeWipe]. It fires only for a
+  /// caller that bypasses the gate.
   static bool recordFailure(String email) {
     final key = _key(email);
     final now = DateTime.now();

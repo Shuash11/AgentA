@@ -64,8 +64,13 @@ class OfflinePasswordChangeException implements Exception {
 ///    untouched and the caller never claims success.
 ///
 /// Failed current-password attempts reuse [OfflineLoginGuard]: the same
-/// per-email counting, 5-attempt lockout and 10-failure credential wipe as
-/// the offline sign-in path.
+/// per-email counting and 5-attempt lockout as the offline sign-in path
+/// (the gate is checked before any failure is recorded). The 10-failure
+/// credential wipe is inherited too, but as the guard's
+/// intentionally-defensive backstop — unreachable through this gated path,
+/// since the lockout plus the [OfflineLoginGuard.lockoutWindow] prune cap
+/// the count at [OfflineLoginGuard.maxAttempts]. The active protection is
+/// the lockout + window prune.
 ///
 /// This file deliberately imports nothing from Supabase — the whole path
 /// must work with the device in airplane mode.
@@ -174,10 +179,13 @@ class OfflinePasswordService {
     }
   }
 
-  /// Records a failed current-password attempt with [OfflineLoginGuard] and
-  /// inherits the offline sign-in wipe semantics: at the guard's wipe
-  /// threshold the local credential is removed (possible brute force), the
-  /// same way the offline sign-in path handles it.
+  /// Records a failed current-password attempt with [OfflineLoginGuard].
+  /// The wipe branch below is the guard's intentionally-defensive backstop:
+  /// it is unreachable through this gated path ([updateLocalPassword] checks
+  /// [OfflineLoginGuard.isLockedOut] before recording anything, and the
+  /// window prune caps the count at [OfflineLoginGuard.maxAttempts]), so the
+  /// active protection remains the 5-attempt lockout + prune. Only a caller
+  /// bypassing the gate can trigger the wipe.
   Future<void> _recordFailure(String email, Map<String, dynamic> row) async {
     final shouldWipe = OfflineLoginGuard.recordFailure(email);
     if (!shouldWipe) return;
