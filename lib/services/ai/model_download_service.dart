@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_edge_ai/flutter_edge_ai.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/config/app_config.dart';
 import '../../data/local/offline_model_dao.dart';
 
@@ -66,7 +67,7 @@ class ModelDownloadService extends ChangeNotifier {
   bool get isSlowConnection => _isSlowConnection;
 
   static const String _modelUrl =
-      'https://huggingface.co/AfiOne/gemma3-1b-it-int4.task/resolve/main/gemma3-1b-it-int4.task';
+      'https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.task';
   static const String _modelType = 'gemma3-1b-it-int4';
 
   /// Channel to the host MainActivity for the Android 13+ runtime
@@ -202,11 +203,31 @@ class ModelDownloadService extends ChangeNotifier {
     _notifyStateChanged(oldStatus, oldProgress);
   }
 
+  /// One-time migration: the broken third-party mirror and official file share
+  /// the filename `gemma3-1b-it-int4.task`, so install() skips the official
+  /// copy unless the old file is removed. Marker set BEFORE uninstall so a
+  /// crash never loops the download.
+  static Future<void> _migrateStaleAssetIfPresent() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('model_asset_v2') == true) return;
+    final dao = OfflineModelDao();
+    final hasActive = FlutterEdgeAi.hasActiveModel();
+    final daoReady = await dao.isModelReady();
+    if (!hasActive && !daoReady) return;
+    await prefs.setBool('model_asset_v2', true);
+    try {
+      await FlutterEdgeAi.uninstallModel('gemma3-1b-it-int4.task');
+    } catch (_) {
+      // Already unregistered / file missing — safe to continue.
+    }
+    await dao.setModelNotInstalled();
+  }
+
   Future<void> installModel() async {
     if (_status == ModelStatus.installing || _status == ModelStatus.ready) {
       return;
     }
-
+    await _migrateStaleAssetIfPresent();
     await checkModelExists();
     if (_status == ModelStatus.ready) return;
 
@@ -247,6 +268,7 @@ class ModelDownloadService extends ChangeNotifier {
           : FlutterEdgeAi.installModel(modelType: ModelType.gemmaIt)
                 .fromNetwork(
                   resolvedModelUrl,
+                  token: AppConfig.hfToken.trim(),
                   foreground: AppConfig.foregroundDownload,
                 )
                 .withProgress(_onDownloadProgress)
@@ -376,8 +398,8 @@ class ModelDownloadService extends ChangeNotifier {
       return switch (error.error) {
         NotFoundError() =>
           'The offline model file could not be found at its source. Check the download link.',
-        UnauthorizedError() ||
-        ForbiddenError() => 'The model source rejected the download.',
+        UnauthorizedError() || ForbiddenError() =>
+          'Download authorization required. The model source is gated — please confirm your HF token is valid and the model license has been accepted. Never share the token.',
         RateLimitedError() => 'Too many download attempts. Try again later.',
         NetworkError() =>
           'No internet connection. Download will resume when you are back online.',
@@ -466,11 +488,13 @@ class ModelDownloadService extends ChangeNotifier {
   /// [AppConfig.foregroundDownload] — when the storage was lost or prefs
   /// restore failed.
   static Future<bool> ensureModelActive() async {
+    await _migrateStaleAssetIfPresent();
     if (FlutterEdgeAi.hasActiveModel()) return true;
     try {
       await FlutterEdgeAi.installModel(modelType: ModelType.gemmaIt)
           .fromNetwork(
             resolvedModelUrl,
+            token: AppConfig.hfToken.trim(),
             foreground: AppConfig.foregroundDownload,
           )
           .install()

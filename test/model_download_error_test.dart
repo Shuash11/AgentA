@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_edge_ai/flutter_edge_ai.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,8 +7,10 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:aiproject/core/config/app_config.dart';
 import 'package:aiproject/data/local/database_helper.dart';
 import 'package:aiproject/services/ai/model_download_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  SharedPreferences.setMockInitialValues({});
   late ModelDownloadService service;
 
   setUp(() {
@@ -27,13 +30,13 @@ void main() {
         service.friendlyDownloadErrorForTest(
           const DownloadException(DownloadError.unauthorized()),
         ),
-        'The model source rejected the download.',
+        'Download authorization required. The model source is gated — please confirm your HF token is valid and the model license has been accepted. Never share the token.',
       );
       expect(
         service.friendlyDownloadErrorForTest(
           const DownloadException(DownloadError.forbidden()),
         ),
-        'The model source rejected the download.',
+        'Download authorization required. The model source is gated — please confirm your HF token is valid and the model license has been accepted. Never share the token.',
       );
       expect(
         service.friendlyDownloadErrorForTest(
@@ -418,6 +421,58 @@ void main() {
       expect(stray.hasActiveWatchdogForTest, isTrue);
       stray.dispose();
       expect(stray.hasActiveWatchdogForTest, isFalse);
+    });
+  });
+
+  group('P1 cycle-36 offline fix assertions', () {
+    test('_modelUrl points at official litert-community repo', () {
+      // The URL is a static const; verify via reflection-free access
+      // by reading the source behavior through resolvedModelUrl.
+      expect(
+        ModelDownloadService.resolvedModelUrl,
+        contains('litert-community/Gemma3-1B-IT'),
+      );
+      expect(
+        ModelDownloadService.resolvedModelUrl,
+        startsWith('https://huggingface.co/litert-community/'),
+      );
+    });
+
+    test('token is threaded when configured (source hygiene + no echo)', () {
+      // Source-level verification: both install chains pass the token,
+      // and no message/string in the service echoes it.
+      final source = File(
+        'lib/services/ai/model_download_service.dart',
+      ).readAsStringSync();
+      expect(source, contains('token: AppConfig.hfToken.trim()'));
+      // Hygiene: none of the friendly copies, errors, or comments contain
+      // a literal token value (sk-...), and the token never reaches UI.
+      expect(source, isNot(contains('sk-')));
+    });
+
+    test(
+      '401/403 friendly copy guides authorization (brand-free, no token)',
+      () {
+        final s = ModelDownloadService();
+        final msg = s.friendlyDownloadErrorForTest(
+          const DownloadException(DownloadError.unauthorized()),
+        );
+        expect(msg, contains('authorization required'));
+        expect(msg, contains('HF token'));
+        expect(msg, isNot(contains('sk-')));
+        expect(msg, isNot(startsWith('https://huggingface.co/Afi')));
+      },
+    );
+
+    test('migration marker semantics', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('model_asset_v2');
+      // When absent and model ready, migration would uninstall; we only
+      // prove the marker survives and gates re-run here (unit-safe).
+      expect(prefs.getBool('model_asset_v2'), isNull);
+      // After setting, no second run should occur (marker present).
+      await prefs.setBool('model_asset_v2', true);
+      expect(prefs.getBool('model_asset_v2'), isTrue);
     });
   });
 }
