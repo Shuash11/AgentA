@@ -129,6 +129,30 @@ class LocalUserDao {
     );
   }
 
+  /// Updates the stored display name of the account row [localId].
+  ///
+  /// Cycle-37 P4 (defect D): the profile edit must reach the device copy
+  /// too, otherwise an offline account keeps the name it was created with
+  /// and every local read of the name is stale.
+  ///
+  /// The row is addressed by [localId] (the `pending_signups.local_id`
+  /// primary key), never by email — an edit can therefore only ever touch
+  /// the account that made it, even when several rows share an address.
+  /// Returns the number of rows updated: 0 means this device holds no row
+  /// for that account, so the caller must not claim the name was saved.
+  Future<int> updateDisplayName({
+    required String localId,
+    required String displayName,
+  }) async {
+    final db = await _dbHelper.database;
+    return db.update(
+      'pending_signups',
+      {'display_name': displayName},
+      where: 'local_id = ?',
+      whereArgs: [localId],
+    );
+  }
+
   Future<List<Map<String, dynamic>>> getPendingSignups() async {
     final db = await _dbHelper.database;
     return await db.query(

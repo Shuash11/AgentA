@@ -504,7 +504,14 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       final localId = localUser['local_id'] as String;
-      final displayName = ((localUser['display_name'] as String?) ?? '').trim();
+      // Cycle-37 P4 (defect D): the name comes from the account's own row,
+      // re-read here — the e-mail lookup can hand back another row for the
+      // same address, and the profile edit writes the fresh name into the
+      // account row.
+      final accountRow =
+          await dao.getPendingSignupByLocalId(localId) ?? localUser;
+      final displayName = ((accountRow['display_name'] as String?) ?? '')
+          .trim();
       final name = displayName.isEmpty ? 'User' : displayName;
       final recoveryHash = (localUser['recovery_code'] as String?) ?? '';
 

@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../cubit/theme/theme_cubit.dart';
 import '../../cubit/update/update_cubit.dart';
+import '../../data/models/user_profile_model.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/update/install_failure_reason.dart';
 import '../../services/update/version_check_service.dart';
@@ -18,10 +19,64 @@ import 'editprofile.dart';
 import 'change_pass_page.dart';
 import 'securitypage.dart';
 
+/// Cycle-37 P4: the signed-in user's identity facts the profile screen
+/// renders. A small view over the Supabase user so the page never touches
+/// gotrue types directly (mirrors `PasswordChangeSession`).
+class ProfileUser {
+  const ProfileUser({
+    required this.id,
+    required this.email,
+    this.metadata = const {},
+  });
+
+  final String id;
+  final String email;
+
+  /// The Auth user metadata — the source of the `display_name` /
+  /// `full_name` / `name` keys.
+  final Map<String, dynamic> metadata;
+}
+
+/// Cycle-37 P4: the profile screen's data seam.
+///
+/// Production uses [AuthService] / [UserRepository] directly; tests
+/// subclass and override (the project's fake-service pattern). Stateless —
+/// every method is a pass-through.
+class ProfileDataGate {
+  const ProfileDataGate();
+
+  /// The signed-in Supabase user, or null when there is none (offline
+  /// account without a Supabase session).
+  ProfileUser? loadUser() {
+    final user = AuthService.currentUser;
+    if (user == null) return null;
+    return ProfileUser(
+      id: user.id,
+      email: user.email ?? '',
+      metadata: user.userMetadata ?? const {},
+    );
+  }
+
+  /// The `profiles` row of [uid] — the source of truth for the name.
+  Future<UserProfileModel?> loadProfile(String uid) =>
+      UserRepository.getUserProfile(uid);
+
+  /// Copies the name into the Auth metadata (the self-heal).
+  Future<void> backfillDisplayName(String displayName) =>
+      AuthService.updateDisplayName(displayName);
+}
+
 class ProfilePage extends StatefulWidget {
   final bool showBottomNav;
 
-  const ProfilePage({super.key, this.showBottomNav = true});
+  /// Test seam onto the data layer; production keeps the default.
+  final ProfileDataGate dataGate;
+
+  const ProfilePage({
+    super.key,
+    this.showBottomNav = true,
+    this.dataGate = const ProfileDataGate(),
+  });
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -46,23 +101,31 @@ class _ProfilePageState extends State<ProfilePage> {
     unawaited(_loadProfile());
   }
 
+  /// Loads the name and the e-mail of the signed-in user.
+  ///
+  /// Cycle-37 P4: the `profiles` row is the source of truth for the name —
+  /// the refresh never relies on gotrue's client-side metadata freshness
+  /// (the N9 flag stays unverified and is not load-bearing). The Auth
+  /// metadata is the fallback when no profile row exists, and it is only
+  /// ever written to when it carries no name at all (the self-heal can
+  /// never clobber a fresher Auth value with an older database one).
   Future<void> _loadProfile() async {
-    try {
-      final user = AuthService.currentUser;
-      if (user != null) {
-        final meta = user.userMetadata;
-        _displayName = meta == null
-            ? null
-            : (meta['display_name'] ?? meta['full_name'] ?? meta['name'])
-                  as String?;
-        _email = user.email;
+    final user = widget.dataGate.loadUser();
+    final authName = _authDisplayName(user?.metadata);
+    var displayName = authName;
+    var email = user?.email;
 
-        if (_displayName == null || _displayName!.isEmpty) {
-          final profile = await UserRepository.getUserProfile(user.id);
-          if (profile != null) {
-            _displayName = profile.displayName;
+    if (user != null) {
+      try {
+        final profile = await widget.dataGate.loadProfile(user.id);
+        final dbName = (profile?.displayName ?? '').trim();
+        if (dbName.isNotEmpty) {
+          displayName = dbName;
+          if (authName == null) {
+            // Self-heal: Auth carries no name at all, so adopting the
+            // database name cannot overwrite anything.
             try {
-              await AuthService.updateDisplayName(_displayName!);
+              await widget.dataGate.backfillDisplayName(dbName);
             } catch (e) {
               if (kDebugMode) {
                 debugPrint('[Profile] display-name backfill failed: $e');
@@ -70,12 +133,50 @@ class _ProfilePageState extends State<ProfilePage> {
             }
           }
         }
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
+      } catch (e, stack) {
+        // The row is unreachable (offline / server error): the Auth name
+        // stays on screen instead of the screen going blank.
+        if (kDebugMode) {
+          debugPrint('[Profile] profile row read failed: $e | $stack');
+        }
       }
     }
+
+    if (!mounted) return;
+    setState(() {
+      _displayName = displayName;
+      _email = email;
+      _isLoading = false;
+    });
+  }
+
+  /// The effective display name in the Auth metadata.
+  ///
+  /// Every known key is checked and an empty value counts as absent: the
+  /// old `??` chain let an empty `display_name` mask a fresh `full_name`,
+  /// which is how the self-heal overwrote newer metadata with an older
+  /// database value.
+  String? _authDisplayName(Map<String, dynamic>? metadata) {
+    if (metadata == null) return null;
+    for (final key in const ['display_name', 'full_name', 'name']) {
+      final value = metadata[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
+  }
+
+  /// Opens the edit screen and reloads the profile when it closes.
+  ///
+  /// Cycle-37 P4 (defect A): the push is awaited, so a saved name is read
+  /// again from the database the moment the screen pops — the profile
+  /// never keeps showing the pre-edit name.
+  Future<void> _openEditProfile() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const EditProfilePage()),
+    );
+    if (!mounted) return;
+    await _loadProfile();
   }
 
   /// User-initiated check (plan ruling 4). Double taps are prevented by the
@@ -395,12 +496,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   _tile(
                     Icons.person,
                     'Edit Profile',
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const EditProfilePage(),
-                      ),
-                    ),
+                    () => _openEditProfile(),
                     colors,
                   ),
                   const SizedBox(height: 12),
