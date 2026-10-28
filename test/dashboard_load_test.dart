@@ -10,6 +10,7 @@ import 'package:aiproject/data/models/chat_session_model.dart';
 import 'package:aiproject/presentation/dashboard/dashboard.dart';
 import 'package:aiproject/repositories/chat_repository.dart';
 import 'package:aiproject/services/ai/groq_service.dart';
+import 'package:aiproject/services/ai/openrouter_service.dart';
 import 'package:aiproject/services/ai/huggingface_image_service.dart';
 import 'package:aiproject/services/ai/model_download_service.dart';
 import 'package:aiproject/services/ai/online_ai_service.dart';
@@ -60,6 +61,7 @@ Future<void> pumpDashboard(WidgetTester tester, ChatRepository repo) async {
   final modelService = ModelDownloadService();
   final onlineService = OnlineAIService(
     GroqService(),
+    OpenRouterService(),
     PollinationsService(),
     HuggingFaceImageService(),
   );

@@ -179,4 +179,117 @@ void main() {
       );
     });
   });
+
+  group('ChatErrorClassifier.friendly — OpenRouter (cycle-36 P3)', () {
+    test('key not configured', () {
+      expect(
+        ChatErrorClassifier.friendly(
+          'OpenRouter API key not configured. Please set OPENROUTER_API_KEY via --dart-define.',
+        ),
+        'Chat service is not configured correctly.',
+      );
+    });
+
+    test('invalid key (401) reads as a configuration problem', () {
+      expect(
+        ChatErrorClassifier.friendly(
+          'Invalid OpenRouter API key. Please check OPENROUTER_API_KEY.',
+        ),
+        'Chat service is not configured correctly.',
+      );
+    });
+
+    test('rate limit (429) is not masked by the broad branch', () {
+      expect(
+        ChatErrorClassifier.friendly(
+          'OpenRouter rate limit exceeded (free tier: 20/min, 50/day).',
+        ),
+        'Cloud chat is rate limited (free tier: 20 requests/min, 50/day). Wait a moment and try again.',
+      );
+    });
+
+    test('free quota (402) is not masked by the broad branch', () {
+      expect(
+        ChatErrorClassifier.friendly(
+          'OpenRouter free quota exhausted (daily limit or account balance).',
+        ),
+        'Free chat quota reached for today. Try again tomorrow or switch models.',
+      );
+    });
+
+    test('forbidden (403)', () {
+      expect(
+        ChatErrorClassifier.friendly('OpenRouter rejected the request (403).'),
+        'The AI service declined this request. Try rephrasing or switch models.',
+      );
+    });
+
+    test('timeout (408)', () {
+      expect(
+        ChatErrorClassifier.friendly('OpenRouter request timed out.'),
+        'Connection timed out. Check your internet connection.',
+      );
+    });
+
+    test('unlisted 4xx', () {
+      expect(
+        ChatErrorClassifier.friendly('OpenRouter request error: 400'),
+        'The selected AI model failed to respond. Please try again.',
+      );
+      expect(
+        ChatErrorClassifier.friendly('OpenRouter request error: unknown'),
+        'The selected AI model failed to respond. Please try again.',
+      );
+    });
+
+    test('5xx and the broad fallback', () {
+      expect(
+        ChatErrorClassifier.friendly('OpenRouter server error: 500'),
+        'The AI service is temporarily unavailable. Please try again.',
+      );
+      expect(
+        ChatErrorClassifier.friendly('OpenRouter something unexpected'),
+        'The AI service is temporarily unavailable. Please try again.',
+      );
+    });
+
+    test('empty content after the reasoning budget', () {
+      expect(
+        ChatErrorClassifier.friendly(
+          'OpenRouter: the model used its full response budget. Please try again.',
+        ),
+        'The model used its full response budget. Please try again.',
+      );
+    });
+
+    test('matching is case-insensitive', () {
+      expect(
+        ChatErrorClassifier.friendly('OPENROUTER RATE LIMIT exceeded'),
+        'Cloud chat is rate limited (free tier: 20 requests/min, 50/day). Wait a moment and try again.',
+      );
+      expect(
+        ChatErrorClassifier.friendly('OPENROUTER API KEY NOT CONFIGURED'),
+        'Chat service is not configured correctly.',
+      );
+    });
+
+    test('openrouter errors never reach the generic catch-all copy', () {
+      expect(
+        ChatErrorClassifier.friendly(
+          'OpenRouter rate limit exceeded (free tier: 20/min, 50/day).',
+        ),
+        isNot('The selected AI model failed to respond. Please try again.'),
+      );
+      expect(
+        ChatErrorClassifier.friendly('OpenRouter server error: 500'),
+        isNot('The selected AI model failed to respond. Please try again.'),
+      );
+      expect(
+        ChatErrorClassifier.friendly(
+          'OpenRouter API key not configured. Please set OPENROUTER_API_KEY via --dart-define.',
+        ),
+        isNot('The selected AI model failed to respond. Please try again.'),
+      );
+    });
+  });
 }

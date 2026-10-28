@@ -12,6 +12,7 @@ class AppConfig {
   // NOTE: String.fromEnvironment requires a literal key (compile-time),
   // so each secret gets its own const.
   static const _dGroq = String.fromEnvironment('GROQ_API_KEY');
+  static const _dOpenRouter = String.fromEnvironment('OPENROUTER_API_KEY');
   static const _dHf = String.fromEnvironment('HF_TOKEN');
   static const _dGemmaUrl = String.fromEnvironment('GEMMA_MODEL_URL');
   static const _dForegroundDownload = String.fromEnvironment(
@@ -22,10 +23,13 @@ class AppConfig {
   static const _dGoogleId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
 
   static String get groqApiKey => _withFallback(_dGroq);
+  static String get openRouterApiKey => _withFallback(_dOpenRouter);
   static String get hfToken => _withFallback(_dHf);
 
   static const String groqEndpoint =
       'https://api.groq.com/openai/v1/chat/completions';
+  static const String openRouterEndpoint =
+      'https://openrouter.ai/api/v1/chat/completions';
   static const String hfImageModel =
       'stabilityai/stable-diffusion-3-medium-diffusers';
   static String get hfImageEndpoint =>
@@ -37,6 +41,13 @@ class AppConfig {
       'https://api.github.com/repos/Shuash11/AgentA/releases/latest';
 
   static const String groqModel = 'allam-2-7b';
+
+  /// cycle-36 P3: the two free OpenRouter chat models (contract §2).
+  /// These two literals are the ONLY OpenRouter model ids in lib/ — the
+  /// service receives the id as a parameter, never hard-coding it.
+  static const String openRouterFlashModel =
+      'thinkingmachines/inkling-small:free';
+  static const String openRouterProModel = 'thinkingmachines/inkling:free';
 
   /// Shared English-enforcing rule reused across every AI persona prompt
   /// (Groq / Gemma) so all chat paths always respond in English.

@@ -6,6 +6,7 @@ import '../core/utils/connectivity_service.dart';
 import '../services/ai/ai_service.dart';
 import '../services/ai/gemma_service.dart';
 import '../services/ai/groq_service.dart';
+import '../services/ai/openrouter_service.dart';
 import '../services/ai/huggingface_image_service.dart';
 import '../services/ai/pollinations_service.dart';
 import '../services/ai/offline_ai_service.dart';
@@ -23,6 +24,7 @@ class AppProviders extends StatelessWidget {
   final ConnectivityService connectivity;
   final GemmaService gemmaService;
   final GroqService groqService;
+  final OpenRouterService openRouterService;
   final PollinationsService pollinationsService;
   final HuggingFaceImageService huggingFaceImageService;
   final OfflineAIService offlineAIService;
@@ -39,6 +41,7 @@ class AppProviders extends StatelessWidget {
     required this.connectivity,
     required this.gemmaService,
     required this.groqService,
+    required this.openRouterService,
     required this.pollinationsService,
     required this.huggingFaceImageService,
     required this.offlineAIService,
@@ -62,6 +65,7 @@ class AppProviders extends StatelessWidget {
     Provider.value(value: connectivity),
     ChangeNotifierProvider.value(value: gemmaService),
     Provider.value(value: groqService),
+    Provider.value(value: openRouterService),
     Provider.value(value: pollinationsService),
     Provider.value(value: huggingFaceImageService),
     Provider.value(value: offlineAIService),

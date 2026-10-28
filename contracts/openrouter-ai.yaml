@@ -1,0 +1,463 @@
+# OpenRouter AI contract (cycle-36 P2)
+#
+# Governing plan: plans/cycle-36-openrouter-cloud-models.md (ACTIVE).
+# P2 of that plan — this file is the single source of truth for P3
+# (OpenRouterService + full wiring). Consumers implement exactly what is
+# written here and never assume. No second copy exists anywhere.
+#
+# NO KEY VALUES ANYWHERE IN THIS FILE. The OpenRouter key is referenced
+# only as the env name OPENROUTER_API_KEY (see §4 secrets posture).
+#
+# External facts (endpoint, auth, stream/error shapes, free-tier limits,
+# reasoning semantics) are live-doc verifications recorded in plan §1.2
+# (verified 2026-10-28) — not training knowledge. Internal facts are
+# file:line citations from plan §1.3, re-verified in the tree at
+# contract time.
+
+contract: openrouter-ai
+version: 1.0.0
+status: active
+
+# ---------------------------------------------------------------------------
+# 1. External API — OpenRouter chat completions (consumed)
+# ---------------------------------------------------------------------------
+
+external_api:
+  # OpenAI-compatible. Source: plan §1.2 (OpenRouter OpenAPI 3.1 +
+  # auth + limits + reasoning-tokens pages, verified 2026-10-28).
+  endpoint: POST https://openrouter.ai/api/v1/chat/completions
+
+  auth:
+    scheme: bearer
+    header: "Authorization: Bearer <OPENROUTER_API_KEY>"
+    key_source: AppConfig.openRouterApiKey (dart-define only — see §3/§4)
+    notes: >-
+      No required attribution headers — no HTTP-Referer requirement exists
+      in the OpenAPI securitySchemes (plan §1.2). A User-Agent header is
+      sent anyway, mirroring the GroqService SDK-UA pattern
+      (groq_service.dart:21-22,134): "AgentA/1.0.0 (Flutter; OpenRouter)".
+
+  request_body:
+    # What WE send. Only `messages` is required by the API; we always send
+    # the full shape below (plan §1.2/P2).
+    model: string — exact model ID from §2 (one request = one model)
+    messages: >-
+      array of {role, content} objects; role is "system" | "user" |
+      "assistant", content is string.
+      # Order + window: system message FIRST, then the last 20 history
+      # messages (dropping a trailing duplicate of the current message),
+      # then the current user message. This mirrors GroqService
+      # (groq_service.dart:82-96,111-123) — OpenRouterService is a
+      # structural sibling (plan P3).
+    stream: true (always — the app consumes the SSE stream)
+    max_tokens: 4096
+      # DECISION RECORDED (plan §1.2 asks the contract to pick one):
+      # `max_tokens` is used, NOT `max_completion_tokens` (deprecated
+      # alias sharing the same budget). 4096 is the documented F3
+      # mitigation for the reasoning-budget hazard — see reasoning
+      # hazard note below.
+    temperature: 0.7
+      # Mirrors GroqService (groq_service.dart:139,240) per the
+      # structural-sibling rule; plan/delegation left the value open.
+    reasoning:
+      effort: "low"      # documented F3 mitigation (default is "high" on both models)
+      exclude: true      # documented F3 mitigation (reasoning text excluded from reply)
+
+  response_200_non_stream:
+    # Recorded for completeness; the app's primary path is streaming.
+    shape: >-
+      { id: string, created: integer, model: string, object: string,
+        usage: object,
+        choices: [ { message: { role: string, content: string|null },
+                     finish_reason: string } ] }
+    content_note: >-
+      content may be null/empty with finish_reason "length" when the
+      token budget is spent on reasoning (see hazard note below).
+
+  streaming:
+    content_type: text/event-stream
+    chunk_shape: >-
+      SSE lines "data: {json}"; each JSON chunk has object:
+      "chat.completion.chunk" and choices[].delta; TEXT CONTENT lives in
+      choices[].delta.content (string pieces, possibly null).
+    ignored_fields:
+      - choices[].delta.reasoning_details — reasoning tokens, EXPLICITLY
+        IGNORED. Parsers reading only delta.content skip them naturally
+        (plan §1.2; legacy alias delta.reasoning behaves the same).
+      - SSE comment lines (any line not starting with the data prefix)
+        are skipped.
+    sentinel: 'data: [DONE] — end of stream.'
+    malformed_chunks: counted + logged with a partial-response warning at
+      a threshold of 10 — same pattern as groq_service.dart:23-30,54-67.
+
+  mid_stream_error_events:
+    # LOAD-BEARING (plan F2). A rate limit hit AFTER streaming starts is
+    # NOT an HTTP status — it arrives as an SSE event inside the stream:
+    shape: >-
+      data: { error: { code: integer, message: string, metadata?: object },
+              choices: [ { delta: {...}, finish_reason: "error" } ] }
+    required_handling: >-
+      On finish_reason "error" the stream must END with a FRIENDLY ERROR
+      raised (mapped via the table below) — never a silent empty reply,
+      never raw JSON in the UI. The Groq parser pattern
+      (groq_service.dart:270-291) reads only delta.content and would
+      truncate silently; OpenRouterService MUST add this branch.
+
+  reasoning_budget_hazard:
+    # Plan F3 (documented, load-bearing). Reasoning tokens count against
+    # max_tokens; both §2 models default reasoning ON at effort "high", so
+    # a Groq-style max_tokens: 2048 request risks finishing the budget
+    # on reasoning → finish_reason "length" with EMPTY content.
+    mitigations_in_request: max_tokens 4096 + effort "low" + exclude true
+      (documented mitigation set; both leave ample room inside the
+      262,144 completion cap — plan P2 §147).
+    required_handling: >-
+      If the stream/response ends with finish_reason "length" and no
+      content was yielded, raise a friendly error (copy in table below),
+      not a silent empty reply.
+
+  error_table:
+    # HTTP error body (plan §1.2): { error: { code: integer, message: string,
+    # metadata?: object } } — codes 400/401/402/403/404/408/413/422/429/
+    # 500/502/503/524/529. Grouped below with the friendly copy the
+    # SERVICE throws and the classifier maps (§3 classifier table).
+    # Copy tone follows the existing classifier/service strings
+    # (chat_error_classifier.dart:38-58; groq_service.dart:156-176).
+    "401":
+      meaning: invalid or missing API key
+      service_message: "Invalid OpenRouter API key. Please check OPENROUTER_API_KEY."
+      friendly: "Chat service is not configured correctly."
+    "402":
+      meaning: >-
+        free-tier exhaustion — negative credit balance also errors free
+        models (plan §1.2); daily free cap reached behaves here
+      service_message: "OpenRouter free quota exhausted (daily limit or account balance)."
+      friendly: "Free chat quota reached for today. Try again tomorrow or switch models."
+    "403":
+      meaning: forbidden (moderation/blocked)
+      service_message: "OpenRouter rejected the request (403)."
+      friendly: "The AI service declined this request. Try rephrasing or switch models."
+    "408":
+      meaning: request timeout
+      service_message: "OpenRouter request timed out."
+      friendly: "Connection timed out. Check your internet connection."
+    "429":
+      meaning: >-
+        rate limit — free tier caps: 20 requests/minute AND 50 requests/day
+        for accounts with <10 credits purchased all-time (1000/day at ≥10);
+        the response may carry Retry-After (honored like GroqService,
+        groq_service.dart:32-52)
+      service_message: "OpenRouter rate limit exceeded (free tier: 20/min, 50/day)."
+      friendly: "Cloud chat is rate limited (free tier: 20 requests/min, 50/day). Wait a moment and try again."
+    other_4xx:  # 400/404/413/422 and any unlisted 4xx
+      meaning: bad request / unknown model / payload too large / validation
+      service_message: "OpenRouter request error: <status>"
+      friendly: "The selected AI model failed to respond. Please try again."
+    5xx:  # 500/502/503/524/529
+      meaning: OpenRouter/upstream server error
+      service_message: "OpenRouter server error: <status>"
+      friendly: "The AI service is temporarily unavailable. Please try again."
+    mid_stream_finish_reason_error:
+      meaning: SSE event per mid_stream_error_events above (map the
+        embedded error.code through this same table; unknown → generic)
+      friendly: >-
+        same mapping as the HTTP row for that code; unknown →
+        "The selected AI model failed to respond. Please try again."
+    empty_content_length_finish:
+      meaning: reasoning-budget exhaustion (hazard above)
+      friendly: "The model used its full response budget. Please try again."
+    key_not_configured_local:
+      meaning: empty or placeholder key in config (mirrors the Groq guard,
+        groq_service.dart:103-108)
+      service_message: "OpenRouter API key not configured. Please set OPENROUTER_API_KEY via --dart-define."
+      friendly: "Chat service is not configured correctly."
+
+  free_tier_limits_context:
+    # Recorded so P3/P5 can reason about quota UX; NOT consumed this cycle.
+    minute_cap: 20 requests/minute on :free variants
+    day_cap: 50 requests/day (<10 credits all-time; 1000/day at ≥10 credits)
+    introspection: GET https://openrouter.ai/api/v1/key exposes
+      free_model_daily_requests (not wired into the app this cycle)
+
+# ---------------------------------------------------------------------------
+# 2. Model constants (user's binding mapping)
+# ---------------------------------------------------------------------------
+
+# USER'S BINDING MAPPING (plan §1.1, live catalog GET /api/v1/models
+# verified 2026-10-28, 464 models). These are fixed constants — never
+# parameterized, never extended this cycle (paid variants out of scope).
+# The user's corrected mapping is confirmed correct against the catalog's
+# own scale: small → inkling-small, strong → inkling (plan §1.1).
+
+model_constants:
+  flash:
+    model_id: "thinkingmachines/inkling-small:free"
+    display_name: "AgentA 2.1 Flash"   # exact picker text (binding)
+    role: small / fast tier
+    tier: free (prompt 0 / completion 0)
+    context_window: 1048576
+    max_completion_tokens: 262144
+    reasoning_default: enabled by default, default effort "high"
+      # → why the explicit §1 reasoning config exists.
+  pro:
+    model_id: "thinkingmachines/inkling:free"
+    display_name: "AgentA Pro"         # exact picker text (binding)
+    role: strong tier
+    tier: free (prompt 0 / completion 0)
+    context_window: 1048576
+    max_completion_tokens: 262144
+    reasoning_default: enabled by default, default effort "high"
+
+# Routing: the app ALWAYS sends the exact model_id above as `model` —
+# one request per enum value, dispatched by §3's switch (P3 acceptance
+# criterion: `grep -rn "thinkingmachines/" lib/` shows EXACTLY these two
+# strings and no others, plan P3 §158).
+
+# ---------------------------------------------------------------------------
+# 3. Internal contract — app integration surface (produced in P3)
+# ---------------------------------------------------------------------------
+
+internal:
+  ai_model:
+    # lib/services/ai/ai_model.dart:1-27 (verified). enum AIModel gains:
+    new_values: [openrouterFlash, openrouterPro]
+    display_names:
+      openrouterFlash: "AgentA 2.1 Flash"   # == §2 binding display_name
+      openrouterPro: "AgentA Pro"           # == §2 binding display_name
+    descriptions:
+      openrouterFlash: "Fast cloud chat — free tier"
+      openrouterPro: "Strong cloud chat — free tier"
+      # Plan P2: descriptions state cloud + free. Tone matches the
+      # existing extension (ai_model.dart:15-24).
+    isImageGeneration: false for both (unchanged extension semantics).
+    name_substring_constraint:
+      # Plan F10 — chats.dart:72-75 + model_picker_sheet.dart:165-168
+      # detect image models by enum-NAME substring. VERIFIED: neither
+      # 'openrouterFlash' nor 'openrouterPro' contains 'pollinations'
+      # or 'image'; both must keep it that way (renames re-run this check).
+      forbidden_substrings: [pollinations, image]
+
+  online_ai_service:
+    # lib/services/ai/online_ai_service.dart (verified: constructor :15,
+    # exhaustive switches :40-49/:59-73, cancel :86-89, default groq :13).
+    constructor: gains an OpenRouterService parameter (positioned after
+      groqService, before pollinationsService — call-site order is part
+      of this contract; main.dart is the only production call site).
+    switch_cases:
+      sendMessage: >-
+        AIModel.openrouterFlash and AIModel.openrouterPro →
+        _openRouter.sendMessage(history:, newMessage:, model: <§2 model_id
+        for the enum value>) — the exact §2 string is passed as parameter.
+      sendMessageStream: same mapping → _openRouter.sendMessageStream(...).
+      # gemma cases unchanged (offline guard throw stays); default
+      # preferred model STAYS AIModel.groq (plan §3: no default change).
+    cancelActiveGeneration:
+      extended: also calls _openRouter.cancelGeneration().
+      # Note (plan F6, OUT OF SCOPE): pollinations is still not cancelled —
+      # pre-existing backlog item, do not fix here.
+    picker_no_change:
+      # model_picker_sheet.dart:57 auto-enumerates every non-gemma
+      # AIModel value; :102 availability = isOnline for non-gemma. Both
+      # new values surface with ZERO picker code changes. No edits there.
+
+  app_config:
+    # lib/core/config/app_config.dart (verified: dart-define consts :14-22,
+    # getters :24-25, endpoint constants :27-28/:39, C1 comment :4-9).
+    new_const: "static const _dOpenRouter = String.fromEnvironment('OPENROUTER_API_KEY');"
+    new_getter: "static String get openRouterApiKey => _withFallback(_dOpenRouter);"
+    new_endpoint_const: >-
+      static const String openRouterEndpoint =
+      'https://openrouter.ai/api/v1/chat/completions'
+      (same style as groqEndpoint :27-28).
+    new_model_id_consts:
+      # (same style as groqModel :39).
+      openRouterFlashModel: "thinkingmachines/inkling-small:free"
+      openRouterProModel: "thinkingmachines/inkling:free"
+    logging_rule: never log the key; any debug logging follows the
+      suffix-only pattern (app_config.dart:98-110). envLengths addition is
+      plan F12 — BACKLOG, not P3.
+
+  openrouter_service:
+    # New file lib/services/ai/openrouter_service.dart. Structural sibling
+    # of GroqService (plan P3) — copy its patterns, change only what is
+    # listed here.
+    shape_matches_groq_service:
+      # groq_service.dart verified: timeout :11, retries+Retry-After
+      # :32-52, malformed-chunk counting :54-67, cancel :69-80, 20-msg
+      # window :82-96, key guard :103-108, non-stream post :128-155,
+      # SSE parse loop :262-291.
+      methods: [sendMessage, sendMessageStream, cancelGeneration]
+      history_window: last 20 messages, trailing-duplicate drop (§1 request_body).
+      retries: 3, honoring Retry-After (seconds or HTTP-date, ≤300s),
+        exponential backoff fallback (2 << attempt).
+      cancel_semantics: _isCancelled flag + _activeClient.close() +
+        resetCancel() on next send — identical to groq_service.dart:69-80.
+      malformed_chunk_counting: threshold 10, shared helper pattern,
+        @visibleForTesting counter hook (groq_service.dart:23-30,54-67).
+      output_guard_compat: >-
+        ai_service.dart wraps online responses in AiOutputGuard
+        (stripPromptArtifacts :75, guardStream :86/:101) for ALL online
+        models automatically — ai_service.dart requires NO changes; if P3
+        finds any are necessary, STOP and report (plan P3 §153).
+    differences_from_groq:
+      connect_timeout: 60 seconds (plan F11 — Groq's 30s, groq_service.dart:11,
+        is tight for reasoning models). Unbounded body-stream shape kept.
+      request_payload: per §1 request_body (adds stream/reasoning/max_tokens
+        4096/temperature 0.7; model routed per §2).
+      sse_parser_addition: >-
+        mid-stream finish_reason:"error" branch per §1 (raises friendly
+        error — F2). Groq's parser (groq_service.dart:270-291) has no
+        such branch; this is the one parser extension.
+      empty_content_guard: finish_reason "length" with no content →
+        friendly error per §1 (F3).
+      injected_client_for_test: accept an http.Client (constructor-injected,
+        default real) so the unit test can mock — plan F5 (Groq has NO unit
+        test file; OpenRouterService must not inherit that gap).
+      model_parameterization: sendMessage/sendMessageStream take the exact
+        §2 model id as a parameter (both services' method signatures are
+        the app-facing contract; OnlineAIService is the only caller).
+
+  wiring_sites:
+    main_dart:
+      # lib/main.dart:241-256 (verified: GroqService constructed :241,
+      # injected into OnlineAIService :246-250).
+      construct: "final openRouterService = OpenRouterService();"
+      inject: add as the OnlineAIService constructor argument per the
+        §3 online_ai_service position.
+    app_providers_dart:
+      # lib/cubit/app_providers.dart:25-68 (verified: field :25-31,
+      # provider list :61-74).
+      expose: >-
+        Provider.value(value: openRouterService) alongside the groq
+        provider (:64) — not a ChangeNotifier; plain value provider.
+
+  classifier:
+    # lib/core/utils/chat_error_classifier.dart:38-58 (verified: groq
+    # branch :38-40, huggingface :41-52, pollinations :53-55, generic
+    # catch-all :56-58 which would mask quota errors as "failed to
+    # respond" — plan F4/F9).
+    rule: openrouter branches are inserted BEFORE the generic api-error
+      catch-all (:56) so quota/config errors are never masked.
+    match_basis: >-
+      the classifier matches on lowercased SUBSTRINGS of the raw error
+      text — therefore §1's service_message strings are the match keys
+      (branch table below).
+    branch_table:
+      - match: "openrouter api key not configured"
+        # F9 — mirrors the literal groq branch at :38-40.
+        friendly: "Chat service is not configured correctly."
+      - match: "openrouter rate limit"
+        # 429 (§1) — free-tier caps surfaced, not masked.
+        friendly: "Cloud chat is rate limited (free tier: 20 requests/min, 50/day). Wait a moment and try again."
+      - match: "openrouter free quota"
+        # 402 (§1) — daily cap / negative balance.
+        friendly: "Free chat quota reached for today. Try again tomorrow or switch models."
+      - match: "openrouter"
+        # remaining openrouter-prefixed service errors (401/403/408/5xx/
+        # mid-stream/empty-content share their §1 friendly strings, which
+        # are thrown pre-classified where the classifier row above does
+        # not already cover them)
+        friendly: "The AI service is temporarily unavailable. Please try again."
+    order_note: >-
+      Exact-match branches (key-not-configured / rate limit / free quota)
+      precede the broad "openrouter" fallback; the generic non-openrouter
+      catch-all (:56-58) stays LAST. Raw detail never reaches the UI;
+      callers log it under kDebugMode (existing contract, :26-28).
+    tests: test/chat_error_classifier_test.dart (exists, verified) gains
+      cases for every branch row above + order (rate-limit not masked).
+
+  service_tests:
+    # Plan F5 — new file test/openrouter_service_test.dart with a mocked
+    # http.Client (injected per §3 openrouter_service). Required coverage
+    # (plan P3 §153):
+    - Authorization header carries the Bearer key exactly once
+    - per-model ID routing (flash vs pro → the two §2 model_id strings)
+    - request body uses stream:true, max_tokens 4096, temperature 0.7,
+      reasoning {effort:"low", exclude:true}
+    - SSE parse covers content chunks, comment lines, and the [DONE]
+      sentinel
+    - mid-stream finish_reason:"error" → friendly error raised (not silent)
+    - finish_reason "length" with empty content → friendly error
+    - 401/429/402 status mapping per §1 error table
+    - Retry-After honored on 429
+
+  config_and_ci_lines:
+    env_example:
+      # .env.example is documentation ONLY ("the app never reads it",
+      # :1-5, verified). Add ONE line (no value — see §4):
+      line: "OPENROUTER_API_KEY=  # OpenRouter chat (AgentA 2.1 Flash + AgentA Pro, free tier) — passed via --dart-define"
+    build_apk_yml:
+      # .github/workflows/build-apk.yml (verified: GROQ trim :158-164,
+      # dart-define block :305-311; C1 note :43-44). Two additions:
+      trim_step: >-
+        OPENROUTER_API_KEY_TRIMMED="$(echo "$OPENROUTER_API_KEY" | sed
+        's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs')"
+        + the matching >> "$GITHUB_ENV" write — mirroring the GROQ lines,
+        value NEVER echoed/printed (plan §4.4).
+      define_line: >-
+        --dart-define=OPENROUTER_API_KEY="${OPENROUTER_API_KEY_TRIMMED:-$OPENROUTER_API_KEY}"
+        appended to the flutter build apk --release block (:305-311).
+      secret_source: a NEW GitHub Actions secret OPENROUTER_API_KEY,
+        entered by the USER (plan §4.2) — CI references the name only.
+
+# ---------------------------------------------------------------------------
+# 4. Secrets posture (plan §4 — Adviser ruling, FINAL)
+# ---------------------------------------------------------------------------
+
+secrets:
+  entry_path: >-
+    OPENROUTER_API_KEY enters exactly like GROQ_API_KEY: build-time
+    --dart-define (C1 — the ONLY config source, app_config.dart:4-9);
+    CI value from a new GitHub Actions secret; local dev via
+    --dart-define=OPENROUTER_API_KEY=... on the command line. `.env`
+    stays git-ignored and unread.
+  no_key_values_here: >-
+    This file contains ZERO key values, zero key fragments, zero key
+    prefixes (the P3 acceptance grep for the OpenRouter key-prefix
+    pattern must also hit nothing here). The key is referenced by NAME
+    only.
+  burned_by_transit: >-
+    The chat-transited key is burned: never recorded in repo, plans,
+    logs, or commits. The user creates a FRESH key at implementation
+    time (rotation, optionally credit-capped) and enters it in GitHub
+    secrets + local builds themselves. No agent ever writes the key to
+    disk (plan §4.2).
+  client_exposure_accepted: >-
+    A dart-define key is extractable from the APK — accepted explicitly
+    for a free-tier key in the user's own app (same posture as
+    GROQ_API_KEY/HF_TOKEN). Server-side proxy alternative = backlog F8,
+    not built now (plan §4.3).
+  hygiene_requirements: >-
+    Never log or embed the key (suffix-only logging if any log is added,
+    app_config.dart:98-110); error messages never echo the key; CI trim
+    step mirrors the GROQ pattern and never prints the value (plan §4.4).
+
+# ---------------------------------------------------------------------------
+# 5. P3 acceptance criteria (consumers)
+# ---------------------------------------------------------------------------
+
+# A consumer phase may not begin before this file exists (contract-first
+# gate). P3 builds exactly this contract; the criteria below are lifted
+# from the governing plan (P2 §149 + P3 §155-161) and are individually
+# checkable:
+
+acceptance:
+  - flutter analyze exits 0 and dart format --set-exit-if-changed
+    reports 0 changed
+  - full "flutter test" green, new tests passing (count vs baseline recorded)
+  - grep -rn "thinkingmachines/" lib/ shows EXACTLY the two §2 model
+    IDs and no other OpenRouter model strings
+  - grep -rn "thinkingmachines/" test/ likewise shows only the two §2 IDs
+  - zero occurrences of the chat-transited key or its key-prefix pattern
+    in tracked files (this file included)
+  - the picker sheet lists both new models with the §2/§3 display names
+    and descriptions (auto-enumeration, model_picker_sheet.dart:57),
+    disabled offline, enabled online
+  - OPENROUTER_API_KEY appears in exactly app_config const+getter,
+    build-apk.yml secret/trim/define, and the .env.example doc line
+  - OPENROUTER_API_KEY absent from every log statement; error strings
+    never contain key material
+  - every path, header, field, ID, and file:line in this contract
+    verifies against plan §1; a reader can implement P3 from this file
+    alone
+

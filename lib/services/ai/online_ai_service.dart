@@ -1,18 +1,26 @@
 import 'package:flutter/foundation.dart';
+import '../../core/config/app_config.dart';
 import '../../data/models/chat_message_model.dart';
 import 'ai_model.dart';
 import 'groq_service.dart';
 import 'huggingface_image_service.dart';
+import 'openrouter_service.dart';
 import 'pollinations_service.dart';
 
 class OnlineAIService extends ChangeNotifier {
   final GroqService _groq;
+  final OpenRouterService _openRouter;
   final PollinationsService _pollinations;
   final HuggingFaceImageService _huggingFace;
 
   AIModel _preferredModel = AIModel.groq;
 
-  OnlineAIService(this._groq, this._pollinations, this._huggingFace);
+  OnlineAIService(
+    this._groq,
+    this._openRouter,
+    this._pollinations,
+    this._huggingFace,
+  );
 
   AIModel get preferredModel => _preferredModel;
 
@@ -42,6 +50,18 @@ class OnlineAIService extends ChangeNotifier {
         return _pollinations.generateImage(prompt: newMessage);
       case AIModel.groq:
         return _groq.sendMessage(history: history, newMessage: newMessage);
+      case AIModel.openrouterFlash:
+        return _openRouter.sendMessage(
+          history: history,
+          newMessage: newMessage,
+          model: AppConfig.openRouterFlashModel,
+        );
+      case AIModel.openrouterPro:
+        return _openRouter.sendMessage(
+          history: history,
+          newMessage: newMessage,
+          model: AppConfig.openRouterProModel,
+        );
       case AIModel.gemma:
         throw Exception(
           'AgentA Offline AI is an offline model and cannot be used while online.',
@@ -66,6 +86,20 @@ class OnlineAIService extends ChangeNotifier {
           newMessage: newMessage,
         );
         return;
+      case AIModel.openrouterFlash:
+        yield* _openRouter.sendMessageStream(
+          history: history,
+          newMessage: newMessage,
+          model: AppConfig.openRouterFlashModel,
+        );
+        return;
+      case AIModel.openrouterPro:
+        yield* _openRouter.sendMessageStream(
+          history: history,
+          newMessage: newMessage,
+          model: AppConfig.openRouterProModel,
+        );
+        return;
       case AIModel.gemma:
         throw Exception(
           'AgentA Offline AI is an offline model and cannot be used while online.',
@@ -85,6 +119,7 @@ class OnlineAIService extends ChangeNotifier {
 
   void cancelActiveGeneration() {
     _groq.cancelGeneration();
+    _openRouter.cancelGeneration();
     _huggingFace.cancelGeneration();
   }
 }

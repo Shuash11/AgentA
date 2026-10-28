@@ -147,6 +147,7 @@ jobs:
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
           GOOGLE_SERVER_CLIENT_ID: ${{ secrets.GOOGLE_SERVER_CLIENT_ID }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           # M21: trim all env — whitespace/newlines stripped, log lengths-only (never values)
@@ -156,12 +157,14 @@ jobs:
           SUPABASE_PUBLISHABLE_KEY_TRIMMED="$(echo "$SUPABASE_PUBLISHABLE_KEY" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
           GOOGLE_SERVER_CLIENT_ID_TRIMMED="$(echo "$GOOGLE_SERVER_CLIENT_ID" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
           GROQ_API_KEY_TRIMMED="$(echo "$GROQ_API_KEY" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
+          OPENROUTER_API_KEY_TRIMMED="$(echo "$OPENROUTER_API_KEY" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
           HF_TOKEN_TRIMMED="$(echo "$HF_TOKEN" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
 
           echo "SUPABASE_URL_TRIMMED=${SUPABASE_URL_TRIMMED}" >> "$GITHUB_ENV"
           echo "SUPABASE_PUBLISHABLE_KEY_TRIMMED=${SUPABASE_PUBLISHABLE_KEY_TRIMMED}" >> "$GITHUB_ENV"
           echo "GOOGLE_SERVER_CLIENT_ID_TRIMMED=${GOOGLE_SERVER_CLIENT_ID_TRIMMED}" >> "$GITHUB_ENV"
           echo "GROQ_API_KEY_TRIMMED=${GROQ_API_KEY_TRIMMED}" >> "$GITHUB_ENV"
+          echo "OPENROUTER_API_KEY_TRIMMED=${OPENROUTER_API_KEY_TRIMMED}" >> "$GITHUB_ENV"
           echo "HF_TOKEN_TRIMMED=${HF_TOKEN_TRIMMED}" >> "$GITHUB_ENV"
 
           # Lengths-only logging (never values) — M21
@@ -295,6 +298,7 @@ jobs:
       - name: Build APK (dart-define secrets, C1)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GEMMA_MODEL_URL: ${{ secrets.GEMMA_MODEL_URL }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -304,6 +308,7 @@ jobs:
           GEMMA_MODEL_URL_TRIMMED="$(echo "$GEMMA_MODEL_URL" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
           flutter build apk --release \
             --dart-define=GROQ_API_KEY="${GROQ_API_KEY_TRIMMED:-$GROQ_API_KEY}" \
+            --dart-define=OPENROUTER_API_KEY="${OPENROUTER_API_KEY_TRIMMED:-$OPENROUTER_API_KEY}" \
             --dart-define=GEMMA_MODEL_URL="$GEMMA_MODEL_URL_TRIMMED" \
             --dart-define=HF_TOKEN="${HF_TOKEN_TRIMMED:-$HF_TOKEN}" \
             --dart-define=SUPABASE_URL="${SUPABASE_URL_TRIMMED:-$SUPABASE_URL}" \
