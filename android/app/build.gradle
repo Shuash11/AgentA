@@ -8,7 +8,8 @@ plugins {
 android {
     namespace = "com.agenta.AgentA"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // Pinned to preinstalled runner NDK (actions/runner-images #14745 removed NDK 28).
+    ndkVersion = "27.3.13750724"
 
     // C4: release signing via android/key.properties (never committed;
     // values come from CI secrets). Debug builds keep the debug key.
