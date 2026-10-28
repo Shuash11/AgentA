@@ -10,6 +10,13 @@
 /// §3): the exact-match rows run before the broad `openrouter` fallback, and
 /// both run before the generic api-error catch-all, so a quota or
 /// configuration error is never masked as "failed to respond".
+///
+/// cycle-37 P3 (contract v1.1.0 §3 branch_table) re-orders that table: the
+/// four CLASSIFIED rows come first — harness-gate, budget/key-limit,
+/// moderation/safety-layer, permission — so a 403 is never described with
+/// the retired generic decline copy. The match keys are substrings of the
+/// contract's `service_message` strings, which the service throws after
+/// parsing the provider's error body.
 class ChatErrorClassifier {
   const ChatErrorClassifier._();
 
@@ -57,8 +64,23 @@ class ChatErrorClassifier {
     if (lower.contains('pollinations')) {
       return 'Image generation failed. Please try again.';
     }
-    // OpenRouter branches (contract §3) — exact-match rows first, then the
-    // broad fallback; both before the generic catch-all below.
+    // OpenRouter branches (contract §3 branch_table) — the four CLASSIFIED
+    // rows first (harness-gate → budget → moderation → permission), then the
+    // exact rows (key-not-configured / rate limit / free quota), then the
+    // broad fallback; all of them before the generic catch-all below, so a
+    // classified error is never masked.
+    if (lower.contains('restricted to agentic harnesses')) {
+      return "This model is restricted by its provider to certain AI tools on OpenRouter's free tier. Please pick another model.";
+    }
+    if (lower.contains('openrouter key spending limit')) {
+      return "Your OpenRouter key has reached its spending limit. Raise or remove the key's limit in the OpenRouter dashboard, then try again.";
+    }
+    if (lower.contains('openrouter blocked this request')) {
+      return "The AI service declined this request: the provider's safety layer blocked it. Please try again or switch models.";
+    }
+    if (lower.contains('openrouter refused the request')) {
+      return "Your OpenRouter account or API key is restricted from this request. Check your OpenRouter account settings or switch models.";
+    }
     if (lower.contains('openrouter api key not configured')) {
       return 'Chat service is not configured correctly.';
     }
@@ -83,6 +105,12 @@ class ChatErrorClassifier {
   /// every OpenRouter status maps to its own friendly copy instead of a
   /// single catch-all string. The 5xx case (and anything unknown) is the
   /// branch table's default copy.
+  ///
+  /// The generic decline row (`declined` / `rejected the request`) is
+  /// RETIRED (contract §3 retired_rows): the four classified rows resolve
+  /// every 403 before any generic path, and no amended `service_message`
+  /// contains either substring — so the old misleading copy can never
+  /// preempt a classified row.
   static String _openRouterFriendly(String lower) {
     if (lower.contains('invalid openrouter api key')) {
       return 'Chat service is not configured correctly.';
@@ -95,9 +123,6 @@ class ChatErrorClassifier {
     }
     if (lower.contains('timed out') || lower.contains('timeout')) {
       return 'Connection timed out. Check your internet connection.';
-    }
-    if (lower.contains('declined') || lower.contains('rejected the request')) {
-      return 'The AI service declined this request. Try rephrasing or switch models.';
     }
     if (lower.contains('full response budget')) {
       return 'The model used its full response budget. Please try again.';

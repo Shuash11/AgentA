@@ -42,12 +42,15 @@ class AppConfig {
 
   static const String groqModel = 'allam-2-7b';
 
-  /// cycle-36 P3: the two free OpenRouter chat models (contract §2).
-  /// These two literals are the ONLY OpenRouter model ids in lib/ — the
-  /// service receives the id as a parameter, never hard-coding it.
+  /// cycle-37 P3b (v1.2.0, 2026-10-28): model-constant swap per contract
+  /// v1.2.0 §2 / §5 — previous harness-gated IDs (removed v1.2.0) were
+  /// locked to agentic harnesses; live proofs (200/model) verified the
+  /// nvidia replacements below. Only OpenRouter ids in lib/; service gets
+  /// id as parameter, never hard-coding it.
   static const String openRouterFlashModel =
-      'thinkingmachines/inkling-small:free';
-  static const String openRouterProModel = 'thinkingmachines/inkling:free';
+      'nvidia/nemotron-3.5-lightning:free';
+  static const String openRouterProModel =
+      'nvidia/nemotron-3-ultra-550b-a55b:free';
 
   /// Shared English-enforcing rule reused across every AI persona prompt
   /// (Groq / Gemma) so all chat paths always respond in English.

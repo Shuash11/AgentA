@@ -217,10 +217,12 @@ void main() {
       );
     });
 
-    test('forbidden (403)', () {
+    test('residual 403 (no classified body) reads as an account restriction', () {
       expect(
-        ChatErrorClassifier.friendly('OpenRouter rejected the request (403).'),
-        'The AI service declined this request. Try rephrasing or switch models.',
+        ChatErrorClassifier.friendly(
+          'OpenRouter refused the request (403): account or key restriction.',
+        ),
+        'Your OpenRouter account or API key is restricted from this request. Check your OpenRouter account settings or switch models.',
       );
     });
 
@@ -289,6 +291,100 @@ void main() {
           'OpenRouter API key not configured. Please set OPENROUTER_API_KEY via --dart-define.',
         ),
         isNot('The selected AI model failed to respond. Please try again.'),
+      );
+    });
+  });
+
+  group('ChatErrorClassifier.friendly — OpenRouter classified rows (C37 v1.1.0)', () {
+    test('harness-gate row names the provider restriction, never a rephrase', () {
+      final friendly = ChatErrorClassifier.friendly(
+        'OpenRouter blocked this model: nvidia/nemotron-3-ultra-550b-a55b:free is restricted to agentic harnesses on the free tier.',
+      );
+      expect(
+        friendly,
+        "This model is restricted by its provider to certain AI tools on OpenRouter's free tier. Please pick another model.",
+      );
+      expect(friendly, isNot(contains('rephrase')));
+      expect(friendly, isNot(contains('declined')));
+    });
+
+    test('budget row names the spending limit and the dashboard remedy', () {
+      expect(
+        ChatErrorClassifier.friendly(
+          'OpenRouter key spending limit reached (403).',
+        ),
+        "Your OpenRouter key has reached its spending limit. Raise or remove the key's limit in the OpenRouter dashboard, then try again.",
+      );
+    });
+
+    test(
+      'moderation row keeps the decline framing and names the safety layer',
+      () {
+        expect(
+          ChatErrorClassifier.friendly(
+            'OpenRouter blocked this request (safety layer).',
+          ),
+          "The AI service declined this request: the provider's safety layer blocked it. Please try again or switch models.",
+        );
+      },
+    );
+
+    test('permission row names the account/key restriction', () {
+      expect(
+        ChatErrorClassifier.friendly(
+          'OpenRouter refused the request (403): account or key restriction.',
+        ),
+        'Your OpenRouter account or API key is restricted from this request. Check your OpenRouter account settings or switch models.',
+      );
+    });
+
+    test('classified rows resolve before the broad openrouter fallback', () {
+      // Every classified service_message contains "openrouter" — the broad
+      // fallback must never swallow one of them.
+      const broadFallback =
+          'The AI service is temporarily unavailable. Please try again.';
+      expect(
+        ChatErrorClassifier.friendly(
+          'OpenRouter blocked this model: nvidia/nemotron-3-ultra-550b-a55b:free is restricted to agentic harnesses on the free tier.',
+        ),
+        isNot(broadFallback),
+      );
+      expect(
+        ChatErrorClassifier.friendly(
+          'OpenRouter key spending limit reached (403).',
+        ),
+        isNot(broadFallback),
+      );
+      expect(
+        ChatErrorClassifier.friendly(
+          'OpenRouter blocked this request (safety layer).',
+        ),
+        isNot(broadFallback),
+      );
+      expect(
+        ChatErrorClassifier.friendly(
+          'OpenRouter refused the request (403): account or key restriction.',
+        ),
+        isNot(broadFallback),
+      );
+    });
+
+    test('the retired decline row never fires', () {
+      expect(
+        ChatErrorClassifier.friendly('OpenRouter rejected the request (403).'),
+        isNot(contains('declined')),
+      );
+      expect(
+        ChatErrorClassifier.friendly('OpenRouter rejected the request (403).'),
+        isNot(contains('rephrase')),
+      );
+      expect(
+        ChatErrorClassifier.friendly('The AI service declined this request.'),
+        isNot(contains('declined')),
+      );
+      expect(
+        ChatErrorClassifier.friendly('The AI service declined this request.'),
+        isNot(contains('rephrase')),
       );
     });
   });

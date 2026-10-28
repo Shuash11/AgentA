@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:aiproject/core/utils/chat_error_classifier.dart';
@@ -13,13 +14,19 @@ import 'package:aiproject/services/ai/pollinations_service.dart';
 
 // SECTION: test doubles (fake client, SSE/JSON response builders, message helper)
 
-/// The two contract model ids (contracts/openrouter-ai.yaml §2) — the only
-/// OpenRouter model strings allowed in test/.
-const String flashModelId = 'thinkingmachines/inkling-small:free';
-const String proModelId = 'thinkingmachines/inkling:free';
+/// The two contract model ids (contracts/openrouter-ai.yaml §2, v1.2.0)
+/// — the only OpenRouter model strings allowed in test/.
+const String flashModelId = 'nvidia/nemotron-3.5-lightning:free';
+const String proModelId = 'nvidia/nemotron-3-ultra-550b-a55b:free';
 
 /// A dummy key — never a real one, and never asserted by value.
 const String testApiKey = 'dummy-test-key';
+
+/// The verbatim harness-gate 403 body from the P1 probe
+/// (contracts/openrouter-ai.yaml §1 403_harness_gate.evidence_body; plan
+/// §2.5) — byte-exact and free of key material.
+const String harnessGateBody =
+    '{"error":{"message":"nvidia/nemotron-3-ultra-550b-a55b:free is only available on agentic harnesses. Try plugging it into a coding agent or productivity app listed on https://openrouter.ai/apps","code":403,"metadata":{"routing_funnel":[{"step":"Initial Endpoints","endpoint_count":1}],"failed_routing_step":"Gate Free Endpoints by Agentic Harness"}}}';
 
 /// Injected fake client — no network, full control over the response.
 class _FakeHttpClient extends http.BaseClient {
@@ -355,7 +362,7 @@ void main() {
         402:
             'Free chat quota reached for today. Try again tomorrow or switch models.',
         403:
-            'The AI service declined this request. Try rephrasing or switch models.',
+            'Your OpenRouter account or API key is restricted from this request. Check your OpenRouter account settings or switch models.',
         408: 'Connection timed out. Check your internet connection.',
         400: 'The selected AI model failed to respond. Please try again.',
         404: 'The selected AI model failed to respond. Please try again.',
@@ -506,6 +513,298 @@ void main() {
         'The model used its full response budget. Please try again.',
       );
     });
+  });
+
+  // SECTION: error-body parsing (contract v1.1.0)
+  group('OpenRouterService error-body parsing (contract v1.1.0)', () {
+    test(
+      'maps the verbatim harness-gate 403 body to the harness-gate copy',
+      () async {
+        final client = _FakeHttpClient(
+          (_) async => _sseResponse(harnessGateBody, statusCode: 403),
+        );
+        final service = OpenRouterService(client: client, apiKey: testApiKey);
+
+        final error = await _streamError(
+          service.sendMessageStream(
+            history: const [],
+            newMessage: 'hello',
+            model: proModelId,
+          ),
+        );
+
+        expect(error, isNotNull);
+        final friendly = ChatErrorClassifier.friendly(error.toString());
+        expect(
+          friendly,
+          "This model is restricted by its provider to certain AI tools on OpenRouter's free tier. Please pick another model.",
+        );
+        // The retired generic decline copy must never appear (plan §6-P3
+        // acceptance criterion 6).
+        expect(friendly, isNot(contains('rephrase')));
+        expect(friendly, isNot(contains('declined')));
+      },
+    );
+
+    test('maps a 403 budget body to the spending-limit copy', () async {
+      const body =
+          '{"error":{"code":403,"message":"Key spending limit reached",'
+          '"metadata":{"limit_source":"openrouter_key_limit"}}}';
+      final client = _FakeHttpClient(
+        (_) async => _sseResponse(body, statusCode: 403),
+      );
+      final service = OpenRouterService(client: client, apiKey: testApiKey);
+
+      final error = await _streamError(
+        service.sendMessageStream(
+          history: const [],
+          newMessage: 'hello',
+          model: proModelId,
+        ),
+      );
+
+      expect(error, isNotNull);
+      final friendly = ChatErrorClassifier.friendly(error.toString());
+      expect(
+        friendly,
+        "Your OpenRouter key has reached its spending limit. Raise or remove the key's limit in the OpenRouter dashboard, then try again.",
+      );
+      // Precedence: never the moderation, permission or retired decline rows.
+      expect(friendly, isNot(contains('safety layer')));
+      expect(friendly, isNot(contains('restricted from this request')));
+      expect(friendly, isNot(contains('declined')));
+    });
+
+    test('maps a 403 moderation body to the safety-layer copy', () async {
+      const body =
+          '{"error":{"code":403,"message":"Request blocked: unsafe content",'
+          '"metadata":{"error_type":"content_policy_violation",'
+          '"provider_name":"some-provider"}}}';
+      final client = _FakeHttpClient(
+        (_) async => _sseResponse(body, statusCode: 403),
+      );
+      final service = OpenRouterService(client: client, apiKey: testApiKey);
+
+      final error = await _streamError(
+        service.sendMessageStream(
+          history: const [],
+          newMessage: 'hello',
+          model: proModelId,
+        ),
+      );
+
+      expect(error, isNotNull);
+      expect(
+        ChatErrorClassifier.friendly(error.toString()),
+        "The AI service declined this request: the provider's safety layer blocked it. Please try again or switch models.",
+      );
+    });
+
+    test('maps a residual 403 body to the permission copy', () async {
+      const body = '{"error":{"code":403,"message":"Forbidden"}}';
+      final client = _FakeHttpClient(
+        (_) async => _sseResponse(body, statusCode: 403),
+      );
+      final service = OpenRouterService(client: client, apiKey: testApiKey);
+
+      final error = await _streamError(
+        service.sendMessageStream(
+          history: const [],
+          newMessage: 'hello',
+          model: proModelId,
+        ),
+      );
+
+      expect(error, isNotNull);
+      expect(
+        ChatErrorClassifier.friendly(error.toString()),
+        'Your OpenRouter account or API key is restricted from this request. Check your OpenRouter account settings or switch models.',
+      );
+    });
+
+    test(
+      'classifies a 400 with routing metadata through the metadata rows',
+      () async {
+        const body =
+            '{"error":{"code":400,"message":"routing failed","metadata":'
+            '{"routing_funnel":[{"step":"Initial Endpoints","endpoint_count":1}],'
+            '"failed_routing_step":"Gate Free Endpoints by Agentic Harness"}}}';
+        final client = _FakeHttpClient(
+          (_) async => _sseResponse(body, statusCode: 400),
+        );
+        final service = OpenRouterService(client: client, apiKey: testApiKey);
+
+        final error = await _streamError(
+          service.sendMessageStream(
+            history: const [],
+            newMessage: 'hello',
+            model: proModelId,
+          ),
+        );
+
+        expect(error, isNotNull);
+        // A routing-class failure is never described as a payload defect.
+        expect(
+          ChatErrorClassifier.friendly(error.toString()),
+          "This model is restricted by its provider to certain AI tools on OpenRouter's free tier. Please pick another model.",
+        );
+        expect(
+          ChatErrorClassifier.friendly(error.toString()),
+          isNot('The selected AI model failed to respond. Please try again.'),
+        );
+      },
+    );
+
+    test('falls back to the 4xx copy for an unmatched routing step', () async {
+      const body =
+          '{"error":{"code":400,"message":"no endpoint matched","metadata":'
+          '{"routing_funnel":[{"step":"Initial Endpoints","endpoint_count":0}],'
+          '"failed_routing_step":"Some Other Step"}}}';
+      final client = _FakeHttpClient(
+        (_) async => _sseResponse(body, statusCode: 400),
+      );
+      final service = OpenRouterService(client: client, apiKey: testApiKey);
+
+      final error = await _streamError(
+        service.sendMessageStream(
+          history: const [],
+          newMessage: 'hello',
+          model: proModelId,
+        ),
+      );
+
+      expect(error, isNotNull);
+      expect(
+        ChatErrorClassifier.friendly(error.toString()),
+        'The selected AI model failed to respond. Please try again.',
+      );
+      // The parsed fields are still carried — never lost.
+      final exception = error! as OpenRouterServiceException;
+      expect(exception.errorBody?.code, 400);
+      expect(exception.errorBody?.hasRoutingMetadata, isTrue);
+      expect(exception.errorBody?.failedRoutingStep, 'Some Other Step');
+    });
+
+    test(
+      'maps a 200 body holding only an error object through the table',
+      () async {
+        final client = _FakeHttpClient(
+          (_) async => _jsonResponse(harnessGateBody, statusCode: 200),
+        );
+        final service = OpenRouterService(client: client, apiKey: testApiKey);
+
+        final error = await _futureError(
+          service.sendMessage(
+            history: const [],
+            newMessage: 'hello',
+            model: proModelId,
+          ),
+        );
+
+        expect(error, isNotNull);
+        expect(error.toString(), isNot(contains('invalid response body')));
+        expect(
+          ChatErrorClassifier.friendly(error.toString()),
+          "This model is restricted by its provider to certain AI tools on OpenRouter's free tier. Please pick another model.",
+        );
+      },
+    );
+
+    test('maps a mid-stream error event through the same rows', () async {
+      final body =
+          'data: {"error":{"code":403,"message":"nvidia/nemotron-3-ultra-550b-a55b:free '
+          'is only available on agentic harnesses.","metadata":'
+          '{"failed_routing_step":"Gate Free Endpoints by Agentic Harness"}},'
+          '"choices":[{"delta":{},"finish_reason":"error"}]}\n\n';
+      final client = _FakeHttpClient((_) async => _sseResponse(body));
+      final service = OpenRouterService(client: client, apiKey: testApiKey);
+
+      final error = await _streamError(
+        service.sendMessageStream(
+          history: const [],
+          newMessage: 'hello',
+          model: proModelId,
+        ),
+      );
+
+      expect(error, isNotNull);
+      expect(
+        ChatErrorClassifier.friendly(error.toString()),
+        "This model is restricted by its provider to certain AI tools on OpenRouter's free tier. Please pick another model.",
+      );
+    });
+
+    test(
+      'keeps the generic 5xx copy for a 500-class mid-stream code',
+      () async {
+        final body =
+            'data: {"error":{"code":500,"message":"upstream exploded"},'
+            '"choices":[{"delta":{},"finish_reason":"error"}]}\n\n';
+        final client = _FakeHttpClient((_) async => _sseResponse(body));
+        final service = OpenRouterService(client: client, apiKey: testApiKey);
+
+        final error = await _streamError(
+          service.sendMessageStream(
+            history: const [],
+            newMessage: 'hello',
+            model: proModelId,
+          ),
+        );
+
+        expect(error, isNotNull);
+        expect(
+          ChatErrorClassifier.friendly(error.toString()),
+          'The AI service is temporarily unavailable. Please try again.',
+        );
+      },
+    );
+
+    test(
+      'carries the parsed body on the failure and never logs the key',
+      () async {
+        final logs = <String>[];
+        final originalPrint = debugPrint;
+        debugPrint = (String? message, {int? wrapWidth}) {
+          if (message != null) logs.add(message);
+        };
+
+        final client = _FakeHttpClient(
+          (_) async => _sseResponse(harnessGateBody, statusCode: 403),
+        );
+        final service = OpenRouterService(client: client, apiKey: testApiKey);
+
+        Object? error;
+        try {
+          error = await _streamError(
+            service.sendMessageStream(
+              history: const [],
+              newMessage: 'hello',
+              model: proModelId,
+            ),
+          );
+        } finally {
+          debugPrint = originalPrint;
+        }
+
+        expect(error, isA<OpenRouterServiceException>());
+        final exception = error! as OpenRouterServiceException;
+        expect(exception.errorBody?.code, 403);
+        expect(
+          exception.errorBody?.message,
+          contains('only available on agentic harnesses'),
+        );
+        expect(
+          exception.errorBody?.metadata?['failed_routing_step'],
+          'Gate Free Endpoints by Agentic Harness',
+        );
+        expect(exception.errorBody?.hasRoutingMetadata, isTrue);
+        // The raw provider message reaches the debug log — the key never does.
+        final log = logs.join('\n');
+        expect(log, contains('only available on agentic harnesses'));
+        expect(log, isNot(contains(testApiKey)));
+        expect(exception.message, isNot(contains(testApiKey)));
+      },
+    );
   });
 
   // SECTION: cancel + retry behaviour

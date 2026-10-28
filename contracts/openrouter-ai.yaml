@@ -1,21 +1,79 @@
-# OpenRouter AI contract (cycle-36 P2)
+# OpenRouter AI contract (cycle-36 P2; AMENDED cycle-37 P2 — v1.1.0;
+# AMENDED cycle-37 P3b — v1.2.0)
 #
-# Governing plan: plans/cycle-36-openrouter-cloud-models.md (ACTIVE).
-# P2 of that plan — this file is the single source of truth for P3
-# (OpenRouterService + full wiring). Consumers implement exactly what is
+# Governing plan: plans/cycle-36-openrouter-cloud-models.md (original
+# authoring) + plans/cycle-37-hotfix-models-name-password.md (the
+# amendment governing plan: §6-P2 — error rows CLOSED there, §4.5
+# Ruling 5; §6-P3b — the v1.2.0 model-constant swap). This file is the
+# single source of truth for both plans' P3 (OpenRouterService + full
+# wiring) and P3b (model constants). Consumers implement exactly what is
 # written here and never assume. No second copy exists anywhere.
+#
+# AMENDMENT RECORD (v1.0.0 → v1.1.0, 2026-10-28, cycle-37 P2): the
+# v1.0.0 error table mapped errors by HTTP STATUS ALONE, and the shipped
+# build received OpenRouter's harness-gate 403 while showing the generic
+# "declined" copy — the body naming the true cause was discarded
+# (openrouter_service.dart:231-247; incident plan §2.5). This amendment
+# makes body parsing MANDATORY (§1 error_body_parsing), splits 403 into
+# four classified rows (harness-gate FIRST), adds the 400-with-routing-
+# metadata rule, the 200-with-error-body rule, and mid-stream message
+# passthrough (§1), adds the matching classifier rows (§3 branch_table,
+# harness-gate match key FIRST, and the v1.0.0 decline row retired),
+# adds the service_tests coverage rows (§3), marks §2's model constants
+# DECISION-PENDING (N13 — plan §4.5 Ruling 6: both inkling :free IDs are
+# harness-gated; substitution/paid/drop is a USER DECISION; a v1.2.0
+# amendment per plan §6-P3b may replace them), and adds the verbatim-
+# body acceptance criterion (§5, plan §6-P3 criterion 6).
+# Evidence for every new row: the P1 probe's verbatim harness-gate 403
+# body (plan §2.5 — reproduced in §1; contains NO key material) and the
+# live OpenRouter errors doc (fetched 2026-10-28, plan §2/§2.1).
+# Change class: additive error-mapping rows — the wire request shape is
+# UNCHANGED (not breaking).
+#
+# AMENDMENT RECORD (v1.1.0 → v1.2.0, 2026-10-28, cycle-37 P3b step 1; plan
+# §6-P3b): the USER DECISION (N13) is CLOSED — Option A, keep names, swap
+# engines (plan §4.5 Ruling 6; decision recorded 2026-10-28). The two
+# harness-gated inkling :free IDs are REPLACED by the substitutes chosen
+# from plan §6-P3b's verified-candidate table: Pro →
+# nvidia/nemotron-3-ultra-550b-a55b:free, Flash →
+# nvidia/nemotron-3.5-lightning:free. The display names "AgentA Pro" /
+# "AgentA 2.1 Flash" are BINDING and UNCHANGED, as are the §3 enum values
+# and the name-substring constraint (neither enum value contains
+# 'pollinations' or 'image'; neither new model name does either). The wire
+# request shape is UNCHANGED — including §1 reasoning {effort:"low",
+# exclude:true}: Flash accepted it live (one real 200 on the fresh rotated
+# key, 2026-10-28 — reasoning_tokens 148 performed + excluded, cost 0, no
+# 400), so the §6-P3b payload-compat conditional (drop the effort
+# sub-field) did NOT fire. Per-ID live-proof state is recorded in §2 under
+# the §12 standing rule (ONE live request per NEW model ID BEFORE
+# release): Flash PROVEN; Pro's budgeted proof request was consumed by an
+# auth-transmission artifact (401 "Missing Authentication header" — the
+# Authorization header was never sent; §4.4 precedent: a harness artifact
+# is NOT evidence about the model) — the candidate is NOT falsified, no
+# gate was hit, and the corrected one-live-request proof for the Pro ID is
+# REQUIRED before P6 release; a harness-gate-style 403 there falsifies it
+# → re-amendment with the next verified candidate (§4.5 STOP-new).
+# §1 is otherwise UNCHANGED and model-agnostic; the 403_harness_gate row
+# STAYS as the standing classifier row for ANY future gated model — the
+# inkling IDs were removed from §2 BECAUSE of the gate, not the error row.
+# §3 app_config consts + the §5 grep gates move to the new IDs. Change
+# class: model-constant swap (additive per plan §6-P3b) — the wire request
+# shape is UNCHANGED (not breaking).
 #
 # NO KEY VALUES ANYWHERE IN THIS FILE. The OpenRouter key is referenced
 # only as the env name OPENROUTER_API_KEY (see §4 secrets posture).
 #
 # External facts (endpoint, auth, stream/error shapes, free-tier limits,
-# reasoning semantics) are live-doc verifications recorded in plan §1.2
-# (verified 2026-10-28) — not training knowledge. Internal facts are
-# file:line citations from plan §1.3, re-verified in the tree at
-# contract time.
+# reasoning semantics, error-body vocabulary) are live-doc verifications
+# recorded in the governing plans (cycle-36 §1.2; cycle-37 §2, §2.1, §2.5,
+# verified 2026-10-28) — not training knowledge. Internal facts are
+# file:line citations from the plans, re-verified in the tree at
+# contract/amendment time (cycle-37 P2 re-verified: classifier
+# chat_error_classifier.dart:62-108; service openrouter_service.dart:
+# 215-264, 330-332, 402-406, 435-439, 476-483).
 
 contract: openrouter-ai
-version: 1.0.0
+version: 1.2.0
 status: active
 
 # ---------------------------------------------------------------------------
@@ -60,7 +118,7 @@ external_api:
       # Mirrors GroqService (groq_service.dart:139,240) per the
       # structural-sibling rule; plan/delegation left the value open.
     reasoning:
-      effort: "low"      # documented F3 mitigation (default is "high" on both models)
+      effort: "low"      # documented F3 mitigation — retained under v1.2.0; accepted live by the Flash ID (§2 live_proof)
       exclude: true      # documented F3 mitigation (reasoning text excluded from reply)
 
   response_200_non_stream:
@@ -105,16 +163,93 @@ external_api:
 
   reasoning_budget_hazard:
     # Plan F3 (documented, load-bearing). Reasoning tokens count against
-    # max_tokens; both §2 models default reasoning ON at effort "high", so
-    # a Groq-style max_tokens: 2048 request risks finishing the budget
-    # on reasoning → finish_reason "length" with EMPTY content.
-    mitigations_in_request: max_tokens 4096 + effort "low" + exclude true
-      (documented mitigation set; both leave ample room inside the
-      262,144 completion cap — plan P2 §147).
+    # max_tokens; a Groq-style max_tokens: 2048 request risks finishing the
+    # budget on reasoning → finish_reason "length" with EMPTY content.
+    # (The v1.0.0/v1.1.0 note that BOTH §2 models default reasoning ON at
+    # effort "high" was inkling catalog data; per-model reasoning defaults
+    # for the v1.2.0 IDs are NOT re-verified — see §2 reasoning_default.)
+    mitigations_in_request: >-
+      max_tokens 4096 + effort "low" + exclude true (documented mitigation
+      set — UNCHANGED under v1.2.0; accepted live by the Flash ID, §2
+      live_proof. The "262,144 completion cap" figure was inkling catalog
+      data and is NOT re-verified for the v1.2.0 IDs — unverified, not
+      load-bearing: the request shape is unchanged.)
     required_handling: >-
       If the stream/response ends with finish_reason "length" and no
       content was yielded, raise a friendly error (copy in table below),
       not a silent empty reply.
+
+  error_body_parsing:
+    # cycle-37 P2 amendment (plan §6-P2 item 1; §4.4 Ruling 2). Governs the
+    # error_table below: v1.0.0 mapped by status alone; that masking is
+    # what cost a full diagnostic round (incident plan §2.5).
+    rule: >-
+      On EVERY non-200 response — pre-stream HTTP status or mid-stream
+      error event — and on any 200 body holding only an `error` object,
+      the service MUST parse the error body and map THROUGH the
+      error_table using its parsed fields. The status code alone is never
+      again sufficient: it only selects the fallback row when the body
+      matches none.
+    parsed_fields:
+      error.code: >-
+        integer (or numeric string) — the HTTP-equivalent code; feeds the
+        status-row selection exactly as today (openrouter_service.dart
+        _serviceMessageForErrorCode keeps working for it).
+      error.message: >-
+        string — the provider's own cause + remedy sentence (e.g. the
+        harness-gate remedy points at openrouter.ai/apps, plan §2.5).
+        NEVER user-facing raw; feeds row selection + the debug surface.
+      error.metadata:
+        # (v1.1.0 carried this as an unparseable plain-scalar + bullet mix;
+        # repaired v1.2.0 to parseable structure — content unchanged.)
+        description: >-
+          object — the discriminating keys (live errors doc, plan §2.1;
+          structure verified against the P1 probe's verbatim body, plan
+          §2.5)
+        discriminating_keys:
+          - limit_source: >-
+              budget/key-limit class — live-doc values
+              openrouter_guardrail_budget / openrouter_workspace_budget /
+              openrouter_key_limit
+          - error_type: >-
+              moderation/permission class — live-doc values incl.
+              content_policy_violation / refusal / permission_denied
+          - provider_name: >-
+              moderation metadata (live doc §2.1)
+          - routing_funnel: >-
+              array of {step, endpoint_count} — routing-class discriminator
+              (P1 probe §2.5)
+          - failed_routing_step: >-
+              string SIBLING of routing_funnel inside error.metadata — NOT
+              nested inside routing_funnel[] (P1 probe §2.5 verbatim body);
+              e.g. "Gate Free Endpoints by Agentic Harness"
+    precedence:
+      - >-
+        1. Metadata-match rows first: if error.metadata matches a
+        classified row below (harness-gate FIRST, then budget, then
+        moderation), that row's copy applies regardless of the status
+        code's default row — this is what makes a routing-class 400-shape
+        never read as a payload defect (plan §6-P2 item 3).
+      - >-
+        2. No metadata match → the status row (403 resolves through its
+        four split rows below; 400/other-4xx → other_4xx; etc.).
+      - >-
+        3. Truly unknown shape (no parseable error object) → the
+        status-code fallback / generic copy exactly as v1.0.0 did.
+    debug_surface:
+      log: >-
+        the raw parsed error body (message + code + metadata) is logged
+        at kDebugMode ONLY (plan §4.4 Ruling 2). Safe because the body
+        never contains key material (plan §2.5); user text inside e.g.
+        metadata flagged_input stays debug-only — never user-facing
+        beyond the single mapped sentence (P3 acceptance criterion 4).
+      typed_failure: >-
+        OpenRouterServiceException carries the parsed fields (code,
+        message, metadata) alongside the mapped user-facing message, so
+        the classifier, callers, and tests consume the PARSED BODY — the
+        developer-visible truth — while the user-facing `message` stays
+        the mapped service_message (friendly copy never embeds more than
+        one sentence of provider payload).
 
   error_table:
     # HTTP error body (plan §1.2): { error: { code: integer, message: string,
@@ -123,6 +258,12 @@ external_api:
     # SERVICE throws and the classifier maps (§3 classifier table).
     # Copy tone follows the existing classifier/service strings
     # (chat_error_classifier.dart:38-58; groq_service.dart:156-176).
+    # AMENDED v1.1.0 (cycle-37 P2): every row is reached THROUGH
+    # error_body_parsing above — status alone selects only fallbacks.
+    # Rows 401/402/408/429/other_4xx/5xx are unchanged from v1.0.0; the
+    # single 403 row is REPLACED by the four classified rows below
+    # (plan §6-P2 item 2 — the old "declined" copy is retired: it was the
+    # misleading generic shown for the harness-gate 403, plan §2.5).
     "401":
       meaning: invalid or missing API key
       service_message: "Invalid OpenRouter API key. Please check OPENROUTER_API_KEY."
@@ -133,10 +274,83 @@ external_api:
         models (plan §1.2); daily free cap reached behaves here
       service_message: "OpenRouter free quota exhausted (daily limit or account balance)."
       friendly: "Free chat quota reached for today. Try again tomorrow or switch models."
-    "403":
-      meaning: forbidden (moderation/blocked)
-      service_message: "OpenRouter rejected the request (403)."
-      friendly: "The AI service declined this request. Try rephrasing or switch models."
+    "403_harness_gate":
+      # FIRST match of the 403 split (plan §6-P2 item 2, evidence §2.5).
+      match_key: >-
+        parsed metadata.failed_routing_step == "Gate Free Endpoints by
+        Agentic Harness" OR parsed error.message contains "only available
+        on agentic harnesses"
+      meaning: >-
+        OpenRouter's free-endpoint routing policy restricts this model's
+        `:free` endpoint to agentic-harness callers (AI coding tools) —
+        the model id may still be LISTED free on the catalog while
+        unreachable for plain API callers (plan §2.5). NOT a key,
+        account, budget, moderation, or app defect; key rotation will not
+        fix it.
+      evidence_body: >-
+        {"error":{"message":"thinkingmachines/inkling:free is only
+        available on agentic harnesses. Try plugging it into a coding
+        agent or productivity app listed on https://openrouter.ai/apps",
+        "code":403,"metadata":{"routing_funnel":[{"step":"Initial
+        Endpoints","endpoint_count":1}],"failed_routing_step":"Gate Free
+        Endpoints by Agentic Harness"}}}
+        # Verbatim P1 probe body (plan §2.5; byte-exact, contains NO key
+        # material) — the P3 unit-test fixture (§3 service_tests).
+        # PROVENANCE (v1.2.0): this row STAYS after the model-constant
+        # swap — it is the standing classifier row for ANY future
+        # harness-gated model (match keys are model-agnostic). The inkling
+        # IDs were removed from §2 BECAUSE of this gate, not this row.
+      service_message: "OpenRouter blocked this model: <model id> is restricted to agentic harnesses on the free tier."
+        # <model id> = the request's `model` parameter (the exact §2
+        # string), substituted at throw time. The provider's own remedy
+        # sentence from error.message ("Try plugging it into a coding
+        # agent…") is preserved on the typed failure's parsed message +
+        # the kDebugMode log (error_body_parsing.debug_surface) — the
+        # user copy below states the app's own remedy instead.
+      friendly: "This model is restricted by its provider to certain AI tools on OpenRouter's free tier. Please pick another model."
+        # Verbatim plan §6-P2: the provider's own remedy class, stated
+        # honestly; never "try rephrasing", never blames the user's
+        # wording, never the old generic "declined" copy.
+    "403_budget_key_limit":
+      match_key: >-
+        parsed error.metadata.limit_source present (live-doc values:
+        openrouter_guardrail_budget / openrouter_workspace_budget /
+        openrouter_key_limit — plan §2.1)
+      meaning: >-
+        a spending limit on the key/workspace/guardrail budget is
+        reached; the live doc has this class reject with 403 (not 402),
+        so the status row alone would mislead (plan §2.1)
+      service_message: "OpenRouter key spending limit reached (403)."
+      friendly: "Your OpenRouter key has reached its spending limit. Raise or remove the key's limit in the OpenRouter dashboard, then try again."
+        # Plan §6-P2: names the spending limit and the user's remedy
+        # (raise/remove the key's limit in the dashboard) — never "try
+        # rephrasing".
+    "403_moderation_guardrail":
+      match_key: >-
+        parsed error.metadata.error_type is content_policy_violation or
+        refusal, OR the parsed error.message is a guardrail block
+        ("Request blocked:" + patterns — plan §4.4 map)
+      meaning: >-
+        the provider's safety layer blocked this request
+        (moderation/guardrail); metadata may carry provider_name and the
+        flagged input (debug-only, plan §2.1)
+      service_message: "OpenRouter blocked this request (safety layer)."
+      friendly: "The AI service declined this request: the provider's safety layer blocked it. Please try again or switch models."
+        # Plan §6-P2: keeps the decline framing and includes that the
+        # request was blocked by the provider's safety layer — no
+        # "rephrasing" advice. (The word "declined" here is the mapped
+        # USER copy, not a classifier match key — the service_message
+        # above deliberately avoids it so the generic declined row at
+        # chat_error_classifier.dart:99-100 can never preempt this row.)
+    "403_permission_other":
+      # Residual row: any 403 whose parsed body matches none of the three
+      # rows above (incl. error_type permission_denied, region/permission
+      # restrictions, and bodies with no usable metadata).
+      meaning: an account/key-level restriction or unclassified 403
+      service_message: "OpenRouter refused the request (403): account or key restriction."
+      friendly: "Your OpenRouter account or API key is restricted from this request. Check your OpenRouter account settings or switch models."
+        # Plan §6-P2: names an account/key restriction; no rephrasing
+        # advice.
     "408":
       meaning: request timeout
       service_message: "OpenRouter request timed out."
@@ -151,6 +365,17 @@ external_api:
       friendly: "Cloud chat is rate limited (free tier: 20 requests/min, 50/day). Wait a moment and try again."
     other_4xx:  # 400/404/413/422 and any unlisted 4xx
       meaning: bad request / unknown model / payload too large / validation
+      routing_metadata_first:
+        # AMENDED v1.1.0 (plan §6-P2 item 3). When the parsed body
+        # carries metadata.routing_funnel or metadata.failed_routing_step,
+        # classification uses those fields FIRST — a routing-class
+        # failure, not a payload defect: run the metadata-match rows
+        # (403_harness_gate etc.) before this row's copy. Probe attempt
+        # 1's R2 artifact (plan §4.4) is why the distinction matters: a
+        # routing 400-shape must never be described as an invalid
+        # request. A routing step that matches no classified row falls
+        # back to THIS row's copy, with the parsed fields still carried
+        # on the typed failure + debug log (never lost).
       service_message: "OpenRouter request error: <status>"
       friendly: "The selected AI model failed to respond. Please try again."
     5xx:  # 500/502/503/524/529
@@ -159,9 +384,21 @@ external_api:
       friendly: "The AI service is temporarily unavailable. Please try again."
     mid_stream_finish_reason_error:
       meaning: SSE event per mid_stream_error_events above (map the
-        embedded error.code through this same table; unknown → generic)
+        embedded error through this same table; unknown → generic)
+      body_parsing_passthrough:
+        # AMENDED v1.1.0 (plan §6-P2 item 5; delegation scope 4). The
+        # embedded error event gets the SAME body parsing as an HTTP
+        # error — code + message + metadata through the same rows — not
+        # code-only (openrouter_service.dart:435-439 reads only
+        # error.code today; _parseSseEvent:504-508/:523-526 discards the
+        # rest). The parsed message + metadata inform the mapped friendly
+        # copy per the same rows whenever the class is NOT 500-masked; a
+        # 500-class code keeps the 5xx row's fixed generic copy (the raw
+        # message stays debug-only).
       friendly: >-
-        same mapping as the HTTP row for that code; unknown →
+        same mapping as the HTTP row for that code — INCLUDING the
+        metadata rows (a mid-stream 403 harness-gate event maps to the
+        403_harness_gate copy); unknown →
         "The selected AI model failed to respond. Please try again."
     empty_content_length_finish:
       meaning: reasoning-budget exhaustion (hazard above)
@@ -183,35 +420,118 @@ external_api:
 # 2. Model constants (user's binding mapping)
 # ---------------------------------------------------------------------------
 
-# USER'S BINDING MAPPING (plan §1.1, live catalog GET /api/v1/models
-# verified 2026-10-28, 464 models). These are fixed constants — never
-# parameterized, never extended this cycle (paid variants out of scope).
-# The user's corrected mapping is confirmed correct against the catalog's
-# own scale: small → inkling-small, strong → inkling (plan §1.1).
+# USER'S BINDING MAPPING — DECIDED (cycle-37 §4.5 Ruling 6; N13 CLOSED by
+# the user's Option A decision, recorded 2026-10-28): the DISPLAY NAMES
+# below are binding and unchanged; the ENGINES were swapped by this v1.2.0
+# amendment. The original v1.0.0 mapping (small → inkling-small, strong →
+# inkling; plan §1.1, live catalog GET /api/v1/models verified 2026-10-28,
+# 464 models) became unreachable for plain API callers when OpenRouter's
+# agentic-harness gate closed the :free endpoint class (plan §2.5 — see §1
+# 403_harness_gate). These remain fixed constants — never parameterized,
+# never extended (paid variants out of scope).
 
 model_constants:
+  # DECIDED — Option A (user decision recorded cycle-37 §4.5 Ruling 6 +
+  # Orchestrator delegation 2026-10-28): keep names, swap engines. The
+  # v1.1.0 decision_pending: N13 marker is REMOVED. Substitutes chosen from
+  # plan §6-P3b's verified-candidate table (live catalog 2026-10-28).
+  # Per-ID live-proof state is recorded below under the §12 standing rule
+  # (ONE live request per NEW model ID BEFORE release — the release gate,
+  # not a gate on this amendment).
   flash:
-    model_id: "thinkingmachines/inkling-small:free"
-    display_name: "AgentA 2.1 Flash"   # exact picker text (binding)
+    model_id: "nvidia/nemotron-3.5-lightning:free"
+    display_name: "AgentA 2.1 Flash"   # exact picker text (binding — unchanged)
     role: small / fast tier
-    tier: free (prompt 0 / completion 0)
-    context_window: 1048576
-    max_completion_tokens: 262144
-    reasoning_default: enabled by default, default effort "high"
-      # → why the explicit §1 reasoning config exists.
+    replaces: >-
+      thinkingmachines/inkling-small:free (removed v1.2.0 — the inkling
+      :free class is harness-gated, plan §2.5; the gate hit is PROVEN for
+      inkling:free by §1's verbatim body, inferred same-gated for
+      inkling-small:free, unverified — probe budget consumed)
+    catalog_facts:   # plan §6-P3b candidate table (live catalog 2026-10-28)
+      architecture: 30B MoE / 3B active
+      context_window: 1000000
+      tier: free (prompt 0 / completion 0 — :free class; live-confirmed usage.cost 0)
+      supported_parameters: reasoning (reasoning_effort NOT listed on catalog)
+      listed: 2026-08-11
+    live_proof:   # §6-P3b verification gate; proof report referenced, not embedded
+      status: >-
+        200 — one real request, 2026-10-28, fresh rotated key env-only
+        (§4.1(4) hygiene; zero key material in any record)
+      routed_model_confirmed: >-
+        nvidia/nemotron-3.5-lightning:free — the response's model field
+        (server-routed to the new constant, not the old inkling-small ID)
+      cost: 0 (usage.cost 0 — free tier confirmed live)
+      reasoning_compat: >-
+        ACCEPTED reasoning {effort:"low", exclude:true} — 200 with 148
+        reasoning tokens performed then excluded, no 400, no retry needed.
+        The catalog note (reasoning_effort not listed) is CONSERVATIVE —
+        the §6-P3b payload-compat conditional (drop the effort sub-field)
+        did NOT fire; §1's reasoning config is unchanged.
+      proof_report_ref: >-
+        C:\Users\joashua\AppData\Local\Temp\opencode\P3b-proof-report.md
+        (session-only, §4.1(4); contains no key material — referenced,
+        not embedded)
+      verdict: >-
+        WORKS — verified reachable, honest answer delivered, no
+        harness-gate, no misleading decline copy
+    reasoning_default: >-
+      not re-verified for this ID (the "enabled by default, effort high"
+      note was inkling catalog data); the §1 mitigation set is retained
+      regardless
+    max_completion_tokens: >-
+      not re-verified for this ID (plan §6-P3b's table records context
+      window + supported_parameters only; the 262,144 figure was inkling
+      catalog data) — unverified, not load-bearing: the request shape is
+      unchanged
   pro:
-    model_id: "thinkingmachines/inkling:free"
-    display_name: "AgentA Pro"         # exact picker text (binding)
+    model_id: "nvidia/nemotron-3-ultra-550b-a55b:free"
+    display_name: "AgentA Pro"         # exact picker text (binding — unchanged)
     role: strong tier
-    tier: free (prompt 0 / completion 0)
-    context_window: 1048576
-    max_completion_tokens: 262144
-    reasoning_default: enabled by default, default effort "high"
+    replaces: >-
+      thinkingmachines/inkling:free (removed v1.2.0 — harness-gate PROVEN
+      by the verbatim §1 403_harness_gate.evidence_body, plan §2.5)
+    catalog_facts:   # plan §6-P3b candidate table (live catalog 2026-10-28)
+      architecture: 550B MoE / 55B active
+      context_window: 1000000
+      tier: free (prompt 0 / completion 0 — :free class)
+      supported_parameters: reasoning + reasoning_effort
+      listed: 2026-06-04
+    live_proof:   # §6-P3b verification gate; proof report referenced, not embedded
+      status: >-
+        200 — one corrected real request, 2026-10-28T23:11:13Z, fresh
+        rotated key env-only (§4.1(4) hygiene; zero key material in any
+        record). The earlier 401 "Missing Authentication header" was a
+        transmission artifact (Authorization header never sent; §4.4
+        precedent: a harness artifact is NOT evidence about the model) —
+        struck from the record and SUPERSEDED by this proof. The
+        §12/§6-P3b one-live-request gate is SATISFIED for this ID.
+      routed_model_confirmed: >-
+        nvidia/nemotron-3-ultra-550b-a55b:free — the response's
+        server-returned model field (routed to the new constant, not the
+        old inkling ID)
+      cost: 0 (usage.cost 0 — free tier confirmed live)
+      reasoning_compat: >-
+        ACCEPTED reasoning {effort:"low", exclude:true} FIRST-TRY — 200
+        with 21 reasoning tokens performed then excluded, no 400, no
+        retry. The catalog's reasoning_effort listing is LIVE-CONFIRMED;
+        the §6-P3b payload-compat conditional (drop the effort sub-field)
+        did NOT fire; §1's reasoning config is unchanged.
+      proof_report_ref: >-
+        C:\Users\joashua\AppData\Local\Temp\opencode\REPORT_P3B_PRO.md
+        (session-only, §4.1(4); redacted key form only, no key material —
+        referenced, not embedded)
+      verdict: >-
+        WORKS — verified reachable, honest answer delivered ("2 + 2 =
+        4."), no harness-gate, no misleading decline copy. The v1.2.0
+        amendment record's "ONE corrected live request REQUIRED before P6
+        release" demand is SATISFIED by this proof — removed; nothing
+        proof-outstanding before P6 on this ID.
 
 # Routing: the app ALWAYS sends the exact model_id above as `model` —
-# one request per enum value, dispatched by §3's switch (P3 acceptance
-# criterion: `grep -rn "thinkingmachines/" lib/` shows EXACTLY these two
-# strings and no others, plan P3 §158).
+# one request per enum value, dispatched by §3's switch. Gate (amended
+# v1.2.0, plan §6-P3b): `grep -rn "nvidia/nemotron-" lib/` shows EXACTLY
+# these two strings and no others, and zero "thinkingmachines/" strings
+# remain in lib/ and test/.
 
 # ---------------------------------------------------------------------------
 # 3. Internal contract — app integration surface (produced in P3)
@@ -270,9 +590,11 @@ internal:
       'https://openrouter.ai/api/v1/chat/completions'
       (same style as groqEndpoint :27-28).
     new_model_id_consts:
-      # (same style as groqModel :39).
-      openRouterFlashModel: "thinkingmachines/inkling-small:free"
-      openRouterProModel: "thinkingmachines/inkling:free"
+      # (same style as groqModel :39). AMENDED v1.2.0 (plan §6-P3b): the
+      # IDs mirror §2 exactly — the P3b middle-end-light step swaps these
+      # two strings in app_config.dart:49-50 and nothing else.
+      openRouterFlashModel: "nvidia/nemotron-3.5-lightning:free"
+      openRouterProModel: "nvidia/nemotron-3-ultra-550b-a55b:free"
     logging_rule: never log the key; any debug logging follows the
       suffix-only pattern (app_config.dart:98-110). envLengths addition is
       plan F12 — BACKLOG, not P3.
@@ -332,19 +654,44 @@ internal:
         provider (:64) — not a ChangeNotifier; plain value provider.
 
   classifier:
-    # lib/core/utils/chat_error_classifier.dart:38-58 (verified: groq
-    # branch :38-40, huggingface :41-52, pollinations :53-55, generic
-    # catch-all :56-58 which would mask quota errors as "failed to
-    # respond" — plan F4/F9).
+    # lib/core/utils/chat_error_classifier.dart — RE-VERIFIED cycle-37 P2
+    # against the committed v1.0.0 implementation: groq branch :42-44,
+    # huggingface :45-56, pollinations :57-59, v1.0.0 openrouter rows
+    # :62-73, generic api-error catch-all :74-78 (would mask quota errors
+    # as "failed to respond" — plan F4/F9), broad-fallback resolver
+    # _openRouterFriendly :86-108 incl. the decline match :99-100 (retired
+    # below). P3 re-works these rows per the amended branch_table.
     rule: openrouter branches are inserted BEFORE the generic api-error
-      catch-all (:56) so quota/config errors are never masked.
+      catch-all (:74-78) so quota/config errors are never masked.
     match_basis: >-
       the classifier matches on lowercased SUBSTRINGS of the raw error
       text — therefore §1's service_message strings are the match keys
       (branch table below).
     branch_table:
+      # AMENDED v1.1.0 (plan §6-P2 item 6): the four classified rows come
+      # FIRST, in this precedence order — their match keys are substrings
+      # of the §1 classified service_message strings, so the broad
+      # "openrouter" fallback can never swallow them (v1.0.0 mapped every
+      # 403 through the decline path — the masking defect, plan §2.5).
+      - match: "restricted to agentic harnesses"
+        # 403_harness_gate (§1) — FIRST (plan §6-P2 item 6). Substring of
+        # the §1 service_message; stable across the <model id> substitution.
+        friendly: "This model is restricted by its provider to certain AI tools on OpenRouter's free tier. Please pick another model."
+      - match: "openrouter key spending limit"
+        # 403_budget_key_limit (§1) — limit_source class.
+        friendly: "Your OpenRouter key has reached its spending limit. Raise or remove the key's limit in the OpenRouter dashboard, then try again."
+      - match: "openrouter blocked this request"
+        # 403_moderation_guardrail (§1) — safety-layer class. The match
+        # keys do not collide with the harness-gate row (that §1
+        # service_message reads "blocked this model", not "blocked this
+        # request") — order is the plan-mandated precedence, not a
+        # collision fix.
+        friendly: "The AI service declined this request: the provider's safety layer blocked it. Please try again or switch models."
+      - match: "openrouter refused the request"
+        # 403_permission_other (§1) — residual 403 class.
+        friendly: "Your OpenRouter account or API key is restricted from this request. Check your OpenRouter account settings or switch models."
       - match: "openrouter api key not configured"
-        # F9 — mirrors the literal groq branch at :38-40.
+        # F9 — mirrors the literal groq branch at :42-44.
         friendly: "Chat service is not configured correctly."
       - match: "openrouter rate limit"
         # 429 (§1) — free-tier caps surfaced, not masked.
@@ -353,18 +700,33 @@ internal:
         # 402 (§1) — daily cap / negative balance.
         friendly: "Free chat quota reached for today. Try again tomorrow or switch models."
       - match: "openrouter"
-        # remaining openrouter-prefixed service errors (401/403/408/5xx/
+        # remaining openrouter-prefixed service errors (401/408/5xx/
         # mid-stream/empty-content share their §1 friendly strings, which
-        # are thrown pre-classified where the classifier row above does
-        # not already cover them)
+        # are thrown pre-classified where no row above covers them; 403s
+        # no longer fall here — the four classified rows resolve them)
         friendly: "The AI service is temporarily unavailable. Please try again."
+    retired_rows:
+      - >-
+        the v1.0.0 decline match (lower.contains('declined') ||
+        lower.contains('rejected the request') — chat_error_classifier.dart
+        :99-100) is RETIRED for OpenRouter errors: no amended §1
+        service_message contains either substring, and the four classified
+        rows above resolve every 403 before any generic path. P3 removes
+        the decline row from _openRouterFriendly (plan §6-P2 item 2
+        retires the old copy; §6-P3 acceptance criterion 6 asserts the
+        harness-gate copy contains neither "rephrase" nor "declined").
     order_note: >-
-      Exact-match branches (key-not-configured / rate limit / free quota)
-      precede the broad "openrouter" fallback; the generic non-openrouter
-      catch-all (:56-58) stays LAST. Raw detail never reaches the UI;
-      callers log it under kDebugMode (existing contract, :26-28).
+      Classified rows (harness-gate / budget / moderation / permission)
+      FIRST, then the exact-match branches (key-not-configured / rate
+      limit / free quota), then the broad "openrouter" fallback; the
+      generic non-openrouter catch-all (:74-78) stays LAST. Raw detail
+      never reaches the UI; callers log it under kDebugMode (existing
+      contract, :26-28).
     tests: test/chat_error_classifier_test.dart (exists, verified) gains
-      cases for every branch row above + order (rate-limit not masked).
+      cases for every branch row above + order (rate-limit not masked;
+      harness-gate matched before the broad fallback; §1 evidence body →
+      harness-gate copy containing neither "rephrase" nor "declined" —
+      see §3 service_tests and plan §6-P3 criterion 6).
 
   service_tests:
     # Plan F5 — new file test/openrouter_service_test.dart with a mocked
@@ -380,6 +742,38 @@ internal:
     - finish_reason "length" with empty content → friendly error
     - 401/429/402 status mapping per §1 error table
     - Retry-After honored on 429
+    # AMENDED v1.1.0 (plan §6-P2 item 6) — coverage rows for the
+    # body-parsing amendment; each is a red→green unit case (plan §6-P3
+    # acceptance criterion 1):
+    - 403 harness-gate — feed §1 403_harness_gate.evidence_body (plan §2.5
+      verbatim body) through service + classifier → the harness-gate
+      friendly copy, which names the model restriction and contains
+      neither "rephrase" nor "declined" (plan §6-P3 criterion 6)
+    - 403 budget — body with error.metadata.limit_source →
+      403_budget_key_limit copy; must NOT hit the moderation/permission
+      rows or any decline copy (precedence; plan §6-P3)
+    - 403 moderation — error_type content_policy_violation or refusal →
+      403_moderation_guardrail copy
+    - 403 residual — parsed body matches no classified row →
+      403_permission_other copy
+    - 400 with error.metadata.routing_funnel / failed_routing_step →
+      classified through the metadata rows FIRST
+      (§1 other_4xx.routing_metadata_first); an unmatched routing step
+      falls back to the other_4xx copy with parsed fields still carried
+      on the typed failure (plan §6-P2 item 3)
+    - 200-with-error-body — non-stream 200 holding only an error object →
+      mapped through the table, never "invalid response body" (§1
+      error_body_parsing; plan §6-P2 item 4)
+    - mid-stream error event carrying message + metadata (non-500) →
+      same rows as the HTTP path (e.g. a harness-gate event maps to the
+      harness-gate copy); a 500-class code keeps the generic 5xx copy (§1
+      mid_stream_finish_reason_error.body_parsing_passthrough)
+    - debug surface — the typed failure carries parsed code/message/
+      metadata; the raw body is logged kDebugMode-only (§1
+      error_body_parsing.debug_surface)
+    - classifier precedence — the harness-gate match key resolves before
+      the broad "openrouter" fallback, and the retired decline row never
+      fires for any §1 service_message
 
   config_and_ci_lines:
     env_example:
@@ -438,16 +832,18 @@ secrets:
 
 # A consumer phase may not begin before this file exists (contract-first
 # gate). P3 builds exactly this contract; the criteria below are lifted
-# from the governing plan (P2 §149 + P3 §155-161) and are individually
-# checkable:
+# from the governing plan (P2 §149 + P3 §155-161; AMENDED cycle-37 P2 per
+# §6-P2/§6-P3) and are individually checkable:
 
 acceptance:
   - flutter analyze exits 0 and dart format --set-exit-if-changed
     reports 0 changed
   - full "flutter test" green, new tests passing (count vs baseline recorded)
-  - grep -rn "thinkingmachines/" lib/ shows EXACTLY the two §2 model
-    IDs and no other OpenRouter model strings
-  - grep -rn "thinkingmachines/" test/ likewise shows only the two §2 IDs
+  - grep -rn "nvidia/nemotron-" lib/ shows EXACTLY the two §2 model
+    IDs and no other OpenRouter model strings; zero "thinkingmachines/"
+    strings remain (the harness-gated IDs were removed v1.2.0, plan §6-P3b)
+  - grep -rn "nvidia/nemotron-" test/ likewise shows only the two §2 IDs
+    (and zero "thinkingmachines/" strings)
   - zero occurrences of the chat-transited key or its key-prefix pattern
     in tracked files (this file included)
   - the picker sheet lists both new models with the §2/§3 display names
@@ -457,6 +853,10 @@ acceptance:
     build-apk.yml secret/trim/define, and the .env.example doc line
   - OPENROUTER_API_KEY absent from every log statement; error strings
     never contain key material
+  - a unit test feeds the §1 403_harness_gate evidence body (plan §2.5
+    verbatim) through service + classifier and asserts the friendly copy
+    names the model restriction — containing neither "rephrase" nor
+    "declined" (plan §6-P3 criterion 6)
   - every path, header, field, ID, and file:line in this contract
     verifies against plan §1; a reader can implement P3 from this file
     alone

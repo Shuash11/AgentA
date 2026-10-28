@@ -17,6 +17,12 @@ import '../../core/config/app_config.dart';
 ///    true}` — the documented reasoning-budget mitigation (F3);
 ///  * the SSE parser understands mid-stream `finish_reason: "error"` events
 ///    (F2) and raises a mapped error instead of truncating silently;
+///  * every error body is parsed — `error.code`, `error.message` and
+///    `error.metadata` (contract v1.1.0 §1 error_body_parsing) — so the
+///    classified rows (harness-gate / budget / moderation / permission)
+///    are chosen from the provider's own cause instead of the status code
+///    alone; the parsed body rides along on the typed failure and the raw
+///    provider message is logged under `kDebugMode` only, never the key;
 ///  * a stream that ends on `finish_reason: "length"` without any content
 ///    raises a mapped error instead of returning an empty reply (F3);
 ///  * the model id is a parameter — one request, one model;
@@ -211,6 +217,11 @@ class OpenRouterService {
   // The service throws the table's `service_message`; the classifier maps it
   // to the table's `friendly` copy (contract §3). No key material ever
   // appears in these strings.
+  //
+  // cycle-37 P3 (contract v1.1.0): the status code alone is never enough —
+  // every error body is parsed (`error.code` / `error.message` /
+  // `error.metadata`) and the classified rows are selected from it BEFORE
+  // the status row (contract §1 error_body_parsing.precedence).
 
   static const String _msgKeyNotConfigured =
       'OpenRouter API key not configured. Please set OPENROUTER_API_KEY via --dart-define.';
@@ -218,7 +229,6 @@ class OpenRouterService {
       'Invalid OpenRouter API key. Please check OPENROUTER_API_KEY.';
   static const String _msgFreeQuota =
       'OpenRouter free quota exhausted (daily limit or account balance).';
-  static const String _msgForbidden = 'OpenRouter rejected the request (403).';
   static const String _msgTimeout = 'OpenRouter request timed out.';
   static const String _msgRateLimit =
       'OpenRouter rate limit exceeded (free tier: 20/min, 50/day).';
@@ -227,40 +237,116 @@ class OpenRouterService {
   static const String _msgCannotConnect =
       'Cannot connect to OpenRouter. Your network may be blocking external APIs.';
 
-  /// Maps an HTTP status code to the contract's service message.
-  static String _serviceMessageForStatus(int statusCode) {
+  // The classified rows (contract §1 error_table, v1.1.0).
+  static const String _msgHarnessGatePrefix = 'OpenRouter blocked this model: ';
+  static const String _msgHarnessGateSuffix =
+      ' is restricted to agentic harnesses on the free tier.';
+  static const String _msgKeySpendingLimit =
+      'OpenRouter key spending limit reached (403).';
+  static const String _msgSafetyLayer =
+      'OpenRouter blocked this request (safety layer).';
+  static const String _msgRestricted =
+      'OpenRouter refused the request (403): account or key restriction.';
+
+  /// The routing step OpenRouter names when a `:free` endpoint is gated to
+  /// agentic harnesses (contract §1 403_harness_gate; the P1 probe's
+  /// verbatim body, plan §2.5).
+  static const String _harnessGateRoutingStep =
+      'Gate Free Endpoints by Agentic Harness';
+
+  /// The provider's own phrase for the same gate (contract §1
+  /// 403_harness_gate.match_key).
+  static const String _harnessGateMessageKey =
+      'only available on agentic harnesses';
+
+  /// The guardrail block marker (contract §1 403_moderation_guardrail).
+  static const String _guardrailMessageKey = 'request blocked:';
+
+  /// Maps a status code to the contract's service message. The 403 row is
+  /// the residual `403_permission_other` row — the classified rows
+  /// (harness-gate / budget / moderation) are selected from the parsed body
+  /// BEFORE this fallback (contract §1 error_body_parsing.precedence).
+  static String _serviceMessageForStatus(int? statusCode) {
     switch (statusCode) {
       case 401:
         return _msgInvalidKey;
       case 402:
         return _msgFreeQuota;
       case 403:
-        return _msgForbidden;
+        return _msgRestricted;
       case 408:
         return _msgTimeout;
       case 429:
         return _msgRateLimit;
       default:
+        if (statusCode == null) return 'OpenRouter request error: unknown';
         if (statusCode >= 500) return 'OpenRouter server error: $statusCode';
         return 'OpenRouter request error: $statusCode';
     }
   }
 
-  /// A mid-stream SSE error event carries the HTTP-equivalent code inside
-  /// the stream (contract §1 mid_stream_error_events) — map it through the
-  /// same table; an unknown code falls back to the generic copy.
-  static String _serviceMessageForErrorCode(Object? code) {
-    final status = switch (code) {
-      final int value => value,
-      final String value => int.tryParse(value.trim()),
-      _ => null,
-    };
-    // Not a status code we know → the generic copy (contract §1
-    // mid_stream_finish_reason_error).
-    if (status == null || status < 100 || status > 599) {
-      return 'OpenRouter request error: unknown';
+  /// True for the harness gate: the routing step OpenRouter names, or the
+  /// provider's own phrase for it (contract §1 403_harness_gate.match_key).
+  static bool _isHarnessGate(OpenRouterErrorBody body) {
+    final step = body.failedRoutingStep?.trim().toLowerCase();
+    if (step == _harnessGateRoutingStep.toLowerCase()) return true;
+    return (body.message ?? '').toLowerCase().contains(_harnessGateMessageKey);
+  }
+
+  /// True for the moderation / safety-layer class (contract §1
+  /// 403_moderation_guardrail.match_key).
+  static bool _isModeration(OpenRouterErrorBody body) {
+    final type = body.errorType?.trim().toLowerCase();
+    if (type == 'content_policy_violation' || type == 'refusal') return true;
+    return (body.message ?? '').toLowerCase().contains(_guardrailMessageKey);
+  }
+
+  /// Maps a parsed error body to the contract's `service_message`
+  /// (contract §1 error_body_parsing.precedence):
+  ///   1. the classified rows — harness-gate FIRST, then budget, then
+  ///      moderation — whatever the status code says;
+  ///   2. otherwise the status row (a 403 falls through to the residual
+  ///      permission row);
+  ///   3. an unparseable body keeps the status-code fallback.
+  static String _serviceMessageForErrorBody(
+    OpenRouterErrorBody? body, {
+    required int? status,
+    required String model,
+  }) {
+    if (body != null) {
+      if (_isHarnessGate(body)) {
+        return '$_msgHarnessGatePrefix$model$_msgHarnessGateSuffix';
+      }
+      if (body.limitSource != null) return _msgKeySpendingLimit;
+      if (_isModeration(body)) return _msgSafetyLayer;
     }
     return _serviceMessageForStatus(status);
+  }
+
+  /// Builds the mapped failure for a provider error: the classified
+  /// `service_message` is the user-facing surface, the parsed body rides
+  /// along on the exception (developer-visible truth) and the provider's raw
+  /// message is logged under `kDebugMode` only — never the key (contract §1
+  /// error_body_parsing.debug_surface).
+  static OpenRouterServiceException _failureFor({
+    required OpenRouterErrorBody? body,
+    required int? status,
+    required String model,
+  }) {
+    final message = _serviceMessageForErrorBody(
+      body,
+      status: status,
+      model: model,
+    );
+    if (kDebugMode) {
+      debugPrint(
+        '[OpenRouterService] provider error — status: $status, '
+        'code: ${body?.code ?? 'none'}, '
+        'message: ${body?.message ?? 'none'}, '
+        'metadata: ${body?.metadata ?? 'none'}',
+      );
+    }
+    return OpenRouterServiceException(message, errorBody: body);
   }
 
   /// Parses the non-stream JSON body: the assistant content plus the finish
@@ -302,6 +388,9 @@ class OpenRouterService {
     final ownsClient = _injectedClient == null;
 
     try {
+      // The parsed body of the last rate-limited response — mapped once the
+      // retries are exhausted (contract §1 error_body_parsing).
+      OpenRouterErrorBody? lastRateLimitBody;
       for (int attempt = 0; attempt < _maxRetries; attempt++) {
         if (_isCancelled) break;
         try {
@@ -323,6 +412,16 @@ class OpenRouterService {
             final completion = _parseJsonCompletion(response.body);
             final content = completion.content;
             if (content != null && content.trim().isNotEmpty) return content;
+            // A 200 body holding only an `error` object is a provider error,
+            // not an invalid body (contract §1 error_body_parsing).
+            final errorBody = OpenRouterErrorBody.parse(response.body);
+            if (errorBody != null) {
+              throw _failureFor(
+                body: errorBody,
+                status: _statusFromCode(errorBody.code),
+                model: model,
+              );
+            }
             // F3: the budget was spent on reasoning — never an empty reply.
             if (completion.finishReason == 'length') {
               throw OpenRouterServiceException(_msgBudgetExhausted);
@@ -338,10 +437,14 @@ class OpenRouterService {
               retryAfter: response.headers['retry-after'],
             );
             await Future.delayed(waitTime);
+            lastRateLimitBody = OpenRouterErrorBody.parse(response.body);
             continue;
           } else {
-            throw OpenRouterServiceException(
-              _serviceMessageForStatus(response.statusCode),
+            final errorBody = OpenRouterErrorBody.parse(response.body);
+            throw _failureFor(
+              body: errorBody,
+              status: _statusFromCode(errorBody?.code) ?? response.statusCode,
+              model: model,
             );
           }
         } on TimeoutException {
@@ -361,7 +464,11 @@ class OpenRouterService {
         }
       }
 
-      throw OpenRouterServiceException(_msgRateLimit);
+      throw _failureFor(
+        body: lastRateLimitBody,
+        status: _statusFromCode(lastRateLimitBody?.code) ?? 429,
+        model: model,
+      );
     } finally {
       if (ownsClient) client.close();
     }
@@ -400,8 +507,17 @@ class OpenRouterService {
       final streamedResponse = await client.send(request).timeout(_timeout);
 
       if (streamedResponse.statusCode != 200) {
-        throw OpenRouterServiceException(
-          _serviceMessageForStatus(streamedResponse.statusCode),
+        // A pre-stream error carries the provider's cause in its body — read
+        // it and map through the table (contract §1 error_body_parsing).
+        final rawBody = await streamedResponse.stream.bytesToString().timeout(
+          _timeout,
+        );
+        final errorBody = OpenRouterErrorBody.parse(rawBody);
+        throw _failureFor(
+          body: errorBody,
+          status:
+              _statusFromCode(errorBody?.code) ?? streamedResponse.statusCode,
+          model: model,
         );
       }
 
@@ -432,9 +548,13 @@ class OpenRouterService {
 
           // F2: an error event inside the stream is NOT an HTTP status — it
           // must end the stream with a mapped error, never a silent truncation.
-          if (event.errorCode != null || event.finishReason == 'error') {
-            throw OpenRouterServiceException(
-              _serviceMessageForErrorCode(event.errorCode),
+          // The embedded body is parsed exactly like the HTTP error path
+          // (contract §1 mid_stream_finish_reason_error).
+          if (event.errorBody != null || event.finishReason == 'error') {
+            throw _failureFor(
+              body: event.errorBody,
+              status: _statusFromCode(event.errorBody?.code),
+              model: model,
             );
           }
 
@@ -471,15 +591,114 @@ class OpenRouterService {
   }
 }
 
-/// A service error whose message is already mapped to the contract's error
+/// A service error whose `message` is already mapped to the contract's error
 /// table (§1). It never contains key material — only the mapped reason.
+///
+/// The parsed provider body (`code` / `message` / `metadata`) rides along as
+/// [errorBody] — the developer-visible truth — while the user-facing
+/// `message` stays the mapped `service_message` (contract §1
+/// error_body_parsing.debug_surface).
 class OpenRouterServiceException implements Exception {
   final String message;
+  final OpenRouterErrorBody? errorBody;
 
-  const OpenRouterServiceException(this.message);
+  const OpenRouterServiceException(this.message, {this.errorBody});
 
   @override
   String toString() => message;
+}
+
+/// The parsed provider error body (contract §1 error_body_parsing).
+///
+/// `code` is the provider's own `error.code` (an integer or a numeric
+/// string), `message` the provider's raw cause sentence and `metadata` the
+/// discriminator object (`limit_source`, `error_type`, `provider_name`,
+/// `routing_funnel`, `failed_routing_step`). The raw message is never
+/// user-facing — it selects the mapped row and stays debug-only.
+class OpenRouterErrorBody {
+  final int? code;
+  final String? message;
+  final Map<String, dynamic>? metadata;
+
+  const OpenRouterErrorBody({this.code, this.message, this.metadata});
+
+  /// Parses a raw response body. Returns null when the body carries no
+  /// usable `error` object — the caller then falls back to the status row.
+  static OpenRouterErrorBody? parse(String rawBody) {
+    if (rawBody.trim().isEmpty) return null;
+    Object? decoded;
+    try {
+      decoded = jsonDecode(rawBody);
+    } catch (_) {
+      return null;
+    }
+    if (decoded is! Map) return null;
+    return fromMap(decoded['error']);
+  }
+
+  /// Builds the parsed body from a decoded `error` object — the HTTP body
+  /// and the SSE error event share this shape (contract §1
+  /// mid_stream_error_events).
+  static OpenRouterErrorBody? fromMap(Object? error) {
+    if (error is! Map) return null;
+    final rawCode = error['code'];
+    final code = switch (rawCode) {
+      final int value => value,
+      final String value => int.tryParse(value.trim()),
+      _ => null,
+    };
+    final message = error['message'];
+    final metadata = error['metadata'];
+    return OpenRouterErrorBody(
+      code: code,
+      message: message is String ? message : null,
+      metadata: metadata is Map ? Map<String, dynamic>.from(metadata) : null,
+    );
+  }
+
+  /// `error.metadata.limit_source` — the budget/key-limit discriminator.
+  String? get limitSource {
+    final value = metadata?['limit_source'];
+    return value is String ? value : null;
+  }
+
+  /// `error.metadata.error_type` — the moderation/permission discriminator.
+  String? get errorType {
+    final value = metadata?['error_type'];
+    return value is String ? value : null;
+  }
+
+  /// `error.metadata.failed_routing_step` — the routing discriminator (P1
+  /// probe body, plan §2.5). A SIBLING of [routingFunnel].
+  String? get failedRoutingStep {
+    final value = metadata?['failed_routing_step'];
+    return value is String ? value : null;
+  }
+
+  /// `error.metadata.routing_funnel` — the routing discriminator (P1 probe
+  /// body, plan §2.5).
+  List<dynamic>? get routingFunnel {
+    final value = metadata?['routing_funnel'];
+    return value is List ? value : null;
+  }
+
+  /// True when the body carries routing metadata at all — a routing-class
+  /// failure, not a payload defect (contract §1
+  /// other_4xx.routing_metadata_first).
+  bool get hasRoutingMetadata =>
+      routingFunnel != null || failedRoutingStep != null;
+
+  @override
+  String toString() =>
+      'OpenRouterErrorBody(code: $code, message: $message, metadata: $metadata)';
+}
+
+/// The status a parsed `error.code` selects — null when the code is not a
+/// usable HTTP status (the generic copy covers it; contract §1
+/// mid_stream_finish_reason_error).
+int? _statusFromCode(int? code) {
+  if (code == null || code < 100 || code > 599) return null;
+  return code;
 }
 
 /// One decoded SSE chunk. `reasoning_details` / `reasoning` deltas are
@@ -488,9 +707,9 @@ class OpenRouterServiceException implements Exception {
 class _SseEvent {
   final String? content;
   final String? finishReason;
-  final Object? errorCode;
+  final OpenRouterErrorBody? errorBody;
 
-  const _SseEvent({this.content, this.finishReason, this.errorCode});
+  const _SseEvent({this.content, this.finishReason, this.errorBody});
 }
 
 /// Decodes one `data: {json}` SSE payload. Throws (so the caller can count it
@@ -501,11 +720,9 @@ _SseEvent _parseSseEvent(String data) {
     throw const FormatException('unexpected SSE payload');
   }
 
-  Object? errorCode;
-  final error = decoded['error'];
-  if (error is Map) {
-    errorCode = error['code'];
-  }
+  OpenRouterErrorBody? errorBody = OpenRouterErrorBody.fromMap(
+    decoded['error'],
+  );
 
   String? content;
   String? finishReason;
@@ -520,16 +737,14 @@ _SseEvent _parseSseEvent(String data) {
       }
       final reason = first['finish_reason'];
       if (reason is String) finishReason = reason;
-      final nestedError = first['error'];
-      if (nestedError is Map && errorCode == null) {
-        errorCode = nestedError['code'];
-      }
+      // A nested error object (choices[0].error) is parsed the same way.
+      errorBody ??= OpenRouterErrorBody.fromMap(first['error']);
     }
   }
 
   return _SseEvent(
     content: content,
     finishReason: finishReason,
-    errorCode: errorCode,
+    errorBody: errorBody,
   );
 }
