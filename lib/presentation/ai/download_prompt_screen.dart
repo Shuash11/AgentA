@@ -181,11 +181,18 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                     boxShadow: AppShadows.well,
                   ),
                   child: Text(
-                    'Model size: ~529MB',
+                    'Model size: ~2.6GB',
                     style: AppTypography.labelSm.copyWith(
                       color: colors.subtext,
                     ),
                   ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'Large download — Wi-Fi recommended. You can keep using '
+                  'your phone while it downloads.',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.labelSm.copyWith(color: colors.subtext),
                 ),
                 const SizedBox(height: AppSpacing.xxl),
                 SizedBox(

@@ -34,7 +34,7 @@ extension AIModelExtension on AIModel {
       case AIModel.openrouterPro:
         return 'Strong cloud chat — free tier';
       case AIModel.gemma:
-        return 'Runs locally on your device — no internet needed';
+        return 'Smarter offline AI — larger 2.6GB download, runs on your device';
     }
   }
 
