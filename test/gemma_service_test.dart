@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_edge_ai/flutter_edge_ai.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:aiproject/data/models/chat_message_model.dart';
@@ -216,6 +218,29 @@ void main() {
       expect(truncated.id, 'long');
       expect(truncated.chatId, 'c');
       expect(truncated.isUser, isFalse);
+    });
+  });
+
+  group('GemmaService.load shape (cycle-38 P2)', () {
+    test('load shape and identity match the offline-model contract', () {
+      final source = File(
+        'lib/services/ai/gemma_service.dart',
+      ).readAsStringSync();
+      // Load shape unchanged by the engine swap: 2048-token context window
+      // on the CPU backend (the LiteRT-LM engine clamps to its KV floor).
+      expect(source, contains('static const int _maxTokens = 2048;'));
+      expect(source, contains('maxTokens: _maxTokens'));
+      expect(source, contains('preferredBackend: PreferredBackend.cpu'));
+      // Identity coherence across the three files that carry it.
+      expect(source, contains("setModelReady(modelType: 'gemma-4-e2b-it')"));
+      final service = File(
+        'lib/services/ai/model_download_service.dart',
+      ).readAsStringSync();
+      expect(service, contains("_modelType = 'gemma-4-e2b-it'"));
+      final dao = File(
+        'lib/data/local/offline_model_dao.dart',
+      ).readAsStringSync();
+      expect(dao, contains("'model_type': 'gemma-4-e2b-it'"));
     });
   });
 }

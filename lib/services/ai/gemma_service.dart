@@ -109,7 +109,7 @@ Formatting rules:
         systemInstruction: _systemInstruction,
       );
 
-      await _dao.setModelReady(modelType: 'gemma3-1b-it-int4');
+      await _dao.setModelReady(modelType: 'gemma-4-e2b-it');
       _isLoaded = true;
       _lastError = null;
       notifyListeners();

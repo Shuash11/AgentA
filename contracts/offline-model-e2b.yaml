@@ -1,0 +1,467 @@
+# Offline-model contract — Gemma 4 E2B via the LiteRT-LM engine (cycle-38 P1)
+#
+# Single source of truth for the on-device model swap implemented by
+# plans/cycle-38 P2 (engine + model swap) and consumed by P3 (download-size
+# copy). Authoritative file — code, comments and delegation prompts are never
+# the contract. No second copy exists anywhere. A reader implements P2 from
+# this file alone. Every figure cites its verified source: plans/cycle-38
+# §1 unless stated otherwise (all plan figures verified live 2026-10-29);
+# code sites were re-verified against the tree at recording time.
+#
+# Recorded 2026-10-29 (cycle-38 P1, contractor) — initial recording v1.0.0.
+# No secret material: token VALUES never appear here; the HF-token threading
+# is documented as no-op-preserving behavior (config key names only).
+
+contract: offline-model-e2b
+version: 1.1.0
+status: active
+# v1.1.0 (2026-10-29, Adviser P2-ruling): §3 migration trigger/call-site
+# AMENDED (P2 deviation ratified — the recorded v1.0.0 trigger was
+# unreachable for the installed base and self-resetting for E2B users at
+# the gate seam); §7 new_exceptions corrected (LiteRtLmBundleException does
+# not exist at the 1.8.6 pin); §5 download_service_comment site re-anchored
+# :254 → :329 (the tree shifted with P2's insertion). No consumer break.
+
+# §1  asset_identity — the downloaded artifact and its verified provenance
+# §2  engine_contract — dependency pin, engine registration, install/load shapes, identity string
+# §3  migration_contract — model_asset_v3 marker, uninstall of the 1B asset, re-download gate
+# §4  download_timeout — install ceilings for the 2.59 GB transfer
+# §5  ux_copy — the strings P3 implements verbatim
+# §6  ram_budget — measured working set vs the user's ≤ 6 GB cap
+# §7  error_surface — download errors (unchanged), engine-init errors, F13 override caveat, STOP divergences
+# §8  system_prompt — template-native handling (the .task-era pollution disappears)
+# §9  acceptance_criteria — P1's own gate (a-d) + P2 invariants this contract pins
+
+# ---------------------------------------------------------------------------
+# 1. Asset identity (verified live: HF API GET /api/models/…?blobs=true and
+#    the pinned plugin docs, fetched 2026-10-29 — plan §1.2)
+# ---------------------------------------------------------------------------
+
+asset_identity:
+  repo: litert-community/gemma-4-E2B-it-litert-lm          # HF API, plan §1.2
+  file: gemma-4-E2B-it.litertlm                            # plan §1.2 (plugin docs install path)
+  install_url: >-
+    https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm
+  size_bytes: 2588147712                                   # ≈2.59 GB — plan §1.2 (HF API blob size)
+  sha256: 181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c   # plan §1.2 (HF API)
+  gated: false                                             # no license gate — plan §1.2
+  license: apache-2.0                                      # plan §1.2
+  last_modified: "2026-10-23"                              # plan §1.2 (HF API)
+  downloads_context: 1445248                               # plan §1.2 — catalog context only, not consumed
+  hf_token_required: false                                 # plan §1.2 — the cycle-36 token/gate surface does NOT apply
+  token_threading: >-
+    Both install chains KEEP passing token: AppConfig.hfToken.trim() (ruling
+    plan §4.5): passing a token to an ungated repo is a no-op, and it keeps
+    GEMMA_MODEL_URL overrides functional against gated assets. No new secret
+    surface. (Mechanics in §2 install_shape; caveat in §7 f13_override_caveat.)
+  not_for_this_path: >-
+    The repo also ships gemma-4-E2B-it-gpu.litertlm (2.0 GB GPU variant) and
+    -web / NPU / Intel builds (plan §1.2) — none is consumed by this contract;
+    the app downloads the CPU-path bundle above only.
+  provenance_note: >-
+    The record-time candidate litert-community/Gemma3-4B-IT is RULED OUT (plan
+    §1.1) — its only files are -web.task builds the plugin documents ❌
+    Android; this E2B .litertlm asset replaces it.
+  env_override: >-
+    GEMMA_MODEL_URL (dart-define → AppConfig.gemmaModelUrl, app_config.dart:17,61)
+    still wins via resolvedModelUrl (model_download_service.dart:84-85) — see
+    §7 f13_override_caveat for the format-coupling consequence.
+
+# ---------------------------------------------------------------------------
+# 2. Engine contract (plan §1.3 + §5-P1 item 2; code sites re-verified)
+# ---------------------------------------------------------------------------
+
+engine_contract:
+  dependency:
+    package: flutter_edge_ai_litertlm
+    pin: "1.8.6"                       # EXACT pin — no caret, no range (plan §4.2)
+    pubspec_site: >-
+      pubspec.yaml dependencies block, beside the untouched pins
+      flutter_edge_ai: ^1.11.4 (:21) and flutter_edge_ai_mediapipe: ^1.0.8 (:22)
+    required_comment: >-
+      one line: "1.8.6 = the only litertlm release compatible with core
+      ^1.11.4; see plans/cycle-38 §1.3" (plan §5-P2 item 1)
+    pairing_evidence: >-
+      pub.dev API 2026-10-29 (plan §1.3): 1.8.6 (published 2026-10-03)
+      requires exactly flutter_edge_ai ^1.11.4 — the app's pinned core; every
+      later release (1.8.7 → 1.19.0) demands core ^2.x; environment
+      flutter >=3.44.0, satisfied (app on Flutter 3.47.6, cycle-36 P7 record).
+    untouched_pins: >-
+      flutter_edge_ai ^1.11.4 and flutter_edge_ai_mediapipe ^1.0.8 stay as-is;
+      flutter pub get must leave pubspec.lock's flutter_edge_ai 1.11.4 +
+      flutter_edge_ai_mediapipe 1.0.8 unchanged (plan §5-P2 criterion 8;
+      divergence = STOP S1, §7).
+    native_libs: >-
+      fetched at build time via Native Assets (SHA256-verified) — no manual
+      native setup (plan §1.3, plugin docs); CI proof is the P5 Build run
+      (STOP S3 lives in plan §6).
+  engine_registration:
+    site: >-
+      lib/main.dart:174-177 (FlutterEdgeAi.initialize) — keep the existing
+      try/catch-ignore (:178-182) and maxDownloadRetries: 3 unchanged
+    before: "inferenceEngines: const [MediaPipeEngine()]"
+    after: "inferenceEngines: const [MediaPipeEngine(), LiteRtLmEngine()]"
+    import: LiteRtLmEngine from package:flutter_edge_ai_litertlm
+    coexistence: >-
+      MediaPipeEngine stays registered — the §3 migration uninstall id
+      'gemma3-1b-it-int4.task' still resolves through it (plan §4.2).
+  install_shape:
+    gate_chain: >-
+      lib/services/ai/model_download_service.dart:266-276 —
+      FlutterEdgeAi.installModel(modelType: ModelType.gemma4,
+      fileType: ModelFileType.litertlm).fromNetwork(resolvedModelUrl,
+      token: AppConfig.hfToken.trim(),
+      foreground: AppConfig.foregroundDownload)
+      .withProgress(_onDownloadProgress).withCancelToken(token).install()
+      — ONLY modelType/fileType change; token/foreground/progress/cancel
+      wiring unchanged.
+    loadtime_chain: >-
+      lib/services/ai/model_download_service.dart:494-500 (ensureModelActive)
+      — same modelType/fileType/fromNetwork args; no progress/cancel wiring
+      (unchanged shape), inline timeout per §4.
+    model_type: ModelType.gemma4        # exists in pinned core (plan §1.3, pub-cache source model.dart)
+    file_type: ModelFileType.litertlm   # selects the ENGINE — never inferred from a filename (core README, plan §1.3)
+    token: AppConfig.hfToken.trim()     # kept per §1 token_threading; no new secret surface
+  load_shape:
+    get_active_model: >-
+      FlutterEdgeAi.getActiveModel(maxTokens: 2048, preferredBackend:
+      PreferredBackend.cpu) — gemma_service.dart:99-102 (_maxTokens = 2048 at
+      :20); parameters UNCHANGED.
+    create_chat: >-
+      gemma_service.dart:104-110 — temperature 0.3, randomSeed 1, topK 30,
+      topP 0.85, systemInstruction (_systemInstruction) — UNCHANGED in
+      parameters.
+    max_tokens_semantics: >-
+      on .litertlm maxTokens is the CONTEXT window; the engine clamps up to
+      the bundle's ≥1024 KV floor; 2048 ≥ floor → no clamp fires (ruling
+      plan §4.4). Reply-length capping via maxOutputTokens is out of scope.
+    backend: >-
+      PreferredBackend.cpu kept (ruling plan §4.3) — deterministic across
+      devices; avoids the documented Gemma-4 GPU half-precision digit-copy
+      defect; the §6 CPU figures are what the 6 GB ruling rests on. GPU/NPU
+      experiments are backlog F11/F9.
+    pinned_source_verification: >-
+      VERIFIED (P2 ruling, 2026-10-29 — pinned flutter_edge_ai_litertlm-1.8.6
+      + flutter_edge_ai-1.11.4 source, the exact compiled artifacts): (a)
+      maxTokens 2048 is the CONTEXT window, floor-clamped to 1024 only
+      (litert_lm_engine.dart:34-66) — 2048 passes unchanged; the CPU
+      fallback order for PreferredBackend.cpu is [cpu] (backend_preference
+      .dart:132). (b) createChat's sampler params (temperature/topK/topP/
+      seed) are ALWAYS attached to the session config on CPU/GPU
+      (litert_lm_client.dart:1029-1057); only NPU discards them (argmax) and
+      the app is CPU — so 0.3/1/30/0.85 take effect. topP 0.85 is explicit,
+      beating the plugin's silent 0.95 default. (c) systemInstruction maps to
+      systemMessage → template-native (F12 confirmed at source). (d)
+      activationDataType is only read by the GPU executor; supportImage/
+      supportAudio default false (text-only intended, F6). Upstream caveat,
+      NOT an app defect: at the shipped native pin the engine-level sampler
+      implements TopP (type 2) with top_k honored as a hint — the plugin's
+      own comment marks that pairing "carried forward, not verified". No
+      different inference settings are required for the E2B bundle; no P2
+      follow-up.
+    thinking: >-
+      OFF — no thinkingTokenBudget parameter (it arrived in litertlm 1.18.0;
+      this contract pins 1.8.6) and answers would slow; backlog F7 (plan §2).
+  identity_string: gemma-4-e2b-it
+  identity_sites:                       # plan §5-P2 item 3-5; all verified
+    - lib/services/ai/model_download_service.dart:71 (_modelType — feeds
+      _dao.setModelReady(modelType:) at :284 and :305)
+    - lib/services/ai/gemma_service.dart:112 (setModelReady(modelType:))
+    - lib/data/local/offline_model_dao.dart:37 (setModelNotInstalled row)
+    - lib/data/local/offline_model_dao.dart:53 (setModelError row)
+  identity_invariant: >-
+    all four sites carry the SAME string 'gemma-4-e2b-it' — DAO/plugin
+    identity and the DB must not drift (F5); coherence is a P2 acceptance
+    grep (plan §5-P2 criterion 3).
+
+# ---------------------------------------------------------------------------
+# 3. Migration contract (plan §5-P1 item 3; pattern verified at
+#    model_download_service.dart:206-224)
+# ---------------------------------------------------------------------------
+
+migration_contract:
+  owner: >-
+    lib/services/ai/model_download_service.dart — _migrateLegacyAssetIfPresent
+    (:248-264 as implemented; v1.0.0 named the v2 function/shape — superseded
+    by the P2 deviation ruling, plan §4.8)
+  marker: "model_asset_v3"              # new SharedPreferences bool — plan §5-P1 item 3
+  call_site: >-
+    AMENDED (P2 deviation ruling, ratified 2026-10-29): the v3 migration is
+    invoked from checkModelExists() — the gate seam — BEFORE the readiness
+    read (:178 precedes :181), so the DAO reset lands before the status
+    decision on the very launch it fires. checkModelExists is hit by EVERY
+    launch path: OfflineModelGate.initState (main.dart:524), its re-check
+    after install (main.dart:564), the download screen (download_prompt_screen
+    .dart:76/:103), and transitively installModel (:306). ensureModelActive
+    also runs it directly (:570) for the load-time rehydration path. The
+    v1.0.0 call sites (installModel/ensureModelActive only) were UNREACHABLE
+    for the migration's own target population — a healthy 1B user's status is
+    ready, so installModel early-returns (:302-304), and ensureModelActive is
+    only called when !hasActiveModel() (gemma_service.dart:89-90), which the
+    installed base's auto-restore makes false. v2's pattern worked only
+    because its target class (broken mirror 1B) had the gate OPEN; v3's
+    target class has it CLOSED. v2 keeps its original call sites unchanged.
+  trigger: >-
+    AMENDED (P2 deviation ruling): marker absent AND the LEGACY ASSET ITSELF
+    is present — _legacyAssetPresent() (:268-274):
+    FlutterEdgeAi.activeModelSpec?.name == 'gemma3-1b-it-int4.task' OR
+    FlutterEdgeAi.isModelInstalled('gemma3-1b-it-int4.task'). Marker present →
+    return early, no uninstall. RATIONALE (both halves verified): the v1.0.0
+    literal trigger (hasActiveModel() || dao.isModelReady(), "any model
+    present") at the checkModelExists seam would fire on launch 2 for a
+    CURRENT-E2B user (DAO ready → uninstall + DAO reset → gate forces a
+    spurious 2.59 GB re-download). The legacy-asset probe kills both holes.
+    Probe semantics verified against pinned core 1.11.4: isModelInstalled
+    takes a model FILENAME (flutter_edge_ai.dart:360 doc), and
+    activeModelSpec.name is the persisted filename on restore
+    (mobile_model_manager.dart:216-218) — so an E2B-only user probes false on
+    both legs (no marker churn, no uninstall), while a 1B user probes true on
+    at least one leg (in-process active spec, or the repository record).
+  steps:                                # ORDER IS NORMATIVE — plan §5-P1 item 3
+    - "1. set marker model_asset_v3 = true FIRST (a crash can never loop the download)"
+    - "2. FlutterEdgeAi.uninstallModel('gemma3-1b-it-int4.task') inside try/catch, tolerant of already-unregistered / file-missing — safe to continue"
+    - "3. dao.setModelNotInstalled() — resets the DB row (DAO identity becomes 'gemma-4-e2b-it' per §2 identity_sites)"
+    - "4. the download gate re-downloads the E2B asset on the next install path — no user-facing migration UI"
+  failure_composition: >-
+    VERIFIED ADDITION (P2 ruling): if v3 partially fails after its marker is
+    set (e.g. setModelNotInstalled throws — the whole body is wrapped in
+    try/catch, :249-263), the row can keep claiming ready while the 1B is
+    uninstalled. The still-unset v2 marker back-stops exactly that class:
+    the next ensureModelActive fires v2 (dao.isModelReady() true → its
+    literal trigger), whose tolerant uninstall is a no-op and whose DAO reset
+    opens the gate. No stranded user, no download loop. For E2B users v3
+    never fires, so the partial-failure path is unreachable for them.
+  untouched: >-
+    the existing model_asset_v2 marker and its logic stay exactly as-is
+    (:206-224 keeps serving v2); v3 follows the identical set-marker-BEFORE-
+    uninstall pattern (F4: the plugin keys idempotency on the URL filename,
+    so the new filename installs cleanly but the old 0.5 GB file would
+    otherwise linger on disk).
+  uninstall_id_note: >-
+    'gemma3-1b-it-int4.task' is the OLD asset's filename (current _modelUrl,
+    :69-70). After P2 it remains in lib/ at exactly two sites — the uninstall
+    id + its comment (plan §5-P2 acceptance criterion 2).
+
+# ---------------------------------------------------------------------------
+# 4. Download timeout (plan §5-P1 item 4; F3; code sites re-verified)
+# ---------------------------------------------------------------------------
+
+download_timeout:
+  gate_ceiling: >-
+    _installTimeout (lib/services/ai/model_download_service.dart:44):
+    Duration(minutes: 30) → Duration(minutes: 60), carrying the
+    size-rationale comment (plan §5-P2 item 3).
+  rationale: >-
+    a 2,588,147,712 B (§1) transfer at ~1.5 MB/s ≈ 29 min — the 30-min
+    ceiling exhausts before a legitimate transfer finishes and lands as
+    "Download timed out. Please try again." with a partial file (plan §1.5
+    install-ceiling row; F3).
+  second_ceiling: >-
+    VERIFIED ADDITION (this task): ensureModelActive carries its OWN inline
+    .timeout(const Duration(minutes: 30)) at model_download_service.dart:501
+    around the SAME re-download of the SAME asset on the load-time
+    rehydration path. It moves to the same 60-minute ceiling so F3's failure
+    class cannot resurface on rehydration. The plan names :44 explicitly;
+    :501 is the second verified site of the identical ceiling and falls
+    inside this timeout contract's scope. Flagged in the P1 report.
+  unchanged_watchdogs: >-
+    the 3-min zero-progress stall watchdog (:49) + CancelToken (:54, :293)
+    are size-independent and reused as-is; the 60s slow-connection heuristic
+    (:105-119) is unchanged (plan §1.5 stall-watchdog row).
+
+# ---------------------------------------------------------------------------
+# 5. UX copy table (plan §5-P1 item 5; consumed VERBATIM by P3 per
+#    plan §5-P3 — these exact strings, no re-wording)
+# ---------------------------------------------------------------------------
+
+ux_copy:
+  gate_size_chip:
+    site: lib/presentation/ai/download_prompt_screen.dart:184
+    current: 'Model size: ~529MB'
+    contract_string: 'Model size: ~2.6GB'
+  gate_data_caution:
+    placement: >-
+      ONE static caution line below the size chip — a SizedBox + Text in the
+      existing column; NO new state, NO new widget logic (plan §5-P3 item 1;
+      the warning renders from the existing slow-connection state only for
+      the banner below, which is unchanged).
+    contract_string: >-
+      Large download — Wi-Fi recommended. You can keep using your phone while
+      it downloads.
+    properties: >-
+      brand-free; conveys: large download + Wi-Fi recommended + download
+      continues in the background via the existing foreground service
+      (plan §5-P3 item 1).
+  picker_gemma_description:
+    site: lib/services/ai/ai_model.dart:36-37 (AIModel.gemma.description)
+    current: 'Runs locally on your device — no internet needed'
+    contract_string: 'Smarter offline AI — larger 2.6GB download, runs on your device'
+    display_name: "'AgentA Offline AI' — UNCHANGED; the picker sheet renders model.description as-is (chats.dart picker surface untouched, plan §5-P3 item 2)"
+  download_service_comment:
+    site: lib/services/ai/model_download_service.dart:329 (inside the comment
+      block; v1.0.0 said :254 — the tree shifted when P2 inserted the v3
+      migration above it; re-anchored in v1.1.0)
+    change: comment only — '~529MB' → '~2.6GB' (plan §5-P3 item 3)
+  out_of_scope: >-
+    the slow-connection banner copy (download_prompt_screen.dart:268-300)
+    and every other string on these surfaces is unchanged. P3 acceptance
+    greps (plan §5-P3): grep "529" lib/ → zero hits; grep "2.6GB" lib/ →
+    the gate chip, the caution (or its ~2.6GB wording), and the :329-area
+    comment (re-anchored in v1.1.0).
+
+# ---------------------------------------------------------------------------
+# 6. RAM budget (plan §1.4 measurements + §4.7 posture; binding cap from the
+#    user directive 2026-10-29, plan header + §3)
+# ---------------------------------------------------------------------------
+
+ram_budget:
+  binding_cap: "runtime RAM ≤ 6 GB (user directive, 2026-10-29 — plan header + §3)"
+  measurement_source: >-
+    the pinned plugin's Memory Diagnostics docs (fluttergemma.dev/docs/
+    diagnostics) — first-hand Android measurements of Gemma 4 E2B on
+    vivo 1933, Android 11 (plan §1.4).
+  mechanism: >-
+    LiteRT-LM mmaps the .litertlm file, so the RAM cost is the
+    mapped-weights working set plus anonymous heap/KV/activations — NOT the
+    2.59 GB file size (plan §1.4).
+  measured_file_backed_bytes_mib:      # plan §1.4 table, verbatim
+    CPU_app_choice: { before_load: 103.6, after_load: 800.5, after_one_prompt: 1043.2 }
+    GPU:            { before_load: 102.3, after_load: 1390.3, after_one_prompt: 1413.2 }
+  realistic_total: >-
+    resident working set ≈ 0.8–1.05 GB on CPU (reclaimable file-backed pages)
+    plus anonymous heap/KV/activations on top → realistic total process
+    footprint ≈ 1.5–2.5 GB on device — the ≤ 6 GB cap holds with wide margin
+    (plan §1.4).
+  device_posture: >-
+    comfortable on ≥ 4 GB-RAM phones; the cap holds on any phone that can
+    store the 2.59 GB file (ruling plan §4.7). The smallest supported device
+    class is verified by the advisory device proof (S5), not assumed.
+  caveat: >-
+    fileBackedBytes counts shared clean pages in full and GPU driver buffers
+    land there on Adreno — treat the deltas, not absolutes, as the model's
+    cost (plan §1.4).
+  backend_ruling: >-
+    CPU is the app's choice (§2 load_shape backend) — the CPU row above is
+    what the 6 GB ruling rests on (plan §4.3).
+
+# ---------------------------------------------------------------------------
+# 7. Error surface (plan §5-P1 item 7 / F13 / F14; friendly strings verified
+#    at model_download_service.dart:390-414 and gemma_service.dart:132-142)
+# ---------------------------------------------------------------------------
+
+error_surface:
+  download_errors: UNCHANGED   # sealed DownloadException mapping, no variant added or reworded
+  friendly_mapping:            # _friendlyDownloadError (model_download_service.dart:390-414)
+    NotFoundError: 'The offline model file could not be found at its source. Check the download link.'
+    UnauthorizedError_ForbiddenError: >-
+      Download authorization required. The model source is gated — please
+      confirm your HF token is valid and the model license has been accepted.
+      Never share the token.
+    RateLimitedError: 'Too many download attempts. Try again later.'
+    NetworkError: 'No internet connection. Download will resume when you are back online.'
+    CanceledError_and_CancelToken_isCancel: silent — back to notInstalled, no error
+    ServerError_UnknownError: 'Download failed. Please try again.'
+    TimeoutException: 'Download timed out. Please try again.'   # (:410-412) — the §4 ceilings land here
+    other: 'Download failed. Please try again.'
+    DownloadStalledException: 'Download stalled. Please try again.'   # (:394-396)
+    note: >-
+      the 401/403 copy above is cycle-36's, kept verbatim (plan §5-P1 item 7);
+      raw plugin detail never reaches the UI (:363-366 doc).
+  engine_init_errors:
+    new_exceptions: >-
+      BackendInitException only (v1.1.0 correction — LiteRtLmBundleException
+      does NOT exist at the 1.8.6 pin; verified by grep over both pinned
+      packages. The bundle-load failure surfaces as a generic
+      Exception('Failed to create engine. Model may be invalid: …') or the
+      actionable backend-constraint Exception — litert_lm_client.dart:925-935
+      of the pinned package source).
+    mapping: >-
+      INTENTIONALLY fall into the existing string heuristics
+      (_classifyLoadError, gemma_service.dart:132-142) → 'Offline model
+      failed to load.' (or 'Offline model is not installed.' for the
+      not-installed class).
+    no_code_change: >-
+      typed mapping of these exceptions is backlog F14 — P2 must NOT add
+      exception-type branches this cycle (plan §5-P1 item 7).
+  f13_override_caveat: >-
+    GEMMA_MODEL_URL override becomes FORMAT-COUPLED: fileType
+    ModelFileType.litertlm is hardcoded in BOTH install chains (§2
+    install_shape), so overriding the URL to a .task asset fails at engine
+    claim. Accepted — debug/enterprise escape hatch (F13, recorded plan
+    §2). resolvedModelUrl (model_download_service.dart:84-85) still wins;
+    AppConfig.gemmaModelUrl (app_config.dart:17,61) unchanged; no code
+    change — this contract item only documents it (plan §5-P1 criterion c).
+  token_posture: >-
+    no new secret surface — the HF-token threading is untouched (§1
+    token_threading, §2 install_shape token); the only secret path is
+    unchanged from cycle-36 P4's verified state (plan §4.5).
+  stop_divergences:            # plan §6 — STOP and report to the Orchestrator; no improvisation
+    S1_pub_resolution: >-
+      flutter pub get cannot resolve flutter_edge_ai_litertlm 1.8.6 with core
+      ^1.11.4, or resolution moves the core/mediapipe pins (verified at plan
+      time, plan §1.3 — a failure is NEW evidence).
+    S2_pinned_source: >-
+      the pinned litertlm 1.8.6 source diverges from this contract (e.g.
+      LiteRtLmEngine export/constructor differs, or the engine cannot claim
+      a ModelFileType.litertlm spec on the pinned core). No speculative
+      patches.
+    S6_asset_state: >-
+      the asset URL or repo state changes at gate time — P4 re-verification
+      fails (install URL HTTP 200 + Content-Length 2588147712, gated:false).
+      Re-check the catalog before proceeding.
+    others_note: >-
+      S3 (CI native-assets failure), S4 (advisory device proof), S5 (RAM OOM)
+      live in plan §6 and are outside this contract's figures — the plan file
+      is authoritative for them.
+
+# ---------------------------------------------------------------------------
+# 8. System prompt — template-native handling (F12; plan §5-P1 delegation
+#    scope item 8)
+# ---------------------------------------------------------------------------
+
+system_prompt:
+  code_change: NONE
+  behavior_shift: >-
+    on .task, the system prompt reached the model as a '[System: …]' blob
+    glued to the first user turn (cycle-36 F15); on .litertlm the bundle's
+    chat template handles the system turn natively (<|turn>system markers,
+    plan §1.2) — the .task-era prompt pollution disappears for free (F12).
+  app_surface: >-
+    createChat(systemInstruction: _systemInstruction) keeps its existing
+    parameter (§2 load_shape) — the same call now lands natively in the
+    template; gemma_service.dart is not touched for this.
+  expected_quality_win: recorded, no work (plan §2 F12) — P2 must NOT "fix"
+    or restructure the system-instruction path.
+
+# ---------------------------------------------------------------------------
+# 9. Acceptance criteria (plan §5-P1 item 8 — P1's own gate — plus the P2
+#    invariants this contract pins)
+# ---------------------------------------------------------------------------
+
+acceptance_criteria:
+  a_figures_exact: >-
+    every figure/URL/hash in this file matches plan §1 exactly — each carries
+    its source citation (plan §1.2 asset figures; §1.3 pairing; §1.4 RAM;
+    §1.5 code sites, re-verified against the tree at recording time).
+  b_no_secrets: >-
+    no secret material — no token values anywhere in this file; only config
+    KEY names appear (GEMMA_MODEL_URL / HF_TOKEN as dart-define keys via
+    AppConfig), which are not secrets (app_config.dart:14-17).
+  c_f13_recorded: the GEMMA_MODEL_URL format-coupling caveat is recorded (§7
+    f13_override_caveat).
+  d_p2_standalone: >-
+    a reader can build P2 from this file alone, without touching the web —
+    the P2 change surface is fully specified by §1-§4, §5 (P3 strings), §7
+    and §8; plan §5-P2 carries the mechanical checklist and acceptance
+    greps that implement it.
+  p2_identity_invariant: >-
+    'gemma-4-e2b-it' coherent across _modelType (model_download_service.dart:
+    71), gemma_service.dart:112, offline_model_dao.dart:37/:53 (plan §5-P2
+    criterion 3; F5).
+  p2_lock_invariant: >-
+    flutter pub get leaves pubspec.lock with flutter_edge_ai 1.11.4 +
+    flutter_edge_ai_mediapipe 1.0.8 unchanged (plan §5-P2 criterion 8);
+    divergence fires STOP S1 (§7).
+  p2_timeout_grep: >-
+    Duration(minutes: 60) present in model_download_service.dart (plan §5-P2
+    criterion 6) — satisfied by §4's gate_ceiling and second_ceiling.

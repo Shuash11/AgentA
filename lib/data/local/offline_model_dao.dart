@@ -34,7 +34,7 @@ class OfflineModelDao {
 
     await db.insert(_tableName, {
       'id': _singleRowId,
-      'model_type': 'gemma3-1b-it-int4',
+      'model_type': 'gemma-4-e2b-it',
       'status': ModelDbStatus.notInstalled.name,
       'downloaded_at': null,
       'file_path': null,
@@ -50,7 +50,7 @@ class OfflineModelDao {
 
     await db.insert(_tableName, {
       'id': _singleRowId,
-      'model_type': 'gemma3-1b-it-int4',
+      'model_type': 'gemma-4-e2b-it',
       'status': ModelDbStatus.error.name,
       'downloaded_at': null,
       'file_path': null,

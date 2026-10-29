@@ -281,9 +281,11 @@ void main() {
 
     tearDown(() {
       service.dispose();
+      ModelDownloadService.legacyAssetPresentOverrideForTest = null;
+      ModelDownloadService.uninstallOverrideForTest = null;
     });
 
-    test('production ceilings: permission 10s, stall 3min, install 30min', () {
+    test('production ceilings: permission 10s, stall 3min, install 60min', () {
       expect(
         ModelDownloadService.permissionTimeoutForTest,
         const Duration(seconds: 10),
@@ -292,9 +294,11 @@ void main() {
         ModelDownloadService.stallTimeoutForTest,
         const Duration(minutes: 3),
       );
+      // The Gemma 4 E2B bundle is 2.59 GB — the 30-min ceiling expired
+      // before a legitimate slow transfer could finish.
       expect(
         ModelDownloadService.installTimeoutForTest,
-        const Duration(minutes: 30),
+        const Duration(minutes: 60),
       );
       // The stall window must stay above the 60s slow-connection heuristic
       // (a merely slow transfer still emits events and resets the timer).
@@ -422,15 +426,81 @@ void main() {
       stray.dispose();
       expect(stray.hasActiveWatchdogForTest, isFalse);
     });
+
+    test(
+      'v3 migration: legacy asset present → marker first, uninstall, DAO reset',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('model_asset_v3');
+        final uninstalled = <String>[];
+        bool? markerAtUninstall;
+        ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+            true;
+        ModelDownloadService.uninstallOverrideForTest = (modelId) async {
+          uninstalled.add(modelId);
+          markerAtUninstall = prefs.getBool('model_asset_v3');
+        };
+
+        await service.checkModelExists();
+
+        expect(uninstalled, ['gemma3-1b-it-int4.task']);
+        // The marker is set BEFORE the uninstall so a crash never loops the
+        // download.
+        expect(markerAtUninstall, isTrue);
+        expect(prefs.getBool('model_asset_v3'), isTrue);
+        // The DB row is reset so the gate re-downloads the current asset.
+        final row = await db.query('offline_model_status');
+        expect(row, hasLength(1));
+        expect(row.first['status'], 'notInstalled');
+        expect(row.first['model_type'], 'gemma-4-e2b-it');
+      },
+    );
+
+    test('v3 migration: marker present → no uninstall', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('model_asset_v3', true);
+      final uninstalled = <String>[];
+      ModelDownloadService.legacyAssetPresentOverrideForTest = () async => true;
+      ModelDownloadService.uninstallOverrideForTest = (modelId) async {
+        uninstalled.add(modelId);
+      };
+
+      await service.checkModelExists();
+
+      expect(uninstalled, isEmpty);
+    });
+
+    test('v3 migration: no legacy asset → no uninstall, no marker', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('model_asset_v3');
+      final uninstalled = <String>[];
+      ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+          false;
+      ModelDownloadService.uninstallOverrideForTest = (modelId) async {
+        uninstalled.add(modelId);
+      };
+
+      await service.checkModelExists();
+
+      expect(uninstalled, isEmpty);
+      expect(prefs.getBool('model_asset_v3'), isNull);
+      // The current asset must never be uninstalled-and-reset by its own
+      // migration (that would strand the user behind a 2.59 GB re-download).
+      expect(await db.query('offline_model_status'), isEmpty);
+    });
   });
 
   group('P1 cycle-36 offline fix assertions', () {
-    test('_modelUrl points at official litert-community repo', () {
+    test('_modelUrl points at the Gemma 4 E2B litert-community repo', () {
       // The URL is a static const; verify via reflection-free access
       // by reading the source behavior through resolvedModelUrl.
       expect(
         ModelDownloadService.resolvedModelUrl,
-        contains('litert-community/Gemma3-1B-IT'),
+        contains('litert-community/gemma-4-E2B-it-litert-lm'),
+      );
+      expect(
+        ModelDownloadService.resolvedModelUrl,
+        endsWith('/gemma-4-E2B-it.litertlm'),
       );
       expect(
         ModelDownloadService.resolvedModelUrl,
@@ -473,6 +543,65 @@ void main() {
       // After setting, no second run should occur (marker present).
       await prefs.setBool('model_asset_v2', true);
       expect(prefs.getBool('model_asset_v2'), isTrue);
+    });
+  });
+
+  group('Cycle-38 P2 offline-model swap assertions', () {
+    test('both install chains target the gemma4 + litertlm spec', () {
+      // The installOverrideForTest seam bypasses the real chain by design —
+      // assert the spec constants in the source, not the plugin call graph.
+      final source = File(
+        'lib/services/ai/model_download_service.dart',
+      ).readAsStringSync();
+      expect('ModelType.gemma4'.allMatches(source).length, 2);
+      expect('ModelFileType.litertlm'.allMatches(source).length, 2);
+      expect(source, isNot(contains('ModelType.gemmaIt')));
+    });
+
+    test('the HF token stays threaded in both install chains', () {
+      final source = File(
+        'lib/services/ai/model_download_service.dart',
+      ).readAsStringSync();
+      expect('token: AppConfig.hfToken.trim()'.allMatches(source).length, 2);
+    });
+
+    test('the GEMMA_MODEL_URL override still wins over the default URL', () {
+      final source = File(
+        'lib/services/ai/model_download_service.dart',
+      ).readAsStringSync();
+      expect(
+        source,
+        contains(
+          'AppConfig.gemmaModelUrl.isNotEmpty ? AppConfig.gemmaModelUrl : _modelUrl',
+        ),
+      );
+    });
+
+    test('the model identity is coherent across the four sites', () {
+      const identity = 'gemma-4-e2b-it';
+      final service = File(
+        'lib/services/ai/model_download_service.dart',
+      ).readAsStringSync();
+      final gemma = File(
+        'lib/services/ai/gemma_service.dart',
+      ).readAsStringSync();
+      final dao = File(
+        'lib/data/local/offline_model_dao.dart',
+      ).readAsStringSync();
+      expect(service, contains("_modelType = '$identity'"));
+      expect(gemma, contains("setModelReady(modelType: '$identity')"));
+      expect("'model_type': '$identity'".allMatches(dao).length, 2);
+      // The superseded identity survives only as the migration uninstall id.
+      expect(service, contains("'gemma3-1b-it-int4.task'"));
+      expect(service, isNot(contains("'gemma3-1b-it-int4'")));
+    });
+
+    test('both install ceilings are 60 minutes', () {
+      final source = File(
+        'lib/services/ai/model_download_service.dart',
+      ).readAsStringSync();
+      expect('Duration(minutes: 60)'.allMatches(source).length, 2);
+      expect(source, isNot(contains('Duration(minutes: 30)')));
     });
   });
 }

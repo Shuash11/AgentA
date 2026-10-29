@@ -40,8 +40,11 @@ class ModelDownloadService extends ChangeNotifier {
   /// blocks the download, it only hides the foreground notification.
   static const Duration _permissionTimeout = Duration(seconds: 10);
 
-  /// Belt-and-braces ceiling for the whole install future.
-  static const Duration _installTimeout = Duration(minutes: 30);
+  /// Belt-and-braces ceiling for the whole install future. 60 minutes: the
+  /// Gemma 4 E2B bundle is 2,588,147,712 B (~2.59 GB) and a ~1.5 MB/s
+  /// transfer needs ~29 min — the old 30-min ceiling expired before a
+  /// legitimate slow download could finish.
+  static const Duration _installTimeout = Duration(minutes: 60);
 
   /// Stall watchdog window: 3 minutes with zero progress events. Generous
   /// vs the 60s slow-connection heuristic above (a merely slow transfer
@@ -66,9 +69,16 @@ class ModelDownloadService extends ChangeNotifier {
   bool get isReady => _status == ModelStatus.ready;
   bool get isSlowConnection => _isSlowConnection;
 
+  /// Gemma 4 E2B native bundle on the LiteRT-LM engine. Ungated (no HF
+  /// token needed), but both install chains keep threading the token so a
+  /// GEMMA_MODEL_URL override against a gated asset still works.
   static const String _modelUrl =
-      'https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.task';
-  static const String _modelType = 'gemma3-1b-it-int4';
+      'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm';
+  static const String _modelType = 'gemma-4-e2b-it';
+
+  /// Filename of the superseded Gemma 3 1B asset — the uninstall id both
+  /// migration generations use.
+  static const String _legacyModelFileName = 'gemma3-1b-it-int4.task';
 
   /// Channel to the host MainActivity for the Android 13+ runtime
   /// POST_NOTIFICATIONS request (no permission_handler dependency).
@@ -162,6 +172,11 @@ class ModelDownloadService extends ChangeNotifier {
     final oldStatus = _status;
     final oldProgress = _progress;
 
+    // Runs BEFORE the readiness read below: the migration resets the DB row
+    // so the gate re-downloads the current asset instead of serving the
+    // superseded one.
+    await _migrateLegacyAssetIfPresent();
+
     try {
       final sqliteReady = await _dao.isModelReady();
 
@@ -203,10 +218,10 @@ class ModelDownloadService extends ChangeNotifier {
     _notifyStateChanged(oldStatus, oldProgress);
   }
 
-  /// One-time migration: the broken third-party mirror and official file share
-  /// the filename `gemma3-1b-it-int4.task`, so install() skips the official
-  /// copy unless the old file is removed. Marker set BEFORE uninstall so a
-  /// crash never loops the download.
+  /// One-time migration (generation 2): the broken third-party mirror and
+  /// official file share the filename `gemma3-1b-it-int4.task`, so install()
+  /// skips the official copy unless the old file is removed. Marker set
+  /// BEFORE uninstall so a crash never loops the download.
   static Future<void> _migrateStaleAssetIfPresent() async {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('model_asset_v2') == true) return;
@@ -215,13 +230,73 @@ class ModelDownloadService extends ChangeNotifier {
     final daoReady = await dao.isModelReady();
     if (!hasActive && !daoReady) return;
     await prefs.setBool('model_asset_v2', true);
+    await _uninstallLegacyModel();
+    await dao.setModelNotInstalled();
+  }
+
+  /// One-time migration (generation 3): the Gemma 4 E2B bundle has a
+  /// different filename, so install() adds it cleanly while the superseded
+  /// 1B file (0.5 GB) lingers on disk. Uninstall that asset and reset the
+  /// DB row so the download gate re-downloads the E2B bundle — no
+  /// user-facing migration UI. Marker set BEFORE uninstall so a crash never
+  /// loops the download.
+  ///
+  /// The trigger is the legacy asset itself (installed in the plugin's
+  /// storage, or the active model), NOT "any model is present": the E2B
+  /// bundle must never be uninstalled-and-reset by its own migration, which
+  /// would strand the user behind a 2.59 GB re-download gate.
+  static Future<void> _migrateLegacyAssetIfPresent() async {
     try {
-      await FlutterEdgeAi.uninstallModel('gemma3-1b-it-int4.task');
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('model_asset_v3') == true) return;
+      if (!await _legacyAssetPresent()) return;
+      await prefs.setBool('model_asset_v3', true);
+      await _uninstallLegacyModel();
+      await OfflineModelDao().setModelNotInstalled();
+    } catch (e) {
+      // A migration must never break the download gate. The marker is set
+      // BEFORE the uninstall (a crash mid-migration never loops the
+      // download), so a failed uninstall is not retried on the next launch.
+      if (kDebugMode) {
+        debugPrint('[ModelDownload] legacy asset migration failed: $e');
+      }
+    }
+  }
+
+  /// Whether the superseded 1B asset is still present: installed in the
+  /// plugin's storage, or the active model on this run.
+  static Future<bool> _legacyAssetPresent() async {
+    final override = legacyAssetPresentOverrideForTest;
+    if (override != null) return override();
+    final active = FlutterEdgeAi.activeModelSpec?.name == _legacyModelFileName;
+    if (active) return true;
+    return FlutterEdgeAi.isModelInstalled(_legacyModelFileName);
+  }
+
+  /// Removes the superseded 1B asset. Tolerant: an already-unregistered or
+  /// already-missing model/file is safe to continue.
+  static Future<void> _uninstallLegacyModel() async {
+    final override = uninstallOverrideForTest;
+    if (override != null) {
+      await override(_legacyModelFileName);
+      return;
+    }
+    try {
+      await FlutterEdgeAi.uninstallModel(_legacyModelFileName);
     } catch (_) {
       // Already unregistered / file missing — safe to continue.
     }
-    await dao.setModelNotInstalled();
   }
+
+  /// Overrides the legacy-asset presence probe (test-only). When set, the
+  /// migration uses it instead of asking the plugin.
+  @visibleForTesting
+  static Future<bool> Function()? legacyAssetPresentOverrideForTest;
+
+  /// Overrides the legacy-asset uninstall (test-only). When set, the
+  /// migration calls it instead of the plugin.
+  @visibleForTesting
+  static Future<void> Function(String modelId)? uninstallOverrideForTest;
 
   Future<void> installModel() async {
     if (_status == ModelStatus.installing || _status == ModelStatus.ready) {
@@ -251,7 +326,7 @@ class ModelDownloadService extends ChangeNotifier {
     _armStallWatchdog();
     try {
       // Foreground (AppConfig.foregroundDownload, default true) keeps the
-      // ~529MB transfer alive when the app is backgrounded (WorkManager
+      // ~2.6GB transfer alive when the app is backgrounded (WorkManager
       // alone is subject to background limits). FOREGROUND_DOWNLOAD=false
       // is the no-rebuild workaround when the foreground path fails.
       // Timeout stays as belt-and-braces.
@@ -265,7 +340,10 @@ class ModelDownloadService extends ChangeNotifier {
       // cancelled so the native download stops instead of lingering.
       final installFuture = installOverrideForTest != null
           ? installOverrideForTest!(token)
-          : FlutterEdgeAi.installModel(modelType: ModelType.gemmaIt)
+          : FlutterEdgeAi.installModel(
+                  modelType: ModelType.gemma4,
+                  fileType: ModelFileType.litertlm,
+                )
                 .fromNetwork(
                   resolvedModelUrl,
                   token: AppConfig.hfToken.trim(),
@@ -489,16 +567,20 @@ class ModelDownloadService extends ChangeNotifier {
   /// restore failed.
   static Future<bool> ensureModelActive() async {
     await _migrateStaleAssetIfPresent();
+    await _migrateLegacyAssetIfPresent();
     if (FlutterEdgeAi.hasActiveModel()) return true;
     try {
-      await FlutterEdgeAi.installModel(modelType: ModelType.gemmaIt)
+      await FlutterEdgeAi.installModel(
+            modelType: ModelType.gemma4,
+            fileType: ModelFileType.litertlm,
+          )
           .fromNetwork(
             resolvedModelUrl,
             token: AppConfig.hfToken.trim(),
             foreground: AppConfig.foregroundDownload,
           )
           .install()
-          .timeout(const Duration(minutes: 30));
+          .timeout(const Duration(minutes: 60));
       return FlutterEdgeAi.hasActiveModel();
     } catch (e) {
       if (kDebugMode) {
