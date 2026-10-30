@@ -28,6 +28,7 @@ import 'services/update/version_check_service.dart';
 import 'core/utils/connectivity_service.dart';
 import 'core/config/app_config.dart';
 import 'data/local/database_helper.dart';
+import 'data/local/offline_model_dao.dart';
 import 'repositories/chat_repository.dart';
 import 'repositories/message_repository.dart';
 import 'presentation/auth/login.dart';
@@ -509,9 +510,18 @@ class OfflineModelGate extends StatefulWidget {
 
 class _OfflineModelGateState extends State<OfflineModelGate> {
   bool _isChecking = true;
-  bool _modelReady = false;
   bool _isLoadingModel = false;
-  String? _loadingError;
+
+  /// Whether the asset is recorded as INSTALLED on the device (the durable
+  /// DAO marker). An installed model must never fall back to the download
+  /// gate — that is the spurious 2.6 GB re-download class (cycle-38 P6,
+  /// S7). It is the routing authority for the retry surface.
+  bool _isInstalled = false;
+
+  /// Readiness state of the on-device model. Drives the gate surface:
+  /// loaded → the app, loadFailed → the retry surface, idle/modelMissing →
+  /// the download gate.
+  OfflineModelState _modelState = OfflineModelState.idle;
 
   @override
   void initState() {
@@ -519,16 +529,30 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
     unawaited(_checkModelStatus());
   }
 
+  /// Checks the download state, then LOADS the installed model.
+  ///
+  /// The model is loaded on every path that finds it installed — the initial
+  /// check, the post-install re-check and the error-screen retry — so
+  /// "installed" can never mean "declared ready but never loaded" (the
+  /// cycle-38 P6 dead-end).
   Future<void> _checkModelStatus() async {
     final modelDownload = context.read<ModelDownloadService>();
     await modelDownload.checkModelExists();
-
     if (!mounted) return;
 
-    if (!modelDownload.isReady) {
+    // The DAO row is the durable truth: an error row that still carries the
+    // download marker means the asset IS installed (it only failed to load)
+    // and must route to RETRY — never to the download gate, which would
+    // strand the user behind a spurious 2.6 GB re-download.
+    final installed = await OfflineModelDao().isModelInstalled();
+    if (!mounted) return;
+
+    if (!installed) {
       setState(() {
-        _modelReady = false;
         _isChecking = false;
+        _isLoadingModel = false;
+        _isInstalled = false;
+        _modelState = OfflineModelState.idle;
       });
       return;
     }
@@ -536,85 +560,75 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
     setState(() {
       _isChecking = false;
       _isLoadingModel = true;
+      _isInstalled = true;
     });
 
+    await _attemptLoad();
+  }
+
+  /// Loads the model and records the outcome.
+  ///
+  /// A failure never dead-ends: the state decides the surface — a broken but
+  /// installed model gets the retry screen, a missing asset gets the
+  /// download gate.
+  Future<void> _attemptLoad() async {
+    final gemmaService = context.read<GemmaService>();
     try {
-      final gemmaService = context.read<GemmaService>();
       await gemmaService.loadInstalled();
       if (!mounted) return;
+      // A successful load rewrites the DAO row to ready. The download
+      // service's in-memory status was computed from the ERROR row (an
+      // installed-but-broken model reads as "not ready" there), so it is
+      // re-synced here: otherwise every surface that asks the download
+      // service — the offline banner, the download screen — would keep
+      // claiming the model is missing and would route the user into the
+      // very download screen that no-ops for an installed model
+      // (cycle-38 P6). checkModelExists() only reads state; it never
+      // downloads.
+      await context.read<ModelDownloadService>().checkModelExists();
+      if (!mounted) return;
       setState(() {
-        _modelReady = gemmaService.isReady;
         _isLoadingModel = false;
+        _modelState = gemmaService.state;
       });
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[OfflineModelGate] loadInstalled failed: $e');
+        debugPrint(
+          '[OfflineModelGate] loadInstalled failed: $e (type: ${e.runtimeType})',
+        );
       }
       if (!mounted) return;
       setState(() {
-        _modelReady = false;
         _isLoadingModel = false;
-        _loadingError = e.toString();
+        _modelState = gemmaService.state;
       });
     }
   }
 
+  /// Post-download: the asset is on the device — LOAD it.
+  ///
+  /// The old path only re-checked the download state and declared the gate
+  /// open, which left the model unloaded and the chat stuck on "still
+  /// getting ready" (cycle-38 P6).
   Future<void> _onModelReady() async {
     final modelDownload = context.read<ModelDownloadService>();
     await modelDownload.checkModelExists();
     if (!mounted) return;
+    // The download just completed: the asset is on the device. The durable
+    // marker is re-read so the gate keeps routing an installed model to the
+    // retry surface — never back to the download gate (S7).
+    final installed = await OfflineModelDao().isModelInstalled();
+    if (!mounted) return;
     setState(() {
-      _modelReady = modelDownload.isReady;
       _isChecking = false;
-      _isLoadingModel = false;
+      _isLoadingModel = true;
+      _isInstalled = installed;
     });
+    await _attemptLoad();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loadingError != null) {
-      return Scaffold(
-        backgroundColor: AppColors.base,
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.error_outline,
-                  color: AppColors.errorText,
-                  size: 48,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Failed to load offline model',
-                  style: AppTypography.subtitle.copyWith(color: AppColors.ink),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'The offline model could not be loaded. Please try again.',
-                  style: AppTypography.labelSm.copyWith(
-                    color: AppColors.subtext,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () => setState(() {
-                    _loadingError = null;
-                    _isChecking = true;
-                    unawaited(_checkModelStatus());
-                  }),
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
     if (_isChecking || _isLoadingModel) {
       return Scaffold(
         backgroundColor: AppColors.base,
@@ -645,15 +659,63 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
       );
     }
 
-    if (!_modelReady) {
-      // M17: forced gate is mandatory by design — no fake skip is offered.
-      return DownloadPromptScreen(
-        onComplete: _onModelReady,
-        isForcedGate: true,
+    if (_modelState == OfflineModelState.loaded) {
+      return widget.child;
+    }
+
+    // S7: an INSTALLED model never falls back to the download gate — the
+    // user would be stranded behind a spurious 2.6 GB re-download of an
+    // asset the device already has. The retry surface is the only honest
+    // affordance for it, and it always re-invokes the service's load.
+    if (_isInstalled || _modelState == OfflineModelState.loadFailed) {
+      // The model is installed but did not load: the honest surface is a
+      // retry, not a download.
+      return Scaffold(
+        backgroundColor: AppColors.base,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  color: AppColors.errorText,
+                  size: 48,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Failed to load offline model',
+                  style: AppTypography.subtitle.copyWith(color: AppColors.ink),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'The offline model could not be loaded. Please try again.',
+                  style: AppTypography.labelSm.copyWith(
+                    color: AppColors.subtext,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _isChecking = true;
+                      _isLoadingModel = false;
+                    });
+                    unawaited(_checkModelStatus());
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
-    return widget.child;
+    // M17: forced gate is mandatory by design — no fake skip is offered.
+    return DownloadPromptScreen(onComplete: _onModelReady, isForcedGate: true);
   }
 }
 

@@ -6,13 +6,39 @@ import '../../data/local/offline_model_dao.dart';
 import '../../data/models/chat_message_model.dart';
 import 'model_download_service.dart';
 
+/// Readiness state of the on-device model (cycle-38 P6).
+///
+/// The three states are distinct on purpose: "not loaded yet" and "failed to
+/// load" need DIFFERENT affordances — the first may still be loading, the
+/// second must offer a RETRY (or, when the asset is gone, the download).
+enum OfflineModelState {
+  /// No load attempt has completed in this process yet.
+  idle,
+
+  /// The model is loaded and usable.
+  loaded,
+
+  /// The last load attempt failed although the asset is installed — a retry
+  /// can recover it (cycle-38 P6: the failed-load dead-end).
+  loadFailed,
+
+  /// The last load attempt failed because the asset itself is missing — a
+  /// retry cannot help; the user needs the download.
+  modelMissing,
+}
+
 class GemmaService extends ChangeNotifier {
   final OfflineModelDao _dao = OfflineModelDao();
-  bool _isLoaded = false;
+  OfflineModelState _state = OfflineModelState.idle;
   bool _isCancelled = false;
   InferenceModel? _model;
   InferenceChat? _chat;
   String? _lastError;
+
+  /// The in-flight load attempt, if any. Cleared when the attempt settles
+  /// (success OR failure) so a failed load never wedges the service — the
+  /// retry affordances depend on a later attempt being able to run.
+  Future<void>? _loadInFlight;
 
   static const Duration _streamFlushInterval = Duration(milliseconds: 45);
   static const int _streamFlushChars = 8;
@@ -40,7 +66,14 @@ Formatting rules:
 - Use bullets or numbered steps for lists.
 ''';
 
-  bool get isReady => _isLoaded && _model != null;
+  bool get isReady => _state == OfflineModelState.loaded;
+
+  /// The current readiness state of the on-device model.
+  OfflineModelState get state => _state;
+
+  /// True when the last load attempt failed while the asset was installed —
+  /// a retry can recover it. Drives the RETRY LOAD affordance.
+  bool get canRetryLoad => _state == OfflineModelState.loadFailed;
 
   /// Friendly reason for the last readiness failure, or null when ready.
   /// Distinguishes "not installed" from "load failed" without leaking
@@ -74,54 +107,158 @@ Formatting rules:
     _isCancelled = false;
   }
 
-  Future<void> loadInstalled() async {
-    if (_isLoaded) {
-      return;
+  /// Loads the installed model into memory.
+  ///
+  /// Re-attemptable by design (cycle-38 P6): a failed attempt leaves the
+  /// service in a clean, retryable state — the in-flight guard is cleared,
+  /// the failure is recorded in the DAO, and the classified reason stays
+  /// available to the UI. The raw exception is never swallowed silently: it
+  /// is logged (kDebugMode) and rethrown so the caller can surface the
+  /// retry affordance.
+  Future<void> loadInstalled() {
+    if (_state == OfflineModelState.loaded) {
+      return Future<void>.value();
     }
 
-    bool rehydrationFailed = false;
+    // One attempt at a time: a second caller (gate + chat) joins the
+    // running attempt instead of starting a competing load.
+    final inFlight = _loadInFlight;
+    if (inFlight != null) return inFlight;
+
+    final attempt = _performLoad();
+    _loadInFlight = attempt;
+    // Clear the guard when the attempt settles — a FAILED attempt must
+    // stay retryable (the failure is reported through the state + DAO).
+    unawaited(
+      attempt.then<void>(
+        (_) => _clearInFlight(attempt),
+        onError: (Object _, StackTrace _) => _clearInFlight(attempt),
+      ),
+    );
+    return attempt;
+  }
+
+  void _clearInFlight(Future<void> attempt) {
+    if (identical(_loadInFlight, attempt)) {
+      _loadInFlight = null;
+    }
+  }
+
+  Future<void> _performLoad() async {
+    var rehydrationFailed = false;
     try {
       // 1.8.4 auto-restores the active-model identity from SharedPreferences
       // at initialize(), so hasActiveModel() is usually true at startup.
       // ensureModelActive() remains as defense for storage-loss or failed
       // restore cases; its install() is idempotent and skips the download
       // when the file is already in the plugin's storage.
-      if (!FlutterEdgeAi.hasActiveModel()) {
-        final rehydrated = await ModelDownloadService.ensureModelActive();
-        rehydrationFailed = !rehydrated;
-        if (kDebugMode && !rehydrated) {
-          debugPrint(
-            '[GemmaService] model rehydration failed — load will retry via gate',
-          );
+      final chatOverride = chatOverrideForTest;
+      if (chatOverride != null) {
+        // Test-only: injects a ready chat instead of the native engine.
+        _chat = await chatOverride();
+      } else {
+        if (!FlutterEdgeAi.hasActiveModel()) {
+          final rehydrated = await ModelDownloadService.ensureModelActive();
+          rehydrationFailed = !rehydrated;
+          if (kDebugMode && !rehydrated) {
+            debugPrint(
+              '[GemmaService] model rehydration failed — load will retry via gate',
+            );
+          }
         }
+
+        _model = await FlutterEdgeAi.getActiveModel(
+          maxTokens: _maxTokens,
+          preferredBackend: PreferredBackend.cpu,
+        );
+
+        _chat = await _model!.createChat(
+          temperature: 0.3,
+          randomSeed: 1,
+          topK: 30,
+          topP: 0.85,
+          systemInstruction: _systemInstruction,
+        );
       }
 
-      _model = await FlutterEdgeAi.getActiveModel(
-        maxTokens: _maxTokens,
-        preferredBackend: PreferredBackend.cpu,
-      );
-
-      _chat = await _model!.createChat(
-        temperature: 0.3,
-        randomSeed: 1,
-        topK: 30,
-        topP: 0.85,
-        systemInstruction: _systemInstruction,
-      );
-
       await _dao.setModelReady(modelType: 'gemma-4-e2b-it');
-      _isLoaded = true;
+      _state = OfflineModelState.loaded;
       _lastError = null;
       notifyListeners();
     } catch (e) {
-      _isLoaded = false;
-      _lastError = _classifyLoadError(e, rehydrationFailed);
-      if (kDebugMode) debugPrint('[GemmaService] loadInstalled failed: $e');
-      notifyListeners();
       _model = null;
       _chat = null;
+      final failure = await _resolveFailureState(e, rehydrationFailed);
+      _state = failure;
+      _lastError = _friendlyForState(failure);
+      // Record the failure so the broken-but-installed state survives a
+      // restart and routes to RETRY LOAD. The DAO write must never mask the
+      // original failure, so it is guarded separately.
+      try {
+        await _dao.setModelError(_lastError);
+      } catch (daoError) {
+        if (kDebugMode) {
+          debugPrint('[GemmaService] setModelError failed: $daoError');
+        }
+      }
+      // S4 evidence: the raw exception CLASS stays in the debug log (the
+      // device log decides "state defect" vs "engine-native failure"). It
+      // never reaches the UI copy.
+      if (kDebugMode) {
+        debugPrint(
+          '[GemmaService] loadInstalled failed: $e (type: ${e.runtimeType})',
+        );
+      }
+      notifyListeners();
       rethrow;
     }
+  }
+
+  /// Resolves the state a failed load leaves the service in.
+  ///
+  /// The classifier's "the asset is missing" verdict is only trusted when
+  /// the durable install marker agrees with it. A load failure on an asset
+  /// that IS recorded as installed is a RETRYABLE failure (cycle-38 P6,
+  /// S7): routing it to the download gate would strand the user behind a
+  /// spurious 2.6 GB re-download of a model the device already has — the
+  /// exact class the v3-migration ruling killed.
+  ///
+  /// The marker is also what keeps the DAO row and the service state in
+  /// agreement: the error row written below keeps the download marker, so
+  /// the UI sees "installed but broken" on both sides.
+  Future<OfflineModelState> _resolveFailureState(
+    Object error,
+    bool rehydrationFailed,
+  ) async {
+    final classified = _classifyLoadState(error, rehydrationFailed);
+    if (classified != OfflineModelState.modelMissing) return classified;
+
+    try {
+      if (await _dao.isModelInstalled()) {
+        return OfflineModelState.loadFailed;
+      }
+    } catch (daoError) {
+      // A marker that cannot be read must never invent a "missing" verdict
+      // on its own — the classifier's verdict stands.
+      if (kDebugMode) {
+        debugPrint('[GemmaService] isModelInstalled failed: $daoError');
+      }
+    }
+    return classified;
+  }
+
+  /// Maps a load failure to the state the UI must react to: a missing asset
+  /// needs the download, any other failure needs a retry.
+  OfflineModelState _classifyLoadState(Object error, bool rehydrationFailed) {
+    final raw = error.toString().toLowerCase();
+    if (rehydrationFailed ||
+        raw.contains('not installed') ||
+        raw.contains('no such file') ||
+        raw.contains('not found') ||
+        raw.contains('bad state')) {
+      return OfflineModelState.modelMissing;
+    }
+    return OfflineModelState.loadFailed;
   }
 
   /// Maps a load failure to a friendly, brand-free reason.
@@ -129,16 +266,15 @@ Formatting rules:
   /// DownloadException path in ModelDownloadService; this heuristic covers
   /// only non-download load failures (engine init, chat creation). Raw
   /// exception text stays in kDebugMode logs, never in the UI.
-  String _classifyLoadError(Object error, bool rehydrationFailed) {
-    final raw = error.toString().toLowerCase();
-    if (rehydrationFailed ||
-        raw.contains('not installed') ||
-        raw.contains('no such file') ||
-        raw.contains('not found') ||
-        raw.contains('bad state')) {
+  String _friendlyForState(OfflineModelState state) {
+    if (state == OfflineModelState.modelMissing) {
       return 'Offline model is not installed.';
     }
     return 'Offline model failed to load.';
+  }
+
+  String _classifyLoadError(Object error, bool rehydrationFailed) {
+    return _friendlyForState(_classifyLoadState(error, rehydrationFailed));
   }
 
   // Test hooks: thin delegates over the private pure helpers above.
@@ -146,6 +282,13 @@ Formatting rules:
   @visibleForTesting
   String classifyLoadErrorForTest(Object error, bool rehydrationFailed) =>
       _classifyLoadError(error, rehydrationFailed);
+
+  /// Injects the chat that [loadInstalled] uses instead of the native
+  /// engine chain (active-model rehydration + getActiveModel + createChat).
+  /// Production never sets it; tests use it to drive the load/retry state
+  /// machine deterministically (a throwing override simulates a failed load).
+  @visibleForTesting
+  Future<InferenceChat> Function()? chatOverrideForTest;
 
   @visibleForTesting
   String truncateAtSentenceForTest(String text, int limit) =>

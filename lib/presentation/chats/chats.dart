@@ -11,6 +11,8 @@ import '../../theme/app_theme.dart';
 import '../../services/ai/ai_service.dart';
 import '../../services/ai/ai_model.dart';
 import '../../services/ai/gemma_service.dart';
+import '../../services/ai/model_download_service.dart';
+import '../../data/local/offline_model_dao.dart';
 import '../shared/offline_model_banner.dart';
 import '../ai/download_prompt_screen.dart';
 import '../../data/models/chat_message_model.dart';
@@ -23,6 +25,47 @@ import 'widgets/chat_input_bar.dart';
 import 'widgets/chat_screen_app_bar.dart';
 import 'widgets/chat_timeline_view.dart';
 import 'widgets/model_picker_sheet.dart';
+
+/// The primary action the offline-model affordance offers.
+enum OfflineModelAction {
+  /// The model is installed but not loaded → retry the load. The download
+  /// screen would be a no-op for an installed model.
+  retryLoad,
+
+  /// The model is genuinely not installed → open the download screen.
+  getModel,
+}
+
+/// Resolves the chat card's primary action from the model state.
+///
+/// cycle-38 P6: an INSTALLED-but-not-loaded model must offer RETRY LOAD.
+/// Routing it to the download screen produced the no-op loop the user hit
+/// ("Get model" → "Download Complete!" → back to a broken chat) and could
+/// start a spurious 2.6 GB re-download of an asset the device already has.
+/// The download screen stays reserved for a model that is genuinely missing.
+///
+/// The durable install marker is the primary signal: it is the one the S7
+/// constraint is written against, and it survives a restart — the
+/// in-memory download-service status cannot answer it after one.
+OfflineModelAction resolveOfflineModelAction({
+  required OfflineModelState state,
+  required bool isInstalled,
+}) {
+  // The model is usable — there is nothing to recover. The card is only
+  // rendered for a failed attempt, so this is a safe default rather than a
+  // reachable UI state.
+  if (state == OfflineModelState.loaded) return OfflineModelAction.retryLoad;
+
+  // Installed → the LOAD is what failed → retry the load. Never the
+  // download screen: that re-downloads an asset the device already has.
+  if (isInstalled) return OfflineModelAction.retryLoad;
+
+  // Not installed → the model is genuinely missing → the download.
+  // `modelMissing` is the service's explicit verdict, `idle` means no load
+  // attempt ran yet, and a `loadFailed` without an installed asset means the
+  // asset is gone too.
+  return OfflineModelAction.getModel;
+}
 
 class Chats extends StatefulWidget {
   final String title;
@@ -563,13 +606,120 @@ class _ChatScreenState extends State<Chats> {
 
     if (!mounted) return;
     if (needsDownloadAction) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      // The affordance follows the model STATE: an installed-but-unloaded
+      // model gets RETRY LOAD, a genuinely missing model gets GET MODEL.
+      final action = await _resolveOfflineAction(context);
+      if (!mounted) return;
+      _showOfflineActionSnackBar(action);
+    }
+  }
+
+  /// Resolves which offline-model affordance the card offers.
+  ///
+  /// The durable install marker decides (S7): an installed model always
+  /// routes to RETRY LOAD. When the marker cannot be read, the service's
+  /// own verdict is the fallback — a failed load must never leave the user
+  /// without an affordance.
+  Future<OfflineModelAction> _resolveOfflineAction(BuildContext context) async {
+    final gemmaService = context.read<GemmaService>();
+    try {
+      final installed = await OfflineModelDao().isModelInstalled();
+      return resolveOfflineModelAction(
+        state: gemmaService.state,
+        isInstalled: installed,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Chats] offline model install state unavailable: $e');
+      }
+      return gemmaService.state == OfflineModelState.modelMissing
+          ? OfflineModelAction.getModel
+          : OfflineModelAction.retryLoad;
+    }
+  }
+
+  /// Shows the offline-model affordance for the current state.
+  void _showOfflineActionSnackBar(OfflineModelAction action) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(ChatErrorClassifier.offlineNotReadyMessage),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: _offlineActionLabel(action),
+          onPressed: () => unawaited(_runOfflineAction(action)),
+        ),
+      ),
+    );
+  }
+
+  String _offlineActionLabel(OfflineModelAction action) {
+    return action == OfflineModelAction.retryLoad ? 'Retry load' : 'Get model';
+  }
+
+  /// Runs the resolved offline-model affordance.
+  Future<void> _runOfflineAction(OfflineModelAction action) async {
+    if (action == OfflineModelAction.retryLoad) {
+      await _retryLoadModel();
+      return;
+    }
+    _pushDownloadScreen();
+  }
+
+  /// Retries the offline-model load.
+  ///
+  /// Honest feedback only: the load reports its progress, a failed retry
+  /// surfaces the service's friendly reason and the retry affordance stays
+  /// available — no endless spinner and no fake success (cycle-38 P6,
+  /// S4-safe). The raw exception never reaches the UI copy.
+  Future<void> _retryLoadModel() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final gemmaService = context.read<GemmaService>();
+
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Loading offline model...'),
+        behavior: SnackBarBehavior.floating,
+        // The first load of a multi-gigabyte model is slow — the progress
+        // notice must outlive it instead of vanishing mid-load and leaving
+        // the user with no feedback (and no affordance).
+        duration: Duration(seconds: 120),
+      ),
+    );
+
+    try {
+      await gemmaService.loadInstalled();
+      if (!mounted) return;
+      // The successful load rewrote the DAO row to ready; re-sync the
+      // download service so the offline banner stops claiming the model is
+      // missing (its in-memory status was computed from the error row).
+      // checkModelExists() only reads state — it never downloads.
+      await context.read<ModelDownloadService>().checkModelExists();
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('AgentA Offline AI is ready.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Chats] offline model load retry failed: $e');
+      }
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      final action = await _resolveOfflineAction(context);
+      if (!mounted) return;
+      messenger.showSnackBar(
         SnackBar(
-          content: const Text(ChatErrorClassifier.offlineNotReadyMessage),
+          content: Text(
+            gemmaService.lastError ?? 'Offline model failed to load.',
+          ),
           behavior: SnackBarBehavior.floating,
           action: SnackBarAction(
-            label: 'Get model',
-            onPressed: () => _openDownloadScreen(context),
+            label: _offlineActionLabel(action),
+            onPressed: () => unawaited(_runOfflineAction(action)),
           ),
         ),
       );
@@ -605,7 +755,19 @@ class _ChatScreenState extends State<Chats> {
     });
   }
 
-  void _openDownloadScreen(BuildContext context) {
+  /// Opens the offline-model affordance for the current state.
+  ///
+  /// An INSTALLED but unloaded model must NOT open the download screen: that
+  /// screen completes instantly for an installed model and used to be a
+  /// no-op loop (cycle-38 P6). It retries the load instead.
+  Future<void> _openDownloadScreen(BuildContext context) async {
+    final action = await _resolveOfflineAction(context);
+    if (!mounted) return;
+    await _runOfflineAction(action);
+  }
+
+  void _pushDownloadScreen() {
+    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => DownloadPromptScreen(
@@ -630,7 +792,7 @@ class _ChatScreenState extends State<Chats> {
           _aiService.setPreferredModel(model);
         });
       },
-      onDownloadRequested: () => _openDownloadScreen(context),
+      onDownloadRequested: () => unawaited(_openDownloadScreen(context)),
     );
   }
 
@@ -670,7 +832,9 @@ class _ChatScreenState extends State<Chats> {
       ),
       body: Column(
         children: [
-          OfflineModelBanner(onTap: () => _openDownloadScreen(context)),
+          OfflineModelBanner(
+            onTap: () => unawaited(_openDownloadScreen(context)),
+          ),
           Expanded(
             child: ChatTimelineView(
               messagesListenable: _messagesNotifier,

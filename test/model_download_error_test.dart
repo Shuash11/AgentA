@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:aiproject/core/config/app_config.dart';
 import 'package:aiproject/data/local/database_helper.dart';
+import 'package:aiproject/data/local/offline_model_dao.dart';
 import 'package:aiproject/services/ai/model_download_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -488,6 +489,47 @@ void main() {
       // migration (that would strand the user behind a 2.59 GB re-download).
       expect(await db.query('offline_model_status'), isEmpty);
     });
+
+    test(
+      'cycle-38 P6: a load-error row neither triggers nor is reset by a migration',
+      () async {
+        // The install wrote the ready row; the load then failed and wrote the
+        // error row — the download marker survives, so the asset is still on
+        // the device.
+        final dao = OfflineModelDao();
+        await dao.setModelReady(modelType: 'gemma-4-e2b-it');
+        await dao.setModelError('Offline model failed to load.');
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('model_asset_v2');
+        await prefs.remove('model_asset_v3');
+
+        final uninstalled = <String>[];
+        ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+            false;
+        ModelDownloadService.uninstallOverrideForTest = (modelId) async {
+          uninstalled.add(modelId);
+        };
+        addTearDown(() {
+          ModelDownloadService.legacyAssetPresentOverrideForTest = null;
+          ModelDownloadService.uninstallOverrideForTest = null;
+        });
+
+        await service.checkModelExists();
+
+        // No migration fired on the new error state: the error row is not a
+        // "model present" trigger for v3 (it keys on the legacy asset) and
+        // it is not a ready row for v2 (so v2 does not reset it either).
+        expect(uninstalled, isEmpty);
+        expect(prefs.getBool('model_asset_v3'), isNull);
+        // The error row survives → the gate keeps routing to RETRY LOAD and
+        // the installed model is never re-downloaded.
+        final row = await dao.getModelStatus();
+        expect(row!['status'], 'error');
+        expect(row['downloaded_at'], isNotNull);
+        expect(await dao.isModelInstalled(), isTrue);
+      },
+    );
   });
 
   group('P1 cycle-36 offline fix assertions', () {
