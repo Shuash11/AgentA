@@ -619,10 +619,8 @@ class AuthService {
   /// that owns the current session — the Google factor of the cycle-31
   /// account-class matrix.
   ///
-  /// Retained by cycle-34 ruling 3: the password-change flow no longer
-  /// invokes this factor (the mandatory emailed code is its own visible
-  /// step), so this method has zero call sites in the change flow. Kept
-  /// unchanged for its option value.
+  /// Restored by cycle-41 on the Google-linked class (first submit per page
+  /// visit; non-fatal on failure; the emailed code still gates).
   ///
   /// Returns the authenticated [GoogleSignInAccount] on success. Every other
   /// outcome is a typed [GoogleSignInFailure] the caller can map to an
@@ -716,15 +714,23 @@ class AuthService {
     }
   }
 
-  // ── Email-OTP step-up (mandatory online factor since cycle-34) ───────
+  // ── Email-OTP step-up: blocking for Google-linked; post-write
+  //    notification for email+password; none for local (cycle-41). ───────
 
   /// Sends a one-time code to [email] for the password-change step-up.
   ///
-  /// Since cycle-34 ruling 3 this is the MANDATORY final factor when the
-  /// password changes online — sent unconditionally for both account classes
-  /// (email/password and Google-linked); the cycle-31 "fallback factor"
-  /// framing is superseded. [shouldCreateUser] must stay `false` — a step-up
-  /// code must never create an account (same rule as [sendOtpForReset]).
+  /// Per-class role since the cycle-41 ruling (designs/
+  /// cycle-41-change-password-redesign.md §4): the code is the DECISIVE
+  /// BLOCKING VERIFIER for the Google-linked class (no reauthenticate exists
+  /// there, so the typed code is the only guaranteed factor — the cycle-34
+  /// zero-factor-pass closure is kept); a NON-BLOCKING POST-WRITE SECURITY
+  /// NOTIFICATION for the email+password class (typed current-password
+  /// reauthenticate already covers the silent-pass threat; the send fires
+  /// after the successful password write and nothing consumes the code); and
+  /// it is NEVER INVOKED for local (never-synced) accounts. The cycle-34
+  /// "mandatory final factor for both classes" framing is superseded.
+  /// [shouldCreateUser] must stay `false` — a step-up code must never create
+  /// an account (same rule as [sendOtpForReset]).
   ///
   /// The code is delivered to the inbox and verified by [verifyOtpStepUp]; it
   /// never passes through the app's logs.

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class SystemKeyboardTextField extends StatelessWidget {
   final TextEditingController controller;
@@ -63,6 +64,14 @@ class SystemKeyboardTextFormField extends StatelessWidget {
   final bool autocorrect;
   final bool enableSuggestions;
   final Iterable<String>? autofillHints;
+
+  /// Pass-through to [TextFormField.inputFormatters] (cycle-41: the code
+  /// field enforces digits-only on pasted input too).
+  final List<TextInputFormatter>? inputFormatters;
+
+  /// Pass-through to [TextFormField.enabled] (cycle-41 §9: the password
+  /// fields are disabled while a save/retry is in flight).
+  final bool enabled;
   final String? Function(String?)? validator;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onFieldSubmitted;
@@ -81,6 +90,8 @@ class SystemKeyboardTextFormField extends StatelessWidget {
     this.autocorrect = true,
     this.enableSuggestions = true,
     this.autofillHints,
+    this.inputFormatters,
+    this.enabled = true,
     this.validator,
     this.onChanged,
     this.onFieldSubmitted,
@@ -98,6 +109,8 @@ class SystemKeyboardTextFormField extends StatelessWidget {
       textInputAction: textInputAction,
       textCapitalization: textCapitalization,
       maxLength: maxLength,
+      inputFormatters: inputFormatters,
+      enabled: enabled,
       obscureText: obscureText,
       autocorrect: autocorrect,
       enableSuggestions: enableSuggestions,

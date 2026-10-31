@@ -434,9 +434,8 @@ void main() {
 
   group('ONLINE — second-factor matrix', () {
     testWidgets('S1 password-provider: reauth (exact typed check) → device '
-        'prompt (exact wording) → emailed code → change; plan order', (
-      tester,
-    ) async {
+        'prompt (exact wording) → write → post-write notification; NO code '
+        'stage (cycle-41 §3.2)', (tester) async {
       final gate = _RecordingGate(
         session: const PasswordChangeSession(
           email: 'user@example.com',
@@ -449,61 +448,61 @@ void main() {
       await _tapChangePassword(tester);
       await tester.pumpAndSettle();
 
+      // Order pin (§12.3): the notification send happens AFTER the write —
+      // and this class never pauses on code entry.
       expect(gate.calls, [
         'reauthenticate',
         'deviceCredentialPromptAvailable',
         'confirmDeviceCredential',
+        'updatePassword',
         'sendOtpStepUp',
       ]);
       expect(gate.reauthEmailSeen, 'user@example.com');
       expect(gate.reauthPasswordSeen, 'OldPass123!');
       expect(gate.deviceReasonSeen, _promptReason);
-
-      // The mandatory emailed code (cycle-34 ruling 3) gates the write.
-      gate.otpVerified = true;
-      await tester.enterText(find.byType(TextFormField), '246810');
-      await _tapSubmit(tester, 'Verify & Change Password');
-      await tester.pumpAndSettle();
-
-      expect(gate.otpCodeSeen, '246810');
       expect(gate.newPasswordSeen, 'NewPass456!');
+      // The notification pings the verified channel: the session address.
+      expect(gate.otpEmailSeen, 'user@example.com');
+      expect(find.text('Verify & Change Password'), findsNothing);
       expect(find.text('Password changed!'), findsOneWidget);
       await _shot(tester, 's01_password_provider_success');
       _runLog.add(
-        'S1 PASS order=${gate.calls} reason=${gate.deviceReasonSeen}',
+        'S1 PASS order=${gate.calls} reason=${gate.deviceReasonSeen} '
+        'notificationAfterWrite=yes',
       );
       await tester.pump(const Duration(seconds: 5));
     });
 
-    testWidgets('S2 google-linked: mandatory emailed code sent '
-        'unconditionally (no Google call) → correct code → change; session '
-        'KEPT', (tester) async {
+    testWidgets('S2 google-linked (dual-provider): reauth → Google prompt → '
+        'device → emailed code (blocking) → change; session KEPT', (
+      tester,
+    ) async {
       final gate = _RecordingGate(
         session: const PasswordChangeSession(
           email: 'user@example.com',
           isGoogleLinked: true,
           hasPassword: true,
         ),
-      );
+      )..googleVerified = true;
       await _pushPage(tester, online: true, gate: gate);
       await _fillForm(tester);
       await _tapChangePassword(tester);
       await tester.pumpAndSettle();
 
-      // No Google factor anywhere in the decisive chain (cycle-34 ruling 3);
-      // device credential first, then the unconditional send.
+      // Cycle-41 §3.3 chain (dual-provider: the knowledge factor stays
+      // first — S2, nothing removed): the code still gates the write.
       expect(gate.calls, [
         'reauthenticate',
+        'verifyGoogleReauth',
         'deviceCredentialPromptAvailable',
         'confirmDeviceCredential',
         'sendOtpStepUp',
       ]);
-      expect(gate.calls, isNot(contains('verifyGoogleReauth')));
       expect(gate.otpEmailSeen, 'user@example.com');
       expect(
         find.text(
-          'We emailed a 6-digit code to user@example.com. '
-          'Enter it below to finish.',
+          'Enter the 6-digit code we emailed to user@example.com to confirm '
+          'this password change.',
         ),
         findsOneWidget,
       );
@@ -517,6 +516,7 @@ void main() {
       // One device prompt per submit; the write tail runs after the code.
       expect(gate.calls, [
         'reauthenticate',
+        'verifyGoogleReauth',
         'deviceCredentialPromptAvailable',
         'confirmDeviceCredential',
         'sendOtpStepUp',
@@ -548,7 +548,7 @@ void main() {
           isGoogleLinked: true,
           hasPassword: true,
         ),
-      );
+      )..googleVerified = true;
       await _pushPage(tester, online: true, gate: gate);
       await _fillForm(tester);
       await _tapChangePassword(tester);
@@ -576,8 +576,9 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
     });
 
-    testWidgets('S4 cancel-abort: device-credential cancel ends BEFORE '
-        'updatePassword', (tester) async {
+    testWidgets('S4 cancel → the inline retry card (the dead-end retired): '
+        'ends BEFORE updatePassword and consumes NO send; Try again '
+        're-runs only the device step', (tester) async {
       final gate = _RecordingGate(
         session: const PasswordChangeSession(
           email: 'user@example.com',
@@ -596,20 +597,56 @@ void main() {
         'confirmDeviceCredential',
       ]);
       expect(gate.calls, isNot(contains('updatePassword')));
+      // Quota discipline: a canceled prompt never consumes a send.
+      expect(gate.calls, isNot(contains('sendOtpStepUp')));
+      // The retired terminal dead-end is gone; the retry card explains.
       expect(
         find.text(
           'Device confirmation was canceled. Your password was not changed.',
         ),
+        findsNothing,
+      );
+      expect(
+        find.text("Your phone's screen lock didn't confirm"),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'Your password was not changed. Nothing has been saved yet. '
+          'Try again to continue.',
+        ),
         findsOneWidget,
       );
       expect(find.text('New Password'), findsWidgets);
-      await _shot(tester, 's04_cancel_abort');
-      _runLog.add('S4 PASS aborted-before-update calls=${gate.calls}');
+      await _shot(tester, 's04_cancel_retry_card');
+
+      // Try again re-runs ONLY the failed step (§7.1): a second
+      // confirmDeviceCredential, no second reauthenticate — then the write
+      // and the post-write notification.
+      gate.deviceConfirmed = true;
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+
+      expect(gate.calls, [
+        'reauthenticate',
+        'deviceCredentialPromptAvailable',
+        'confirmDeviceCredential',
+        'confirmDeviceCredential',
+        'updatePassword',
+        'sendOtpStepUp',
+      ]);
+      expect(gate.calls.where((c) => c == 'reauthenticate'), hasLength(1));
+      expect(find.text('Password changed!'), findsOneWidget);
+      _runLog.add(
+        'S4 PASS retry-card state + retry-completes calls=${gate.calls}',
+      );
       await tester.pump(const Duration(seconds: 5));
     });
 
-    testWidgets('S5 google-only: emailed code REQUIRED before updatePassword '
-        '(order assert)', (tester) async {
+    testWidgets('S5 google-only: Google prompt (non-fatal) → device → '
+        'emailed code REQUIRED before updatePassword (order assert)', (
+      tester,
+    ) async {
       final gate = _RecordingGate(
         session: const PasswordChangeSession(
           email: 'user@example.com',
@@ -623,13 +660,21 @@ void main() {
       await _tapChangePassword(tester);
       await tester.pumpAndSettle();
 
-      // Device then the unconditional send; the Google factor is gone.
+      // Order pin (§3.3): the Google prompt first — its non-success (the
+      // fake default) is non-fatal (CP-13) and the code still gates.
       expect(gate.calls, [
+        'verifyGoogleReauth',
         'deviceCredentialPromptAvailable',
         'confirmDeviceCredential',
         'sendOtpStepUp',
       ]);
-      expect(gate.calls, isNot(contains('verifyGoogleReauth')));
+      expect(
+        find.text(
+          "Google confirmation didn't go through. We'll confirm it's you "
+          'with the emailed code instead.',
+        ),
+        findsOneWidget,
+      );
       // The write cannot happen before the code verifies.
       expect(gate.calls, isNot(contains('updatePassword')));
 
@@ -645,7 +690,8 @@ void main() {
       expect(find.text('Password changed!'), findsOneWidget);
       await _shot(tester, 's05_otp_before_update');
       _runLog.add(
-        'S5 PASS otpBeforeUpdate='
+        'S5 PASS order=${gate.calls} googleNonFatal=yes '
+        'otpBeforeUpdate='
         '${gate.calls.indexOf('verifyOtpStepUp')}'
         '<${gate.calls.indexOf('updatePassword')}',
       );

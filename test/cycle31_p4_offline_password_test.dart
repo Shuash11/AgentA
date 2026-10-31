@@ -715,10 +715,6 @@ void main() {
             'Current password is incorrect',
           ),
           (
-            OfflinePasswordChangeFailure.deviceCancelled,
-            'Device confirmation was canceled. Your password was not changed.',
-          ),
-          (
             OfflinePasswordChangeFailure.updateConflict,
             'Your account changed before the update finished. '
                 'Your password was not changed.',
@@ -741,6 +737,102 @@ void main() {
             reason: 'no success for $failure',
           );
         }
+      },
+    );
+
+    testWidgets('a canceled device prompt lands on the retry card (the retired '
+        'terminal dead-end); Try again re-runs the local proof and completes', (
+      tester,
+    ) async {
+      final gate = _FakeGate(session: null);
+      final service = _FakeOfflineService()
+        ..failure = OfflinePasswordChangeFailure.deviceCancelled;
+      await _pumpOfflinePage(tester, gate, service);
+
+      await _fillForm(tester);
+      await _tapSubmit(tester);
+      await tester.pumpAndSettle();
+
+      // The retry card replaces the retired dead-end string (cycle-41 §7).
+      expect(
+        find.text(
+          'Device confirmation was canceled. Your password was not changed.',
+        ),
+        findsNothing,
+      );
+      expect(
+        find.text("Your phone's screen lock didn't confirm"),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'Your password was not changed. Nothing has been saved yet. '
+          'Try again to continue.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Try again'), findsOneWidget);
+      expect(find.text('Back'), findsOneWidget);
+      expect(find.text('Password changed!'), findsNothing);
+
+      // The local proof re-runs with the still-held values (§7.1 — no
+      // email exists on this path) and completes.
+      service.failure = null;
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+
+      expect(service.calls, [
+        'deviceCredentialPromptAvailable',
+        'updateLocalPassword',
+        'deviceCredentialPromptAvailable',
+        'updateLocalPassword',
+      ]);
+      expect(service.currentPasswordSeen, 'OldPass123!');
+      expect(service.newPasswordSeen, 'NewPass456!');
+      expect(find.text('Password changed!'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets(
+      'the retry card\u2019s Back returns to the intact form and clears every '
+      'chain state without re-running the proof',
+      (tester) async {
+        final gate = _FakeGate(session: null);
+        final service = _FakeOfflineService()
+          ..failure = OfflinePasswordChangeFailure.deviceCancelled;
+        await _pumpOfflinePage(tester, gate, service);
+
+        await _fillForm(tester);
+        await _tapSubmit(tester);
+        await tester.pumpAndSettle();
+        expect(
+          find.text("Your phone's screen lock didn't confirm"),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text('Back'));
+        await tester.pumpAndSettle();
+
+        // Card dismissed; the form (and its values) stays; nothing re-ran.
+        expect(
+          find.text("Your phone's screen lock didn't confirm"),
+          findsNothing,
+        );
+        expect(find.byType(TextFormField), findsNWidgets(2));
+        final fields = find.byType(TextFormField);
+        expect(
+          tester.widget<TextFormField>(fields.at(0)).controller!.text,
+          'OldPass123!',
+        );
+        expect(
+          tester.widget<TextFormField>(fields.at(1)).controller!.text,
+          'NewPass456!',
+        );
+        expect(service.calls, [
+          'deviceCredentialPromptAvailable',
+          'updateLocalPassword',
+        ]);
+        expect(find.text('Password changed!'), findsNothing);
       },
     );
 
@@ -802,24 +894,18 @@ void main() {
         await _tapSubmit(tester);
         await tester.pumpAndSettle();
 
-        // Cycle-34 ruling 3: the emailed 6-digit code is the mandatory final
-        // verifier for every online class — the flow pauses on code entry.
-        expect(find.text('Verify & Change Password'), findsOneWidget);
-        await tester.enterText(find.byType(TextFormField), '123456');
-        await tester.tap(
-          find.widgetWithText(ElevatedButton, 'Verify & Change Password'),
-        );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
+        // Cycle-41 §3.2 (the online CONTROL case): the email+password class
+        // runs reauth → device prompt → write → POST-WRITE notification; no
+        // code stage exists on this class anymore.
+        expect(find.text('Verify & Change Password'), findsNothing);
         await tester.pumpAndSettle();
 
         expect(gate.calls, [
           'reauthenticate',
           'deviceCredentialPromptAvailable',
           'confirmDeviceCredential',
-          'sendOtpStepUp',
-          'verifyOtpStepUp',
           'updatePassword',
+          'sendOtpStepUp',
         ]);
         expect(service.calls, isEmpty);
         expect(find.text('Password changed!'), findsOneWidget);
