@@ -17,6 +17,11 @@ class MainActivity : FlutterActivity() {
     private val notificationPermissionCode = 9001
     private var pendingNotificationResult: MethodChannel.Result? = null
 
+    // Cycle-40 P1: the device-ABI probe. The LiteRT-LM engine ships its
+    // native stack for android_arm64 only, so the app asks the platform
+    // which ABIs it supports before it offers the 2.59 GB model download.
+    private val deviceChannel = "com.agenta.agenta/device"
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(
@@ -25,6 +30,16 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             if (call.method == "requestNotificationPermission") {
                 requestNotificationPermission(result)
+            } else {
+                result.notImplemented()
+            }
+        }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            deviceChannel,
+        ).setMethodCallHandler { call, result ->
+            if (call.method == "supportedAbis") {
+                result.success(Build.SUPPORTED_ABIS.toList())
             } else {
                 result.notImplemented()
             }

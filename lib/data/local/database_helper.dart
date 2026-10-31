@@ -114,6 +114,14 @@ class DatabaseHelper {
     if (oldVersion < 7) {
       await _migrateToSaltedPasswords(db);
     }
+    if (oldVersion < 8) {
+      // Cycle-40 P1: the persisted failure CLASS of a failed model load.
+      // A shipped build has no debug logs, so the class is the only
+      // field-visible evidence of why the load failed.
+      await db.execute(
+        'ALTER TABLE offline_model_status ADD COLUMN failure_class TEXT',
+      );
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -175,6 +183,7 @@ class DatabaseHelper {
         downloaded_at INTEGER,
         file_path TEXT,
         version TEXT,
+        failure_class TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )

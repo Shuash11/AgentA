@@ -22,6 +22,7 @@ import 'services/ai/openrouter_service.dart';
 import 'services/ai/huggingface_image_service.dart';
 import 'services/ai/pollinations_service.dart';
 import 'services/ai/ai_service.dart';
+import 'services/ai/device_capabilities.dart';
 import 'services/ai/model_download_service.dart';
 import 'services/sync/sync_service.dart';
 import 'services/update/version_check_service.dart';
@@ -518,6 +519,14 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
   /// S7). It is the routing authority for the retry surface.
   bool _isInstalled = false;
 
+  /// Whether this device can run the offline model at all (cycle-40 P1).
+  ///
+  /// The engine ships its native stack for arm64 only: on every other ABI
+  /// the model can never load, so the gate must not offer the 2.59 GB
+  /// download and must not offer a retry that cannot succeed. It shows the
+  /// honest incompatible-device message instead.
+  bool _isDeviceCompatible = true;
+
   /// Readiness state of the on-device model. Drives the gate surface:
   /// loaded → the app, loadFailed → the retry surface, idle/modelMissing →
   /// the download gate.
@@ -536,6 +545,22 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
   /// "installed" can never mean "declared ready but never loaded" (the
   /// cycle-38 P6 dead-end).
   Future<void> _checkModelStatus() async {
+    // The ABI gate comes FIRST (cycle-40 P1): on a device that cannot run
+    // the model there is nothing to download and nothing to retry — the
+    // honest surface is the incompatible-device message.
+    final compatible = await DeviceCapabilities.isOfflineAiSupported();
+    if (!mounted) return;
+    if (!compatible) {
+      setState(() {
+        _isChecking = false;
+        _isLoadingModel = false;
+        _isInstalled = false;
+        _isDeviceCompatible = false;
+        _modelState = OfflineModelState.idle;
+      });
+      return;
+    }
+
     final modelDownload = context.read<ModelDownloadService>();
     await modelDownload.checkModelExists();
     if (!mounted) return;
@@ -663,11 +688,27 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
       return widget.child;
     }
 
+    // Cycle-40 P1: a device that cannot run the model at all. There is
+    // nothing to download and no retry that could ever succeed, so the
+    // gate shows the honest message and nothing else.
+    if (!_isDeviceCompatible) {
+      return const _IncompatibleDeviceSurface();
+    }
+
     // S7: an INSTALLED model never falls back to the download gate — the
     // user would be stranded behind a spurious 2.6 GB re-download of an
     // asset the device already has. The retry surface is the only honest
     // affordance for it, and it always re-invokes the service's load.
     if (_isInstalled || _modelState == OfflineModelState.loadFailed) {
+      // A failure the engine itself classified as an ABI mismatch can never
+      // be recovered by a retry (the persisted failure class is the
+      // release-visible evidence of it) — the honest surface is the
+      // incompatible-device message, not a retry button.
+      final failureClass = context.read<GemmaService>().lastFailureClass;
+      if (failureClass == OfflineModelFailureClass.unsupportedAbi) {
+        return const _IncompatibleDeviceSurface();
+      }
+
       // The model is installed but did not load: the honest surface is a
       // retry, not a download.
       return Scaffold(
@@ -716,6 +757,50 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
 
     // M17: forced gate is mandatory by design — no fake skip is offered.
     return DownloadPromptScreen(onComplete: _onModelReady, isForcedGate: true);
+  }
+}
+
+/// The honest surface of a device that cannot run the offline model
+/// (cycle-40 P1).
+///
+/// Message only: the download would waste a 2.59 GB transfer on an engine
+/// that cannot load the asset, and a retry could never succeed. A model
+/// that is already downloaded on such a device lands here too — removing
+/// it is backlog, not part of this cycle.
+class _IncompatibleDeviceSurface extends StatelessWidget {
+  const _IncompatibleDeviceSurface();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.base,
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.phonelink_erase_outlined,
+                color: AppColors.warningText,
+                size: 48,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Offline AI unavailable',
+                style: AppTypography.subtitle.copyWith(color: AppColors.ink),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                DeviceCapabilities.incompatibleDeviceMessage,
+                style: AppTypography.labelSm.copyWith(color: AppColors.subtext),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

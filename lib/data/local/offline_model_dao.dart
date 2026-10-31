@@ -3,10 +3,35 @@ import 'database_helper.dart';
 
 enum ModelDbStatus { notInstalled, ready, error, skipped }
 
+/// The family a failed model load belongs to (cycle-40 P1).
+///
+/// The class is the field-visible failure evidence: a shipped build has no
+/// debug logs (every raw-exception log is `kDebugMode`-gated and tree-shaken
+/// from release), so the persisted class is the only way to tell WHY a load
+/// failed once the app is in the user's hands.
+///
+/// * [unsupportedAbi] — the device cannot run the model at all (the engine's
+///   deterministic arm64-only guard);
+/// * [notInstalled] — the model asset is not on the device;
+/// * [file] — the asset is present but corrupt/unreadable;
+/// * [engineInit] — the engine refused to initialise on an installed asset;
+/// * [unknown] — the failure matched no known family.
+enum OfflineModelFailureClass {
+  unsupportedAbi,
+  notInstalled,
+  file,
+  engineInit,
+  unknown,
+}
+
 class OfflineModelDao {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
   static const String _tableName = 'offline_model_status';
   static const int _singleRowId = 1;
+
+  /// Whether the persisted row carries the failure-class column. Cached per
+  /// DAO instance: the answer cannot change while the database is open.
+  bool? _hasFailureClassColumn;
 
   Future<void> setModelReady({
     required String modelType,
@@ -68,6 +93,50 @@ class OfflineModelDao {
       'created_at': now,
       'updated_at': now,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Records the failure CLASS of the last failed load.
+  ///
+  /// Written AFTER [setModelError]: that write replaces the whole row, so a
+  /// class stored before it would be dropped with the old row. A database
+  /// whose row predates the class column is tolerated — the error row still
+  /// records the failure, only the class is unavailable.
+  Future<void> setFailureClass(OfflineModelFailureClass? failureClass) async {
+    final db = await _dbHelper.database;
+    if (!await _supportsFailureClass(db)) return;
+
+    await db.update(
+      _tableName,
+      {'failure_class': failureClass?.name},
+      where: 'id = ?',
+      whereArgs: [_singleRowId],
+    );
+  }
+
+  /// The failure class of the last failed load, or null when the last
+  /// operation succeeded (or the row predates the class column).
+  Future<OfflineModelFailureClass?> getFailureClass() async {
+    final db = await _dbHelper.database;
+    if (!await _supportsFailureClass(db)) return null;
+
+    final status = await getModelStatus();
+    final stored = status?['failure_class'] as String?;
+    if (stored == null) return null;
+    for (final value in OfflineModelFailureClass.values) {
+      if (value.name == stored) return value;
+    }
+    return OfflineModelFailureClass.unknown;
+  }
+
+  /// Whether the offline-model row carries the failure-class column.
+  Future<bool> _supportsFailureClass(Database db) async {
+    final cached = _hasFailureClassColumn;
+    if (cached != null) return cached;
+
+    final columns = await db.rawQuery('PRAGMA table_info($_tableName)');
+    final present = columns.any((column) => column['name'] == 'failure_class');
+    _hasFailureClassColumn = present;
+    return present;
   }
 
   /// Whether the model asset is present on the device.

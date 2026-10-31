@@ -4,7 +4,23 @@ import 'package:flutter_edge_ai/flutter_edge_ai.dart';
 import '../../core/config/app_config.dart';
 import '../../data/local/offline_model_dao.dart';
 import '../../data/models/chat_message_model.dart';
+import 'device_capabilities.dart';
 import 'model_download_service.dart';
+
+/// The outcome of classifying a failed model load: a stable failure CLASS
+/// plus the friendly, brand-free copy the UI shows.
+///
+/// The class is what makes the failure diagnosable in the field (cycle-40
+/// P1): it is persisted next to the error row, so a shipped build — which
+/// tree-shakes every raw-exception log — can still tell an incompatible
+/// device from an engine-init failure, a corrupt file, or an unknown error.
+/// The raw exception text never leaves the `kDebugMode` log.
+class LoadFailure {
+  final OfflineModelFailureClass failureClass;
+  final String friendlyCopy;
+
+  const LoadFailure(this.failureClass, this.friendlyCopy);
+}
 
 /// Readiness state of the on-device model (cycle-38 P6).
 ///
@@ -34,6 +50,11 @@ class GemmaService extends ChangeNotifier {
   InferenceModel? _model;
   InferenceChat? _chat;
   String? _lastError;
+
+  /// The class of the last load failure. Null until a load fails; cleared
+  /// by a successful load. Persisted through the DAO's error path so the
+  /// failure stays diagnosable after a restart (cycle-40 P1).
+  OfflineModelFailureClass? _lastFailureClass;
 
   /// The in-flight load attempt, if any. Cleared when the attempt settles
   /// (success OR failure) so a failed load never wedges the service — the
@@ -79,6 +100,14 @@ Formatting rules:
   /// Distinguishes "not installed" from "load failed" without leaking
   /// raw exception text to the UI (raw errors stay in kDebugMode logs).
   String? get lastError => _lastError;
+
+  /// The class of the last load failure, or null when no load has failed
+  /// since the last successful one.
+  ///
+  /// The UI reads it to pick an honest affordance: an [OfflineModelFailureClass
+  /// .unsupportedAbi] failure can never be recovered by a retry, so the
+  /// surfaces show the incompatible-device message instead of one.
+  OfflineModelFailureClass? get lastFailureClass => _lastFailureClass;
 
   void cancelGeneration() {
     _isCancelled = true;
@@ -184,18 +213,24 @@ Formatting rules:
       await _dao.setModelReady(modelType: 'gemma-4-e2b-it');
       _state = OfflineModelState.loaded;
       _lastError = null;
+      _lastFailureClass = null;
       notifyListeners();
     } catch (e) {
       _model = null;
       _chat = null;
-      final failure = await _resolveFailureState(e, rehydrationFailed);
+      final classification = _classifyLoadFailure(e, rehydrationFailed);
+      final failure = await _resolveFailureState(classification);
       _state = failure;
-      _lastError = _friendlyForState(failure);
+      _lastFailureClass = classification.failureClass;
+      _lastError = _friendlyCopyFor(classification, failure);
       // Record the failure so the broken-but-installed state survives a
       // restart and routes to RETRY LOAD. The DAO write must never mask the
       // original failure, so it is guarded separately.
       try {
         await _dao.setModelError(_lastError);
+        // The class is written after the error row: that write replaces the
+        // whole row, so a class stored before it would be dropped.
+        await _dao.setFailureClass(_lastFailureClass);
       } catch (daoError) {
         if (kDebugMode) {
           debugPrint('[GemmaService] setModelError failed: $daoError');
@@ -227,10 +262,9 @@ Formatting rules:
   /// agreement: the error row written below keeps the download marker, so
   /// the UI sees "installed but broken" on both sides.
   Future<OfflineModelState> _resolveFailureState(
-    Object error,
-    bool rehydrationFailed,
+    LoadFailure classification,
   ) async {
-    final classified = _classifyLoadState(error, rehydrationFailed);
+    final classified = _stateForClass(classification.failureClass);
     if (classified != OfflineModelState.modelMissing) return classified;
 
     try {
@@ -250,31 +284,115 @@ Formatting rules:
   /// Maps a load failure to the state the UI must react to: a missing asset
   /// needs the download, any other failure needs a retry.
   OfflineModelState _classifyLoadState(Object error, bool rehydrationFailed) {
+    return _stateForClass(
+      _classifyLoadFailure(error, rehydrationFailed).failureClass,
+    );
+  }
+
+  /// The state a failure class leaves the service in.
+  ///
+  /// Only the "the asset is missing" class routes to the download; every
+  /// other class (including an incompatible device) needs a retry or the
+  /// incompatible-device message.
+  OfflineModelState _stateForClass(OfflineModelFailureClass failureClass) {
+    return failureClass == OfflineModelFailureClass.notInstalled
+        ? OfflineModelState.modelMissing
+        : OfflineModelState.loadFailed;
+  }
+
+  /// Maps a load failure to its CLASS and the friendly copy the UI shows.
+  ///
+  /// The class is the release-visible evidence (cycle-40 P1): the pinned
+  /// engine's arm64-only guard is deterministic, so an incompatible device
+  /// is told apart from an engine-init failure, a corrupt asset, or an
+  /// unknown error. The raw exception text stays in the `kDebugMode` log.
+  LoadFailure _classifyLoadFailure(Object error, bool rehydrationFailed) {
     final raw = error.toString().toLowerCase();
+
+    // The pinned plugin's deterministic ABI guard (flutter_edge_ai_litertlm
+    // 1.8.6, litert_lm_client.dart:606-611).
+    if (raw.contains(_unsupportedAbiMarker)) {
+      return const LoadFailure(
+        OfflineModelFailureClass.unsupportedAbi,
+        DeviceCapabilities.incompatibleDeviceMessage,
+      );
+    }
+
+    // The cycle-38 P6 "the asset is missing" signals — unchanged, so the
+    // arm64 flow keeps its exact behaviour.
     if (rehydrationFailed ||
         raw.contains('not installed') ||
         raw.contains('no such file') ||
         raw.contains('not found') ||
         raw.contains('bad state')) {
-      return OfflineModelState.modelMissing;
+      return const LoadFailure(
+        OfflineModelFailureClass.notInstalled,
+        'Offline model is not installed.',
+      );
     }
-    return OfflineModelState.loadFailed;
+
+    // A present but unreadable asset (a corrupt or truncated download).
+    if (raw.contains('corrupt') ||
+        raw.contains('truncated') ||
+        raw.contains('malformed') ||
+        raw.contains('invalid file') ||
+        raw.contains('not a valid') ||
+        raw.contains('checksum') ||
+        raw.contains('unexpected end of file')) {
+      return const LoadFailure(
+        OfflineModelFailureClass.file,
+        'Offline model failed to load.',
+      );
+    }
+
+    // The engine refused to start (engine creation, chat session creation).
+    if (raw.contains('engine') ||
+        raw.contains('failed to create') ||
+        raw.contains('session') ||
+        raw.contains('failed to initiali')) {
+      return const LoadFailure(
+        OfflineModelFailureClass.engineInit,
+        'Offline model failed to load.',
+      );
+    }
+
+    return const LoadFailure(
+      OfflineModelFailureClass.unknown,
+      'Offline model failed to load.',
+    );
   }
 
-  /// Maps a load failure to a friendly, brand-free reason.
-  /// Download failures arrive pre-classified from the typed
-  /// DownloadException path in ModelDownloadService; this heuristic covers
-  /// only non-download load failures (engine init, chat creation). Raw
-  /// exception text stays in kDebugMode logs, never in the UI.
-  String _friendlyForState(OfflineModelState state) {
-    if (state == OfflineModelState.modelMissing) {
-      return 'Offline model is not installed.';
+  /// The stable marker inside the pinned plugin's `UnsupportedError` text
+  /// ("…models require an arm64-v8a Android device (got …)…").
+  static const String _unsupportedAbiMarker =
+      'require an arm64-v8a android device';
+
+  /// The friendly copy for a classified failure.
+  ///
+  /// The state's verdict outranks the class for the "asset is missing"
+  /// family: an INSTALLED asset whose load reports a missing state is an
+  /// engine failure, not a missing model (S7) — the copy must not promise a
+  /// download for an asset the device already has.
+  String _friendlyCopyFor(LoadFailure failure, OfflineModelState state) {
+    switch (failure.failureClass) {
+      case OfflineModelFailureClass.unsupportedAbi:
+        return DeviceCapabilities.incompatibleDeviceMessage;
+      case OfflineModelFailureClass.notInstalled:
+        return state == OfflineModelState.modelMissing
+            ? 'Offline model is not installed.'
+            : 'Offline model failed to load.';
+      case OfflineModelFailureClass.file:
+      case OfflineModelFailureClass.engineInit:
+      case OfflineModelFailureClass.unknown:
+        return 'Offline model failed to load.';
     }
-    return 'Offline model failed to load.';
   }
 
   String _classifyLoadError(Object error, bool rehydrationFailed) {
-    return _friendlyForState(_classifyLoadState(error, rehydrationFailed));
+    return _friendlyCopyFor(
+      _classifyLoadFailure(error, rehydrationFailed),
+      _classifyLoadState(error, rehydrationFailed),
+    );
   }
 
   // Test hooks: thin delegates over the private pure helpers above.
@@ -282,6 +400,13 @@ Formatting rules:
   @visibleForTesting
   String classifyLoadErrorForTest(Object error, bool rehydrationFailed) =>
       _classifyLoadError(error, rehydrationFailed);
+
+  /// The classified failure of [error]: its class plus the friendly copy.
+  @visibleForTesting
+  LoadFailure classifyLoadFailureForTest(
+    Object error,
+    bool rehydrationFailed,
+  ) => _classifyLoadFailure(error, rehydrationFailed);
 
   /// Injects the chat that [loadInstalled] uses instead of the native
   /// engine chain (active-model rehydration + getActiveModel + createChat).

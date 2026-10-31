@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../services/ai/device_capabilities.dart';
 import '../../services/ai/model_download_service.dart';
 import '../../cubit/connectivity/connectivity_cubit.dart';
 import '../../cubit/theme/theme_cubit.dart';
@@ -32,22 +33,42 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
   String? _errorMessage;
   bool _hasCompleted = false;
 
+  /// Whether this device can run the offline model (cycle-40 P1). Null until
+  /// the capability check resolves; false means the download must never
+  /// start — the engine ships its native stack for arm64 only.
+  bool? _isDeviceCompatible;
+
+  /// The download service, captured while the widget is still active.
+  ///
+  /// `dispose()` must not look a provider up through its own (already
+  /// deactivated) context — that lookup throws in debug mode and made this
+  /// screen untestable.
+  ModelDownloadService? _modelDownload;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_startAutoDownload());
+      unawaited(_resolveDeviceThenStart());
       _setupCompletionListener();
     });
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _modelDownload = context.read<ModelDownloadService>();
+  }
+
   void _setupCompletionListener() {
-    final modelDownload = context.read<ModelDownloadService>();
+    final modelDownload =
+        _modelDownload ?? context.read<ModelDownloadService>();
     modelDownload.addListener(_checkCompletion);
   }
 
   void _checkCompletion() {
-    final modelDownload = context.read<ModelDownloadService>();
+    final modelDownload =
+        _modelDownload ?? context.read<ModelDownloadService>();
     if (modelDownload.isReady && !_hasCompleted) {
       _hasCompleted = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -60,8 +81,7 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
 
   @override
   void dispose() {
-    final modelDownload = context.read<ModelDownloadService>();
-    modelDownload.removeListener(_checkCompletion);
+    _modelDownload?.removeListener(_checkCompletion);
     super.dispose();
   }
 
@@ -69,6 +89,29 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
     if (_hasCompleted || !mounted) return;
     _hasCompleted = true;
     widget.onComplete();
+  }
+
+  /// Resolves the device capability BEFORE anything is downloaded
+  /// (cycle-40 P1).
+  ///
+  /// On a device that cannot run the model the download would waste a
+  /// 2.59 GB transfer and end in a load failure that no retry can recover,
+  /// so the screen shows the incompatible-device message instead.
+  Future<void> _resolveDeviceThenStart() async {
+    final compatible = await DeviceCapabilities.isOfflineAiSupported();
+    if (!mounted) return;
+
+    if (!compatible) {
+      setState(() {
+        _isDeviceCompatible = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isDeviceCompatible = true;
+    });
+    await _startAutoDownload();
   }
 
   Future<void> _startAutoDownload() async {
@@ -138,6 +181,44 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
     final hasNoInternet = context.select(
       (ConnectivityCubit c) => c.state.hasNoInternet,
     );
+
+    // Cycle-40 P1: an incompatible device never sees the download offer —
+    // no size chip, no download button, no progress. Only the honest
+    // message.
+    if (_isDeviceCompatible == false) {
+      return Scaffold(
+        backgroundColor: colors.base,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            child: Container(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              alignment: Alignment.center,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.phonelink_erase_outlined,
+                    size: 56,
+                    color: AppColors.warningText,
+                  ),
+                  const SizedBox(height: AppSpacing.xxl),
+                  Text(
+                    'Offline AI unavailable',
+                    style: AppTypography.display.copyWith(color: colors.ink),
+                  ),
+                  const SizedBox(height: AppSpacing.base),
+                  Text(
+                    DeviceCapabilities.incompatibleDeviceMessage,
+                    textAlign: TextAlign.center,
+                    style: AppTypography.body.copyWith(color: colors.subtext),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: colors.base,

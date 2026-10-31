@@ -10,6 +10,7 @@ import '../../cubit/connectivity/connectivity_cubit.dart';
 import '../../theme/app_theme.dart';
 import '../../services/ai/ai_service.dart';
 import '../../services/ai/ai_model.dart';
+import '../../services/ai/device_capabilities.dart';
 import '../../services/ai/gemma_service.dart';
 import '../../services/ai/model_download_service.dart';
 import '../../data/local/offline_model_dao.dart';
@@ -34,6 +35,11 @@ enum OfflineModelAction {
 
   /// The model is genuinely not installed → open the download screen.
   getModel,
+
+  /// The device cannot run the model at all (cycle-40 P1) → no download and
+  /// no retry: both could never succeed, so the card shows the honest
+  /// incompatible-device message and nothing else.
+  incompatibleDevice,
 }
 
 /// Resolves the chat card's primary action from the model state.
@@ -47,10 +53,23 @@ enum OfflineModelAction {
 /// The durable install marker is the primary signal: it is the one the S7
 /// constraint is written against, and it survives a restart — the
 /// in-memory download-service status cannot answer it after one.
+///
+/// cycle-40 P1: a device that cannot run the model offers NO action. The
+/// same holds when the engine itself classified the failure as an ABI
+/// mismatch — the failure class is the release-visible evidence that a
+/// retry cannot help.
 OfflineModelAction resolveOfflineModelAction({
   required OfflineModelState state,
   required bool isInstalled,
+  bool isDeviceCompatible = true,
+  OfflineModelFailureClass? failureClass,
 }) {
+  // An incompatible device can neither load nor download the model.
+  if (!isDeviceCompatible ||
+      failureClass == OfflineModelFailureClass.unsupportedAbi) {
+    return OfflineModelAction.incompatibleDevice;
+  }
+
   // The model is usable — there is nothing to recover. The card is only
   // rendered for a failed attempt, so this is a safe default rather than a
   // reachable UI state.
@@ -619,18 +638,27 @@ class _ChatScreenState extends State<Chats> {
   /// The durable install marker decides (S7): an installed model always
   /// routes to RETRY LOAD. When the marker cannot be read, the service's
   /// own verdict is the fallback — a failed load must never leave the user
-  /// without an affordance.
+  /// without an affordance. A device that cannot run the model has no
+  /// affordance at all (cycle-40 P1).
   Future<OfflineModelAction> _resolveOfflineAction(BuildContext context) async {
     final gemmaService = context.read<GemmaService>();
+    final compatible = await DeviceCapabilities.isOfflineAiSupported();
     try {
       final installed = await OfflineModelDao().isModelInstalled();
       return resolveOfflineModelAction(
         state: gemmaService.state,
         isInstalled: installed,
+        isDeviceCompatible: compatible,
+        failureClass: gemmaService.lastFailureClass,
       );
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[Chats] offline model install state unavailable: $e');
+      }
+      if (!compatible ||
+          gemmaService.lastFailureClass ==
+              OfflineModelFailureClass.unsupportedAbi) {
+        return OfflineModelAction.incompatibleDevice;
       }
       return gemmaService.state == OfflineModelState.modelMissing
           ? OfflineModelAction.getModel
@@ -639,30 +667,56 @@ class _ChatScreenState extends State<Chats> {
   }
 
   /// Shows the offline-model affordance for the current state.
+  ///
+  /// An incompatible device gets the honest message and NO action: no
+  /// download, no retry (cycle-40 P1).
   void _showOfflineActionSnackBar(OfflineModelAction action) {
+    final label = _offlineActionLabel(action);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text(ChatErrorClassifier.offlineNotReadyMessage),
-        behavior: SnackBarBehavior.floating,
-        action: SnackBarAction(
-          label: _offlineActionLabel(action),
-          onPressed: () => unawaited(_runOfflineAction(action)),
+        content: Text(
+          label == null
+              ? DeviceCapabilities.incompatibleDeviceMessage
+              : ChatErrorClassifier.offlineNotReadyMessage,
         ),
+        behavior: SnackBarBehavior.floating,
+        action: label == null
+            ? null
+            : SnackBarAction(
+                label: label,
+                onPressed: () => unawaited(_runOfflineAction(action)),
+              ),
       ),
     );
   }
 
-  String _offlineActionLabel(OfflineModelAction action) {
-    return action == OfflineModelAction.retryLoad ? 'Retry load' : 'Get model';
+  /// The label of the affordance, or null when the state offers none.
+  String? _offlineActionLabel(OfflineModelAction action) {
+    switch (action) {
+      case OfflineModelAction.retryLoad:
+        return 'Retry load';
+      case OfflineModelAction.getModel:
+        return 'Get model';
+      case OfflineModelAction.incompatibleDevice:
+        return null;
+    }
   }
 
   /// Runs the resolved offline-model affordance.
   Future<void> _runOfflineAction(OfflineModelAction action) async {
-    if (action == OfflineModelAction.retryLoad) {
-      await _retryLoadModel();
-      return;
+    switch (action) {
+      case OfflineModelAction.retryLoad:
+        await _retryLoadModel();
+        return;
+      case OfflineModelAction.getModel:
+        _pushDownloadScreen();
+        return;
+      case OfflineModelAction.incompatibleDevice:
+        // Nothing can be done for an incompatible device — say so honestly
+        // instead of offering an action that cannot succeed (cycle-40 P1).
+        _showOfflineActionSnackBar(action);
+        return;
     }
-    _pushDownloadScreen();
   }
 
   /// Retries the offline-model load.
@@ -711,16 +765,21 @@ class _ChatScreenState extends State<Chats> {
       messenger.hideCurrentSnackBar();
       final action = await _resolveOfflineAction(context);
       if (!mounted) return;
+      final label = _offlineActionLabel(action);
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            gemmaService.lastError ?? 'Offline model failed to load.',
+            label == null
+                ? DeviceCapabilities.incompatibleDeviceMessage
+                : (gemmaService.lastError ?? 'Offline model failed to load.'),
           ),
           behavior: SnackBarBehavior.floating,
-          action: SnackBarAction(
-            label: _offlineActionLabel(action),
-            onPressed: () => unawaited(_runOfflineAction(action)),
-          ),
+          action: label == null
+              ? null
+              : SnackBarAction(
+                  label: label,
+                  onPressed: () => unawaited(_runOfflineAction(action)),
+                ),
         ),
       );
     }
