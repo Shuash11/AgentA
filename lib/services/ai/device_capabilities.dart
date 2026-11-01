@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// The device capabilities the offline surface reads.
 ///
@@ -20,6 +21,15 @@ import 'package:flutter/services.dart';
 /// ABI verdict decides nothing about WHICH model a device is offered. The
 /// ABI machinery STAYS here as the backstop of the load-time `unsupportedAbi`
 /// failure class (cycle-40): rarely reachable now, zero risk to keep.
+///
+/// Cycle-43 (contract `offline-model-qwen15b` §3 `under_floor_override`)
+/// adds the ONE user-consent input: the persisted "Download anyway" ack.
+/// A device below the RAM floor first sees the honest risk copy (warning-
+/// first, cycle-43 §6 S1); an explicit tap records the ack — a user
+/// PREFERENCE, never auto-cleared, never a migration marker — and admits
+/// the SAME Qwen spec (below-floor + ack ⇒ eligible, the ruled verdict
+/// `totalMem >= floor OR ack`). The failure path is untouched: an OOM/kill
+/// on an overridden device classifies exactly as before.
 class DeviceCapabilities {
   const DeviceCapabilities._();
 
@@ -41,9 +51,12 @@ class DeviceCapabilities {
   ///
   /// The asset's vendor-measured peak RSS is ≈ 2.2 GB (CPU, q8 ekv4096 —
   /// contract §5), so a device with less than 4 GB of TOTAL memory cannot
-  /// hold the runtime with margin. A device below the floor is never
-  /// offered the asset: it keeps the honest message-only state (the
-  /// RAM-floor honesty discipline, plan §6 S8).
+  /// hold the runtime with margin. AMENDED at cycle-43 (the S8 amendment):
+  /// a device below the floor is never offered the asset BY DEFAULT — it
+  /// first sees the honest risk copy ([underFloorRiskCopy]) + the
+  /// "Download anyway" button, and an explicit user override AFTER that
+  /// warning admits the SAME asset ([hasRamOverrideAck], the informed-
+  /// consent discipline, cycle-43 §6 S1).
   static const int minimumTotalMemoryBytes = 4 * 1024 * 1024 * 1024;
 
   /// The native channel that answers with `Build.SUPPORTED_ABIS` and
@@ -51,6 +64,37 @@ class DeviceCapabilities {
   static const MethodChannel _channel = MethodChannel(
     'com.agenta.agenta/device',
   );
+
+  // ── The under-floor override copy (cycle-43) ─────────────────────────────
+  //
+  // The UX copy of the override state, consumed VERBATIM from contract
+  // `offline-model-qwen15b` §6 (under_floor_first_use / under_floor_post_ack)
+  // — these exact strings, no re-wording (the E2B contract §5 discipline).
+  // The strings live beside [incompatibleDeviceMessage]: they are copy of
+  // the capability state, not of any one surface.
+
+  /// The first-use risk copy of an under-floor device (contract §6
+  /// `under_floor_first_use` — VERBATIM). It renders FIRST on every
+  /// message-only surface, ahead of any download affordance (warning-first,
+  /// cycle-43 §6 S1). The "3.6 GB" figure is the ruled reference device's
+  /// MemTotal (OPPO CPH2591 ≈ 3.64 GB, cycle-43 plan §1.1); a verified fact
+  /// REFINES the figure, never the string shape (plan §10 search 1).
+  static const String underFloorRiskCopy =
+      'This phone has 3.6 GB RAM. The model may be closed by the system '
+      'when memory runs low.';
+
+  /// The override button's label (contract §6 `under_floor_first_use` —
+  /// VERBATIM). The label names the consequence, not a yes/no (the
+  /// confirmation-dialog discipline: the option summarises what happens).
+  static const String downloadAnywayButtonLabel = 'Download anyway';
+
+  /// The retained risk line shown after the recorded ack, whenever the
+  /// download is enabled on an under-floor device (contract §6
+  /// `under_floor_post_ack` — VERBATIM). Never re-nagged (the full risk
+  /// copy and the button do not repeat), never silently green (the line
+  /// always accompanies the enabled download).
+  static const String underFloorRetainedRiskLine =
+      'Low-RAM device: the model may be closed when memory runs low.';
 
   /// The cached verdict — a resolved VALUE, never a Future.
   ///
@@ -226,6 +270,116 @@ class DeviceCapabilities {
         debugPrint('[DeviceCapabilities] memory detection failed: $e');
       }
       return null;
+    }
+  }
+
+  // ── The under-floor override ack (cycle-43) ──────────────────────────────
+  //
+  // The ONE user-consent input of the selection table (contract §3
+  // under_floor_override): a persisted PREFERENCE — NOT a migration marker
+  // (no DAO / model_asset-marker implications) — recorded when the user
+  // taps "Download anyway" after the honest risk copy. NEVER auto-cleared:
+  // the warning served its purpose once, and the failure-class layer is
+  // the honest backstop afterwards. Read through `SharedPreferencesAsync`
+  // (the modern-API precedent — online_ai_service.dart, update_cubit.dart,
+  // the cycle-29 P1 precedent).
+
+  /// The persisted key of the under-floor override ack (cycle-43, contract
+  /// §3 `under_floor_override`).
+  static const String ramOverrideAckPrefsKey = 'offline_ram_override_ack';
+
+  /// The cached override-ack verdict — a resolved VALUE, never a Future.
+  ///
+  /// Same reason as the verdicts above: a cached Future created inside a
+  /// finished fake-async zone never resumes for a later `testWidgets`
+  /// case. The ack is read once per process and cached; the one runtime
+  /// change ([acknowledgeRamOverride]) updates the cache itself. A FAILED
+  /// read is cached too — a device whose preferences cannot be asked has
+  /// the honest verdict "not recorded" (the S1 default: warning-first).
+  static bool _cachedOverrideAck = false;
+
+  /// Whether the ack read already ran. A failed read is a verdict of its
+  /// own ("not recorded"), so the flag — not the value — marks it done.
+  static bool _ackRead = false;
+
+  /// Test seam: replaces the persisted ack read entirely.
+  ///
+  /// A test sets it to simulate a device with or without the recorded
+  /// override; production never sets it.
+  @visibleForTesting
+  static Future<bool> Function()? ramOverrideAckOverrideForTest;
+
+  /// Test seam: forgets the cached ack read so the next
+  /// [hasRamOverrideAck] re-reads the persisted value (or re-hits the
+  /// platform). Production never calls it — the cache is the process
+  /// verdict; only the ack write may change it.
+  @visibleForTesting
+  static void resetRamOverrideAckForTest() {
+    _cachedOverrideAck = false;
+    _ackRead = false;
+  }
+
+  /// Whether the user has recorded the "Download anyway" override ack
+  /// (cycle-43, contract §3 `under_floor_override`).
+  ///
+  /// Defaults to `false` — the warning-first default (cycle-43 §6 S1): a
+  /// device without the recorded ack keeps the message-only state, and no
+  /// download may start without it. An unreadable preferences store also
+  /// reads as NOT recorded (the fail-closed rule); the read failure never
+  /// blocks the feature.
+  static Future<bool> hasRamOverrideAck() {
+    final override = ramOverrideAckOverrideForTest;
+    if (override != null) return override();
+    if (_ackRead) return Future<bool>.value(_cachedOverrideAck);
+    return _readAckAndCache();
+  }
+
+  /// Runs the ack read once and remembers its verdict.
+  static Future<bool> _readAckAndCache() async {
+    final ack = await _readAckFromPrefs();
+    _cachedOverrideAck = ack;
+    _ackRead = true;
+    return ack;
+  }
+
+  /// The persisted ack, or `false` when it cannot be read.
+  static Future<bool> _readAckFromPrefs() async {
+    try {
+      // SharedPreferencesAsync (the new API, not the legacy singleton).
+      // Its constructor throws StateError when the platform is unset
+      // (unit tests) — the same defensive guard the update_cubit
+      // SharedPreferences reads run under.
+      final prefs = SharedPreferencesAsync();
+      return await prefs.getBool(ramOverrideAckPrefsKey) ?? false;
+    } catch (e) {
+      // Defensive: unreadable prefs must never block the feature — and
+      // must never grant the override either (the S1 default).
+      if (kDebugMode) {
+        debugPrint('[DeviceCapabilities] override ack read failed: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Records the override ack — the "Download anyway" tap (cycle-43).
+  ///
+  /// The in-memory verdict is applied FIRST (the tap is the consent; the
+  /// session proceeds immediately), then persisted best-effort: a persist
+  /// failure still applies the choice for this session, and the next
+  /// launch re-reads the honest default (the online_ai_service precedent).
+  /// The ack is NEVER auto-cleared by any code path — the warning served
+  /// its purpose, and the failure-class layer is the honest backstop
+  /// (contract §3 under_floor_override, plan §4.1).
+  static Future<void> acknowledgeRamOverride() async {
+    _cachedOverrideAck = true;
+    _ackRead = true;
+    try {
+      await SharedPreferencesAsync().setBool(ramOverrideAckPrefsKey, true);
+    } catch (e) {
+      // Persist failure — the choice still applies for this session.
+      if (kDebugMode) {
+        debugPrint('[DeviceCapabilities] override ack persist failed: $e');
+      }
     }
   }
 }

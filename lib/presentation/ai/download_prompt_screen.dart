@@ -118,6 +118,25 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
     await _startAutoDownload();
   }
 
+  /// The "Download anyway" override (cycle-43): records the ack and
+  /// proceeds into the NORMAL download flow — the same path an eligible
+  /// device takes (contract §3 under_floor_override). The re-resolve can
+  /// only leave the message-only class if the ack failed to admit the
+  /// device, in which case the honest surface stays and nothing downloads
+  /// (defensive; S1). The failure path is untouched: an OOM/kill on an
+  /// overridden device classifies exactly as before.
+  Future<void> _acknowledgeOverrideAndDownload() async {
+    await DeviceCapabilities.acknowledgeRamOverride();
+    if (!mounted) return;
+    final selection = await OfflineModelSpecTable.resolve();
+    if (!mounted) return;
+    setState(() {
+      _selection = selection;
+    });
+    if (selection.isMessageOnly) return;
+    await _startAutoDownload();
+  }
+
   Future<void> _startAutoDownload() async {
     final modelDownload = context.read<ModelDownloadService>();
     await modelDownload.checkModelExists();
@@ -188,9 +207,14 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
 
     // Cycle-42 P2: the message-only class never sees the download offer —
     // no size chip, no download button, no progress. Only the honest
-    // message.
+    // message. Cycle-43 (contract §6 under_floor_first_use): a BELOW-FLOOR
+    // device additionally sees the ruled risk copy FIRST (warning-first,
+    // cycle-43 §6 S1) + the "Download anyway" button — the informed-
+    // consent override into the normal download flow. An UNREADABLE device
+    // keeps the plain honest message (the fail-closed rule).
     final selection = _selection;
     if (selection != null && selection.isMessageOnly) {
+      final canOverride = selection.isBelowFloor;
       return Scaffold(
         backgroundColor: colors.base,
         body: SafeArea(
@@ -212,11 +236,41 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                     style: AppTypography.display.copyWith(color: colors.ink),
                   ),
                   const SizedBox(height: AppSpacing.base),
+                  // The ruled risk copy renders FIRST (contract-verbatim).
+                  if (canOverride) ...[
+                    Text(
+                      DeviceCapabilities.underFloorRiskCopy,
+                      textAlign: TextAlign.center,
+                      style: AppTypography.body.copyWith(
+                        color: AppColors.warningText,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.base),
+                  ],
                   Text(
                     DeviceCapabilities.incompatibleDeviceMessage,
                     textAlign: TextAlign.center,
                     style: AppTypography.body.copyWith(color: colors.subtext),
                   ),
+                  if (canOverride) ...[
+                    const SizedBox(height: AppSpacing.xxl),
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: AppRadius.buttonRadius,
+                        boxShadow: AppShadows.raised,
+                      ),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: _acknowledgeOverrideAndDownload,
+                          child: Text(
+                            DeviceCapabilities.downloadAnywayButtonLabel,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -443,6 +497,22 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                       color: colors.errorText,
                     ),
                     textAlign: TextAlign.center,
+                  ),
+                ],
+                // Cycle-43 (contract §6 under_floor_post_ack): on an
+                // under-floor device the recorded ack admits, the enabled
+                // download ALWAYS keeps the short retained risk line —
+                // never re-nagged, never silently green. Above-floor
+                // devices render nothing here (unchanged flow). Null
+                // selection (pre-resolve) renders nothing, like the chip.
+                if (selection?.isBelowFloor ?? false) ...[
+                  const SizedBox(height: AppSpacing.base),
+                  Text(
+                    DeviceCapabilities.underFloorRetainedRiskLine,
+                    textAlign: TextAlign.center,
+                    style: AppTypography.labelSm.copyWith(
+                      color: AppColors.warningText,
+                    ),
                   ),
                 ],
                 const SizedBox(height: AppSpacing.xxl),

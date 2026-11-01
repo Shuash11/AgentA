@@ -529,8 +529,19 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
   /// little RAM, or RAM that cannot be read) can run NO model at all — the
   /// gate must not offer a download and must not offer a retry that could
   /// never succeed. It shows the honest incompatible-device message
-  /// instead.
+  /// instead. AMENDED at cycle-43 (the under-floor override): a BELOW-FLOOR
+  /// device's message-only surface gains the ruled risk copy + the
+  /// "Download anyway" button — the informed-consent override; an
+  /// UNREADABLE-RAM device keeps the plain message (the fail-closed rule).
   bool _isMessageOnly = false;
+
+  /// Whether the message-only device's RAM is READABLE and below the floor
+  /// (cycle-43, contract §3 under_floor_override): the state whose surface
+  /// carries the "Download anyway" override affordances. False keeps the
+  /// pre-cycle-43 surface byte-for-byte — an unreadable device, and the
+  /// unsupportedAbi failure class, are NOT the RAM state the override
+  /// consents to.
+  bool _isBelowFloor = false;
 
   /// Readiness state of the on-device model. Drives the gate surface:
   /// loaded → the app, loadFailed → the retry surface, idle/modelMissing →
@@ -563,14 +574,17 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
     await modelDownload.checkModelExists();
     if (!mounted) return;
 
-    // The message-only class: there is nothing to download and nothing to
-    // retry — the honest surface is the incompatible-device message.
+    // The message-only class: nothing is offered by default — the honest
+    // surface is the incompatible-device message, and on a BELOW-FLOOR
+    // device (readable RAM) it carries the ruled risk copy + the
+    // "Download anyway" override (cycle-43, warning-first §6 S1).
     if (selection.isMessageOnly) {
       setState(() {
         _isChecking = false;
         _isLoadingModel = false;
         _isInstalled = false;
         _isMessageOnly = true;
+        _isBelowFloor = selection.isBelowFloor;
         _modelState = OfflineModelState.idle;
       });
       return;
@@ -641,6 +655,22 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
     }
   }
 
+  /// The gate's "Download anyway" override (cycle-43): records the ack and
+  /// re-runs the gate check — the selection now admits the device (below-
+  /// floor + ack ⇒ eligible, contract §3 under_floor_override), so the
+  /// normal download flow takes over: the same path an eligible device
+  /// takes. The failure path is untouched: an OOM/kill on an overridden
+  /// device classifies and surfaces exactly as before.
+  Future<void> _acknowledgeOverrideAndRecheck() async {
+    await DeviceCapabilities.acknowledgeRamOverride();
+    if (!mounted) return;
+    setState(() {
+      _isChecking = true;
+      _isMessageOnly = false;
+    });
+    await _checkModelStatus();
+  }
+
   /// Post-download: the asset is on the device — LOAD it.
   ///
   /// The old path only re-checked the download state and declared the gate
@@ -701,10 +731,18 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
 
     // Cycle-40 P1 / cycle-42 P2b: a device that can run no model at all
     // (below the 4 GB RAM floor, or RAM that cannot be read). There is
-    // nothing to download and no retry that could ever succeed, so the
-    // gate shows the honest message and nothing else.
+    // nothing to download by default and no retry that could ever succeed,
+    // so the gate shows the honest message and nothing else. Cycle-43: a
+    // BELOW-FLOOR device additionally sees the risk copy + the "Download
+    // anyway" override — the informed-consent path into the SAME flow an
+    // eligible device takes.
     if (_isMessageOnly) {
-      return const _IncompatibleDeviceSurface();
+      return _IncompatibleDeviceSurface(
+        showOverrideAffordance: _isBelowFloor,
+        onOverrideDownload: _isBelowFloor
+            ? _acknowledgeOverrideAndRecheck
+            : null,
+      );
     }
 
     // S7: an INSTALLED model never falls back to the download gate — the
@@ -773,14 +811,35 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
 }
 
 /// The honest surface of a device that cannot run the offline model
-/// (cycle-40 P1).
+/// (cycle-40 P1; amended by cycle-43).
 ///
-/// Message only: the download would waste a 2.59 GB transfer on an engine
-/// that cannot load the asset, and a retry could never succeed. A model
-/// that is already downloaded on such a device lands here too — removing
-/// it is backlog, not part of this cycle.
+/// Message only: the download would waste a multi-gigabyte transfer on a
+/// device that cannot hold the runtime, and a retry could never succeed.
+/// A model that is already downloaded on such a device lands here too —
+/// removing it is backlog, not part of this cycle.
+///
+/// Cycle-43 (contract `offline-model-qwen15b` §6 under_floor_first_use): on
+/// a device whose RAM is READABLE and below the floor, the ruled risk copy
+/// renders FIRST (warning-first — ahead of any download affordance,
+/// cycle-43 §6 S1), the honest message-only text stays, and the
+/// "Download anyway" button follows. The tap records the ack and proceeds
+/// into the normal download flow — the SAME flow an eligible device takes;
+/// it is consent, never a default. An unreadable-RAM device (and the
+/// unsupportedAbi failure class) keep the plain message: the override
+/// consents to the RAM risk, and neither state is one the copy can
+/// honestly describe.
 class _IncompatibleDeviceSurface extends StatelessWidget {
-  const _IncompatibleDeviceSurface();
+  /// Whether the device's RAM is readable and below the floor (cycle-43) —
+  /// the message-only state that gains the override affordances.
+  final bool showOverrideAffordance;
+
+  /// The override tap: records the ack and proceeds into the download flow.
+  final VoidCallback? onOverrideDownload;
+
+  const _IncompatibleDeviceSurface({
+    this.showOverrideAffordance = false,
+    this.onOverrideDownload,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -803,11 +862,30 @@ class _IncompatibleDeviceSurface extends StatelessWidget {
                 style: AppTypography.subtitle.copyWith(color: AppColors.ink),
               ),
               const SizedBox(height: 8),
+              // The ruled risk copy renders FIRST on an under-floor device
+              // (warning-first, cycle-43 §6 S1) — contract-verbatim.
+              if (showOverrideAffordance) ...[
+                Text(
+                  DeviceCapabilities.underFloorRiskCopy,
+                  style: AppTypography.labelSm.copyWith(
+                    color: AppColors.warningText,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+              ],
               Text(
                 DeviceCapabilities.incompatibleDeviceMessage,
                 style: AppTypography.labelSm.copyWith(color: AppColors.subtext),
                 textAlign: TextAlign.center,
               ),
+              if (showOverrideAffordance) ...[
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: onOverrideDownload,
+                  child: Text(DeviceCapabilities.downloadAnywayButtonLabel),
+                ),
+              ],
             ],
           ),
         ),

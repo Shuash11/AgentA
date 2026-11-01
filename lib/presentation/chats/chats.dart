@@ -630,7 +630,7 @@ class _ChatScreenState extends State<Chats> {
       // model gets RETRY LOAD, a genuinely missing model gets GET MODEL.
       final action = await _resolveOfflineAction(context);
       if (!mounted) return;
-      _showOfflineActionSnackBar(action);
+      await _showOfflineActionSnackBar(action);
     }
   }
 
@@ -676,25 +676,89 @@ class _ChatScreenState extends State<Chats> {
   /// Shows the offline-model affordance for the current state.
   ///
   /// An incompatible device gets the honest message and NO action: no
-  /// download, no retry (cycle-40 P1).
-  void _showOfflineActionSnackBar(OfflineModelAction action) {
+  /// download, no retry (cycle-40 P1). AMENDED at cycle-43 (contract §6
+  /// under_floor_first_use / under_floor_post_ack): on a BELOW-FLOOR device
+  /// (readable RAM) the message-only state renders the risk copy FIRST
+  /// (warning-first, cycle-43 §6 S1) with the "Download anyway" action —
+  /// the tap records the ack and routes into the download flow; and on an
+  /// overridden device the enabled GET-MODEL affordance carries the short
+  /// retained risk line (never re-nagged, never silently green). An
+  /// unreadable-RAM device and the unsupportedAbi failure class keep the
+  /// plain honest message: the override consents to the RAM risk, and
+  /// neither state is one the copy can honestly describe.
+  Future<void> _showOfflineActionSnackBar(OfflineModelAction action) async {
     final label = _offlineActionLabel(action);
+    // The below-floor facts (cycle-43): the selection is cheap here — its
+    // verdicts are cached after the first read.
+    final selection = await OfflineModelSpecTable.resolve();
+    if (!mounted) return;
+
+    if (label == null) {
+      if (selection.isMessageOnly && selection.isBelowFloor) {
+        // The informed-consent state (contract §6 under_floor_first_use):
+        // the risk copy renders FIRST, the honest message-only text stays,
+        // and the "Download anyway" action follows — it records the ack
+        // and routes into the download flow (one flow, four entries).
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${DeviceCapabilities.underFloorRiskCopy}\n'
+              '${DeviceCapabilities.incompatibleDeviceMessage}',
+            ),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: DeviceCapabilities.downloadAnywayButtonLabel,
+              onPressed: () => unawaited(_acknowledgeOverrideAndDownload()),
+            ),
+          ),
+        );
+        return;
+      }
+      // The plain honest message — no action to tap (the pre-cycle-43
+      // behavior, kept for the unreadable state and the unsupportedAbi
+      // failure class).
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(DeviceCapabilities.incompatibleDeviceMessage),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    // The enabled affordances: on an under-floor device the override ack
+    // admits, the GET-MODEL affordance is the enabled download — the
+    // retained risk line ALWAYS accompanies it (contract §6
+    // under_floor_post_ack). The RETRY-LOAD affordance is the failure
+    // path, which this ruling leaves untouched: it keeps the classifier
+    // copy.
+    final showRetainedLine =
+        action == OfflineModelAction.getModel && selection.isBelowFloor;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          label == null
-              ? DeviceCapabilities.incompatibleDeviceMessage
+          showRetainedLine
+              ? DeviceCapabilities.underFloorRetainedRiskLine
               : ChatErrorClassifier.offlineNotReadyMessage,
         ),
         behavior: SnackBarBehavior.floating,
-        action: label == null
-            ? null
-            : SnackBarAction(
-                label: label,
-                onPressed: () => unawaited(_runOfflineAction(action)),
-              ),
+        action: SnackBarAction(
+          label: label,
+          onPressed: () => unawaited(_runOfflineAction(action)),
+        ),
       ),
     );
+  }
+
+  /// Records the under-floor override ack and routes into the download
+  /// flow (cycle-43): the card's "Download anyway" affordance. The
+  /// download screen resolves the now-admitted selection and proceeds
+  /// normally — one flow, four entries.
+  Future<void> _acknowledgeOverrideAndDownload() async {
+    await DeviceCapabilities.acknowledgeRamOverride();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    _pushDownloadScreen();
   }
 
   /// The label of the affordance, or null when the state offers none.
@@ -719,9 +783,12 @@ class _ChatScreenState extends State<Chats> {
         _pushDownloadScreen();
         return;
       case OfflineModelAction.incompatibleDevice:
-        // Nothing can be done for an incompatible device — say so honestly
-        // instead of offering an action that cannot succeed (cycle-40 P1).
-        _showOfflineActionSnackBar(action);
+        // Nothing can be done for an incompatible device by default — say
+        // so honestly instead of offering an action that cannot succeed
+        // (cycle-40 P1). Cycle-43: a BELOW-FLOOR device's message-only
+        // state gains the "Download anyway" override affordance inside
+        // the snackbar itself.
+        await _showOfflineActionSnackBar(action);
         return;
     }
   }

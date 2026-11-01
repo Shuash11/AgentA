@@ -4,7 +4,10 @@
 # recorded the per-device FALLBACK class implemented by P2; the v1.1.0
 # amendment (plan §4.9) collapses selection to THIS ONE spec for every
 # device — "make the qwen the main model offline" — consumed by P2b and P3
-# (evidence). Authoritative file — code, comments and delegation prompts are
+# (evidence); the v1.2.0 amendment (cycle-43) adds the under-floor
+# "Download anyway" RAM override to the SAME spec — consent-gated,
+# warning-first (plans/cycle-43 §4.1-§4.3) — consumed by P2. Authoritative
+# file — code, comments and delegation prompts are
 # never the contract. No second copy exists anywhere. A reader implements
 # P2b from this file (as amended) plus offline-model-e2b.yaml (v1.3.0) alone,
 # without touching the web (the plan §5-P1 item 8c discipline; plan §5-P2b
@@ -22,8 +25,52 @@
 # no-op-preserving per the E2B contract §1 token_threading.
 
 contract: offline-model-qwen15b
-version: 1.1.0
+version: 1.2.0
 status: active
+# v1.2.0 (2026-11-01, cycle-43 §4.1-§4.3 under-floor override amendment,
+# contractor): the Adviser's ruling on the user directive (VERBATIM): "if
+# yes then let me still download the offline model like there is a button
+# saying download anyway" — with the FIRST live device facts ever
+# (user-reported, recorded as governance, plans/cycle-43 §1.1): OPPO
+# CPH2591, arm64, MemTotal 3,814,532 kB ≈ 3.64 GB — BELOW the 4 GB floor —
+# so v1.9.0 resolves the message-only state on the user's phone: no
+# offline model at all there today. The under-floor refusal was honest but
+# denied agency; the ruling grants informed consent WITHOUT dropping the
+# warning. Changes (§3 + §5 selection_floor + §6 + §7 stop_divergences +
+# this record only): (1) the eligibility verdict gains the user-override
+# term — totalMem >= floor OR the recorded override ack (§3
+# under_floor_override; below-floor + ack ⇒ eligible — the SAME Qwen
+# spec, NOT a different model; plan §4.3); (2) the message-only state
+# becomes WARNING-FIRST: the honest risk copy renders first
+# (contract-verbatim, §6 under_floor_first_use: "This phone has 3.6 GB
+# RAM. The model may be closed by the system when memory runs low." + the
+# button "Download anyway"); after the ack the download is enabled with a
+# SHORT retained risk line (§6 under_floor_post_ack: "Low-RAM device: the
+# model may be closed when memory runs low.") — never re-nagged, never
+# silently green; (3) the ack persists via SharedPreferencesAsync, key
+# "offline_ram_override_ack" (the modern-API precedent — already the
+# established in-tree API: online_ai_service.dart:94/:125,
+# update_cubit.dart:189/:279-283, the cycle-29 P1 precedent; verified
+# 2026-11-01; shared_preferences ^2.5.5 — NO new package); a user
+# PREFERENCE, NOT a migration marker (§4 untouched — no DAO/#
+# model_asset-marker implications, plan §4.3); NEVER auto-cleared (plan
+# §4.1). S8's wording is AMENDED (§5 selection_floor + §7
+# stop_divergences): the asset is never OFFERED BY DEFAULT below the
+# floor; an explicit user override AFTER the honest risk copy is
+# permitted (informed consent — the warning-first discipline is the
+# control; plans/cycle-43 §4.1/§6 S1). All FOUR surfaces carry the
+# amended state (the gate, the download screen, the chat card, the picker
+# tile — plan §4.2). The failure-class layer (§7) is UNTOUCHED — an
+# OOM/kill on an overridden device classifies and surfaces exactly as
+# today (plan §4.4). The 0.5B degradation rung stays the recorded
+# FAST-FOLLOW (§1 fallback_ladder rung (b); trigger: the user reports the
+# 1.5B killed/unloadable on 3.64 GB — plan §4.5) — OUT OF SCOPE this
+# cycle (cycle-43 §6 S2, grep-gated; never an offered tier). Consumers:
+# P2 (cycle-43 frontend) implements the amended §3/§5/§6/§7 per
+# plans/cycle-43 §5-P2; no consumer break to v1.1.0 readers beyond the
+# ruled semantics (the above-floor flow is byte-for-byte unchanged —
+# plan §5-P2 criterion 3; the message-only state gains affordances
+# without losing its honesty).
 # v1.1.0 (2026-10-31, cycle-42 §4.9 lived-evidence amendment, contractor):
 # the Adviser's amendment ruling — the user directive (VERBATIM): "make the
 # qwen the main model offline" — with the lived evidence: v1.8.2 on the
@@ -49,7 +96,7 @@ status: active
 
 # §1  asset_identity — the fallback artifact and its verified provenance (plan §1.2 verbatim)
 # §2  engine_contract — ModelType.qwen + ModelFileType.task on the EXISTING MediaPipeEngine; install/load shapes; identity
-# §3  selection_table — the binding ONE-class RAM-floor table (plan §4.9 amendment; supersedes §4.3's two-key matrix)
+# §3  selection_table — the binding ONE-class RAM-floor table + the under-floor override (plan §4.9; cycle-43 §4.1-§4.3; supersedes §4.3's two-key matrix)
 # §4  migration_v4 — model_asset_v4 marker; the WIDENED stranded-E2B uninstall — ANY stranded E2B asset (plan §4.4 as widened by §4.9)
 # §5  ram_budget — vendor peak RSS vs the 4 GB floor and the ≤ 6 GB cap (plan §1.2)
 # §6  ux_copy — the strings P2 implements verbatim (plan §4.5)
@@ -226,8 +273,10 @@ engine_contract:
     criterion 5, plan §10 grep 1.
 
 # ---------------------------------------------------------------------------
-# 3. Selection table (plan §4.3 as AMENDED by §4.9 — BINDING; §5-P2b item 1;
-#    the lived-evidence directive collapsed the two-key matrix to ONE class)
+# 3. Selection table (plan §4.3 as AMENDED by §4.9, then by cycle-43
+#    §4.1-§4.3 — BINDING; the lived-evidence directive collapsed the
+#    two-key matrix to ONE class; cycle-43 adds the under-floor
+#    "Download anyway" override — warning-first, consent-gated)
 # ---------------------------------------------------------------------------
 
 selection_table:
@@ -247,46 +296,135 @@ selection_table:
     ONE SELECTION CLASS, AUTOMATIC, RUNTIME SELF-REPORTING: the model spec
     resolves ONCE per device from the EXISTING DeviceCapabilities seam
     (lib/services/ai/device_capabilities.dart — the cached-verdict pattern,
-    verified 2026-10-31; plan §1.6). NO user input; NO dependency on
-    receiving device specs — each device self-reports totalMem at runtime.
-    P2's implemented machinery (spec table, totalMem read, v4, spec-driven
-    chains/identity/UI) is exactly what this single-spec ruling needs —
-    the amendment is the cheap reshaping of an already-built surface
-    (plan §4.9, §5-P2b).
+    verified 2026-10-31; plan §1.6). NO user input decides WHICH model —
+    each device self-reports totalMem at runtime, and the ONE user input
+    added at v1.2.0 is the under-floor CONSENT gate (§ under_floor_override:
+    the recorded ack admits the SAME spec below the floor — it never
+    selects a different model; plan §4.3). NO dependency on receiving
+    device specs. P2's implemented machinery (spec table, totalMem read,
+    v4, spec-driven chains/identity/UI) is exactly what this single-spec
+    ruling needs — the amendment is the cheap reshaping of an
+    already-built surface (plan §4.9, §5-P2b).
   keys: >-
-    ONE selection key: totalMem (the P2-implemented read —
+    ONE capability key: totalMem (the P2-implemented read —
     ActivityManager.MemoryInfo.totalMem beside supportedAbis in
     MainActivity.kt, via the com.agenta.agenta/device MethodChannel; the
     @visibleForTesting seams per device_capabilities.dart's established
-    pattern, as recorded at v1.0.0). ABI IS NO LONGER CONSULTED FOR
-    SELECTION (plan §4.9): the MediaPipe .task engine is the multi-ABI
-    engine (cycle-40 §1.1), so the ABI verdict is irrelevant to which
-    model a device is offered. The verdict machinery STAYS in code — see
-    unsupportedAbi_mapping_note below.
+    pattern, as recorded at v1.0.0) — JOINED at v1.2.0 by ONE
+    user-consent input: the persisted override ack (§ under_floor_override;
+    the flag + the verdict are read at the SAME DeviceCapabilities seam —
+    plan §4.2). The eligibility VERDICT becomes: totalMem >= 4 GB OR the
+    recorded override ack (the plan's verbatim formula, plan §4.3 +
+    §5-P2 item 1; below-floor + ack ⇒ eligible — the SAME Qwen spec; the
+    UNREADABLE-totalMem edge is recorded explicitly in
+    under_floor_override, not silently resolved). ABI IS NO LONGER
+    CONSULTED FOR SELECTION (plan §4.9): the MediaPipe .task engine is
+    the multi-ABI engine (cycle-40 §1.1), so the ABI verdict is
+    irrelevant to which model a device is offered. The verdict machinery
+    STAYS in code — see unsupportedAbi_mapping_note below.
   classes:                              # the table — binding, plan §4.9
     single_qwen_class: >-
       EVERY device (any ABI) with totalMem >= 4 GB → Qwen 2.5 1.5B Instruct
       .task — THIS contract (§1/§2): identity qwen2.5-1.5b-it, install
       URL/size/sha per §1, engine per §2. The 'Model size: ~1.6GB' chip is
       UNIVERSAL on this class (the §6 gate_size_chip e2b_class row is
-      superseded — no E2B class exists in selection anymore).
+      superseded — no E2B class exists in selection anymore). An
+      under-floor device holding the recorded override ack joins THIS
+      class — the SAME spec, nothing re-specified (§ under_floor_override;
+      below-floor + ack ⇒ eligible, plan §4.3).
     message_only_class: >-
       totalMem < 4 GB OR totalMem UNREADABLE (the fail-closed KEPT, S8
       carries — a device that cannot report RAM gets the message-only
-      honesty, plan §4.9) → NO model — the honest message, its wording
-      GENERALIZED to the RAM reason (NO ABI mention): NO download CTA,
-      NO retry (cycle-40's discipline; P2b acceptance criterion 5; the
-      message constant DeviceCapabilities.incompatibleDeviceMessage,
-      device_capabilities.dart:28 as-of the v1.0.0 recording — re-verify
-      the site at P2b per the header anchor policy). The IDENTITY on this
-      row is 'qwen2.5-1.5b-it' APP-WIDE — the identity is the app's
-      offline-model NAME, not the installed asset (the row never installs)
+      honesty, plan §4.9). AMENDED at v1.2.0 (cycle-43 §4.1-§4.3) — the
+      BELOW-FLOOR disjunct becomes the WARNING-FIRST override state: NO
+      model is offered by default; the honest message STAYS (its wording
+      GENERALIZED to the RAM reason, NO ABI mention —
+      DeviceCapabilities.incompatibleDeviceMessage,
+      device_capabilities.dart:33-34 as-of the v1.2.0 recording,
+      2026-11-01 — re-verify at P2 per the header anchor policy) and the
+      ruled risk copy renders FIRST (§6 under_floor_first_use) with the
+      "Download anyway" button; an explicit tap records the ack and
+      proceeds to the download flow (plan §5-P2 item 2). After the ack,
+      subsequent visits show the download ENABLED with the SHORT retained
+      risk line (§6 under_floor_post_ack) — never re-nagged, never
+      silently green. The PRE-ACK state has NO auto-enabled download
+      (cycle-43 §6 S1 — a download without the recorded ack is the phase
+      FAIL); NO retry is added anywhere (the override is CONSENT, not a
+      retry — cycle-40's no-retry discipline carries; failures classify
+      per §7). The UNREADABLE disjunct: see under_floor_override's
+      unreadable_edge note (recorded, not silently resolved). The
+      IDENTITY on this row is 'qwen2.5-1.5b-it' APP-WIDE — the identity
+      is the app's offline-model NAME, not the installed asset (the row
+      never installs BY DEFAULT; with the recorded ack the below-floor
+      disjunct installs the SAME spec — § under_floor_override)
       (plan §4.9).
+    under_floor_override: >-
+      NEW at v1.2.0 (cycle-43 §4.1-§4.3 — the binding record of the
+      override state). WHAT: the message-only state's below-floor
+      disjunct gains an explicit, consent-gated path to the SAME Qwen
+      spec (§ single_qwen_class — identity qwen2.5-1.5b-it, install
+      URL/size/sha per §1, engine per §2 — NOT a different model, plan
+      §4.3). VERDICT: totalMem >= 4 GB OR the recorded override ack
+      (below-floor + ack ⇒ eligible); the flag + the verdict are read at
+      the existing DeviceCapabilities seam (plan §4.2). FLAG:
+      SharedPreferencesAsync, key "offline_ram_override_ack" (the
+      modern-API precedent — online_ai_service.dart:94/:125,
+      update_cubit.dart:189/:279-283, the cycle-29 P1 precedent; verified
+      2026-11-01); a setter + the @visibleForTesting seam per
+      device_capabilities.dart's established pattern (plan §5-P2 item 1);
+      a user PREFERENCE, NOT a migration marker (§4 is untouched — no
+      DAO/model_asset-marker implications, plan §4.3); NEVER auto-cleared
+      (the warning served its purpose; the failure path is the honest
+      backstop, plan §4.1). DISCIPLINE — S8 AMENDED (warning-first,
+      cycle-43 §6 S1): the asset is never OFFERED BY DEFAULT below the
+      floor; the honest risk copy renders FIRST (§6
+      under_floor_first_use), and only an explicit user override AFTER it
+      is permitted (informed consent — the warning-first discipline is
+      the control); after the ack the user is never re-nagged and the
+      honesty never disappears (the short line stays — §6
+      under_floor_post_ack). SURFACES — all FOUR, consistently (plan
+      §4.2): the gate (lib/main.dart:807 as-of the v1.2.0 recording,
+      2026-11-01), the download screen
+      (lib/presentation/ai/download_prompt_screen.dart:216), the chat
+      card (lib/presentation/chats/chats.dart:686/:780) and the picker
+      tile (lib/presentation/chats/widgets/model_picker_sheet.dart:20)
+      each render the risk copy + the "Download anyway" button in the
+      message-only state; the card/picker buttons SET the ack and ROUTE
+      into the download screen with the override acknowledged (one flow,
+      four entries — the established multi-surface pattern); re-verify
+      the anchors at P2 per the header anchor policy. FAILURE PATH —
+      untouched: an OOM/kill on an overridden device classifies and
+      surfaces exactly as today (§7; plan §4.4 — the cycle-40
+      failure-class layer is the safety net). NEXT RUNG — the 0.5B
+      degradation rung stays the recorded FAST-FOLLOW (§1 fallback_ladder
+      rung (b); trigger: the user reports the 1.5B killed/unloadable on
+      3.64 GB; plan §4.5) — OUT OF SCOPE this cycle (cycle-43 §6 S2,
+      grep-gated; never an offered tier). EMPIRICAL TEST — ship and let
+      the user test on their own phone; the agent-side load test is
+      REJECTED (plan §4.4); the risk copy's "may" is the honesty
+      contract — genuinely unknown until their test. UNREADABLE EDGE —
+      recorded, not silently resolved: plan §4.3's headline names
+      "below-floor + ack ⇒ eligible", while its ruled formula
+      ("totalMem >= floor OR ack", plan §5-P2 item 1) read literally also
+      admits an UNREADABLE-totalMem device whose ack is recorded (at the
+      resolver seam — offline_model_spec.dart:141-144/:168-169, verified
+      2026-11-01 — both below-floor and unreadable arrive as 'floor not
+      cleared'). The ruled test matrix (plan §5-P2 item 3) covers
+      below-floor ± ack and above-floor ONLY — no unreadable case; the
+      fail-closed primitive (DeviceCapabilities.clearsMemoryFloor's
+      null→false, device_capabilities.dart:207-210, verified 2026-11-01)
+      is NOT this ruling's subject. P2 implements the RULED FORMULA; the
+      unreadable disposition is flagged to the Adviser for confirmation
+      at P2 review (reported, not silently resolved).
   floor_rationale: >-
     the 4 GB totalMem floor exists because the vendor peak RSS for this
     asset is ≈ 2.2 GB (§5) — a device under 4 GB total RAM cannot hold the
     runtime with margin (plan §4.3/§4.9, §5-P1 item 5); the floor keeps
     the ONE offer RAM-honest (the 2.2 GB peak-RSS honesty, plan §4.9).
+    The v1.2.0 override does NOT repeal the physics: it converts the
+    floor from a refusal into informed consent — the risk copy states the
+    SAME honesty and the user decides (§ under_floor_override, §5
+    selection_floor; plan §4.1).
   one_active_model: >-
     the plugin holds ONE active model — satisfied by construction: each
     device resolves exactly ONE spec from this table and installs exactly
@@ -328,7 +466,11 @@ selection_table:
     class. Consumer sites as recorded at v1.0.0 (verified 2026-10-31:
     main.dart:551 the gate, download_prompt_screen.dart:101 the screen,
     chats.dart:645 the card, model_picker_sheet.dart:36 the picker) —
-    re-verify at P2b per the header anchor policy.
+    re-verify at P2b per the header anchor policy. At v1.2.0 the CURRENT
+    consumer is cycle-43's P2 (the override wiring — §
+    under_floor_override); the message-only render sites were re-verified
+    2026-11-01 at main.dart:807, download_prompt_screen.dart:216,
+    chats.dart:686/:780, model_picker_sheet.dart:20.
   supersedes: >-
     the per-class phrasing recorded at v1.0.0 elsewhere in this file is
     SUPERSEDED by THIS table (kept in place as the P2-era record; those
@@ -346,6 +488,27 @@ selection_table:
     per-class framing → single-class per plan §5-P2b items 1/3/5. This
     amendment touches §3/§4 and the header record ONLY (plan §4.9's
     contract path).
+  supersedes_v1_2_0: >-
+    the cycle-43 override ruling (plan §4.1-§4.3) supersedes, with the
+    amended text edited IN PLACE where it is load-bearing and recorded
+    here for the audit trail: §5 selection_floor's "a device under the
+    floor is NEVER offered this asset" → the AMENDED S8 wording (never
+    offered BY DEFAULT; the explicit post-warning override admits the
+    SAME spec — see under_floor_override and the amended §5
+    selection_floor); §7 stop_divergences' "S8 (the Qwen asset offered on
+    a device failing §3)" → the AMENDED S8/S1 stop (offered by default
+    below the floor, OR any download without the recorded ack, OR any
+    skipped warning = phase FAIL — see the amended §7 stop_divergences);
+    §8 p2_selection_tests' "non-arm64 < 4 GB → ineligible" framing →
+    below-floor + ack ⇒ eligible per THIS table (the no-ack below-floor
+    case stays ineligible — S1); §6 picker_chat_card_states'
+    message_only_class row's "NO CTA" → the below-floor state gains the
+    ruled override affordances (§6 under_floor_first_use /
+    under_floor_post_ack) while NO retry STAYS (§6, amended in place).
+    Superseded NOWHERE: the unreadable fail-closed disposition question
+    is recorded in under_floor_override (not silently resolved); the
+    above-floor flow is unchanged (plan §5-P2 criterion 3); §1/§2/§4 are
+    untouched by this amendment.
 
 # ---------------------------------------------------------------------------
 # 4. Migration contract v4 (plan §4.4 as WIDENED by §4.9 — BINDING;
@@ -425,9 +588,20 @@ migration_v4:
 ram_budget:
   binding_cap: "runtime RAM ≤ 6 GB (user directive — the E2B contract §6 binding_cap carries; plan §1.2)"
   selection_floor: >-
-    totalMem >= 4 GB is the OFFER floor (§3): a device under the floor is
-    NEVER offered this asset (plan §4.3; the S8 honesty discipline —
-    plan §6).
+    totalMem >= 4 GB is the DEFAULT-OFFER floor (§3) — AMENDED at v1.2.0
+    (cycle-43 §4.1, the S8 amendment): a device under the floor is never
+    offered this asset BY DEFAULT; it FIRST sees the honest risk copy +
+    the "Download anyway" button (§3 message_only_class, §6
+    under_floor_first_use) — the warning-first discipline is the control
+    — and an explicit user override AFTER the honest risk copy is
+    permitted (informed consent): with the recorded ack the SAME Qwen
+    spec becomes eligible (below-floor + ack ⇒ eligible, plan §4.3). The
+    asset is never silently offered below the floor; any download on an
+    under-floor device WITHOUT the recorded ack — or any path that skips
+    the warning — is the S1 phase FAIL (cycle-43 plan §6). The RAM
+    honesty is unchanged: the floor exists because the vendor peak RSS
+    is ≈ 2.2 GB (vendor_figures below) — the override changes WHO
+    decides, not the physics.
   measurement_source: >-
     the repo's own README — VENDOR-MEASURED on Samsung S25 Ultra,
     CPU/XNNPACK, 4 threads (plan §1.2).
@@ -462,7 +636,9 @@ ram_budget:
 
 # ---------------------------------------------------------------------------
 # 6. UX copy table (plan §4.5 — BINDING; §5-P1 item 6; consumed VERBATIM —
-#    these exact strings, no re-wording; the E2B contract §5 discipline)
+#    these exact strings, no re-wording; the E2B contract §5 discipline.
+#    cycle-43 adds the under-floor override copy — § under_floor_first_use
+#    / under_floor_post_ack, plans/cycle-43 §4.1)
 # ---------------------------------------------------------------------------
 
 ux_copy:
@@ -479,6 +655,39 @@ ux_copy:
     UNCHANGED and rendered for BOTH classes — the E2B contract §5
     gate_data_caution line ("Large download — Wi-Fi recommended. You can
     keep using your phone while it downloads.") stays (plan §4.5).
+  under_floor_first_use:                # NEW at v1.2.0 (cycle-43 §4.1) — BINDING VERBATIM (the E2B contract §5 discipline): these exact strings, no re-wording
+    risk_copy: 'This phone has 3.6 GB RAM. The model may be closed by the system when memory runs low.'
+    button_label: 'Download anyway'
+    state: >-
+      the message-only state's FIRST use on an under-floor device (all
+      four surfaces — §3 under_floor_override): the ruled risk copy
+      renders FIRST (warning-first — ahead of any download affordance,
+      cycle-43 §6 S1), the honest message-only text STAYS (§3
+      message_only_class), and the "Download anyway" button follows. NO
+      auto-enabled download in this state (S1 — never a silent offer).
+    figure_note: >-
+      the risk copy's "3.6 GB" is the ruled reference device's figure —
+      OPPO CPH2591, MemTotal 3,814,532 kB ≈ 3.64 GB (cycle-43 plan §1.1,
+      the first live device facts). Per the plan's refinement clause
+      (cycle-43 §10 search 1) a verified fact REFINES the copy's
+      "3.6 GB" figure, never blocks the string shape; the strings are
+      otherwise consumed VERBATIM.
+  under_floor_post_ack:                 # NEW at v1.2.0 (cycle-43 §4.1) — BINDING VERBATIM
+    retained_risk_line: 'Low-RAM device: the model may be closed when memory runs low.'
+    state: >-
+      after the recorded ack, subsequent visits on ALL FOUR surfaces show
+      the download ENABLED + this SHORT retained risk line: never
+      re-nagged (the full risk copy and the button do not repeat), never
+      silently green (the line ALWAYS accompanies the enabled download —
+      the honesty never disappears, plan §4.1). The enabled download's
+      CTA is the EXISTING download affordance — this ruling introduces
+      NO new CTA label.
+    persistence: >-
+      the ack persists via SharedPreferencesAsync, key
+      "offline_ram_override_ack" — never auto-cleared (§3
+      under_floor_override; plan §4.1/§5-P2 item 1). Overriding ONCE
+      persists (the flag round-trip is a ruled P2 test — plan §5-P2
+      item 3).
   picker_chat_card_states: >-
     the picker tile + chat card render the SELECTED spec's affordances per
     the §3 table (plan §4.5): arm64_primary → the existing E2B affordances
@@ -486,7 +695,17 @@ ux_copy:
     identity surfaces via the spec; the ~1.6GB chip on the download flow);
     message_only_class → cycle-40's message-only state (the honest
     incompatible message, NO CTA, NO retry —
-    download_prompt_screen.dart:211, verified 2026-10-31).
+    download_prompt_screen.dart:211, verified 2026-10-31). AMENDED at
+    v1.2.0 (cycle-43 §4.2): in the message-only state the below-floor
+    device ALSO renders the ruled override affordances on EVERY surface
+    (the gate, the download screen, the chat card, the picker tile — one
+    flow, four entries): first use → § under_floor_first_use (the risk
+    copy FIRST + the "Download anyway" button; the card/picker button
+    SETS the ack and ROUTES into the download screen with the override
+    acknowledged); post-ack → § under_floor_post_ack (the download
+    enabled + the short retained line). NO retry is added — the override
+    is consent, not a retry (cycle-40's no-retry discipline carries; the
+    unreadable disposition is recorded in §3 under_floor_override).
   excluded_file: >-
     lib/services/ai/ai_model.dart is EXCLUDED from this cycle's change
     surface AND its commits (F9 — cycle-39's uncommitted edits share the
@@ -552,6 +771,19 @@ error_surface:
     existing channel), S6 (asset drift — the §1 figures), S7 (v4 fires on
     an eligible device's E2B asset, loops, or strands a download), S8 (the
     Qwen asset offered on a device failing §3) — plans/cycle-42 §6.
+    AMENDED at v1.2.0 (cycle-43): cycle-42's S8 entry above is superseded
+    by the AMENDED S8 (cycle-43 §6 S1 — warning-first, BINDING): the Qwen
+    asset OFFERED BY DEFAULT on a device failing §3, OR any download on
+    an under-floor device WITHOUT the recorded ack, OR any path that
+    skips the warning = phase FAIL — the override is consent, never a
+    default (plans/cycle-43 §6). Cycle-43's other phase stops carry
+    (plans/cycle-43 §6): S2 (the 0.5B rung — the recorded FAST-FOLLOW,
+    §1 fallback_ladder rung (b) — is OUT of scope: no spec/tier/URL for
+    it enters this cycle's changes, grep-gated), S3 (the Qwen asset's
+    live state diverges at gate time → re-check the catalog), S4 (global
+    divergence from the plan's ground truth). The cycle-42 S1/S2/S3
+    entries above are UNCHANGED and bind P2 alongside cycle-43's (the
+    S-numbers collide across the two plans — each entry names its plan).
 
 # ---------------------------------------------------------------------------
 # 8. Acceptance criteria (plan §5-P1 item 8 — P1's own gate — plus the P2
