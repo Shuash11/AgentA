@@ -6,6 +6,7 @@ import 'package:flutter_edge_ai/flutter_edge_ai.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/config/app_config.dart';
 import '../../data/local/offline_model_dao.dart';
+import 'offline_model_spec.dart';
 
 enum ModelStatus { notInstalled, installing, ready, error }
 
@@ -69,30 +70,42 @@ class ModelDownloadService extends ChangeNotifier {
   bool get isReady => _status == ModelStatus.ready;
   bool get isSlowConnection => _isSlowConnection;
 
-  /// Gemma 4 E2B native bundle on the LiteRT-LM engine. Ungated (no HF
-  /// token needed), but both install chains keep threading the token so a
-  /// GEMMA_MODEL_URL override against a gated asset still works.
-  static const String _modelUrl =
-      'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm';
-  static const String _modelType = 'gemma-4-e2b-it';
-
-  /// Filename of the superseded Gemma 3 1B asset — the uninstall id both
-  /// migration generations use.
+  /// Filename of the superseded Gemma 3 1B asset — the uninstall id the
+  /// v3 migration uses.
   static const String _legacyModelFileName = 'gemma3-1b-it-int4.task';
+
+  /// Filename of the Gemma 4 E2B asset — the uninstall id the v4 migration
+  /// uses. E2B left model selection (plan §4.9), so every device that still
+  /// holds the asset holds a STRANDED one.
+  ///
+  /// Exact case matters: the pinned core keys a model by its persisted
+  /// filename, and that filename is the install URL's last path segment
+  /// (`path.basename(Uri.parse(url).path)` — network_source_handler.dart),
+  /// so the E2B asset is persisted as `gemma-4-E2B-it.litertlm`. A
+  /// case-mismatched probe would silently never migrate.
+  static const String _e2bModelFileName = 'gemma-4-E2B-it.litertlm';
 
   /// Channel to the host MainActivity for the Android 13+ runtime
   /// POST_NOTIFICATIONS request (no permission_handler dependency).
-  /// Best-effort only: denial merely hides the foreground notification,
-  /// the download itself still runs.
+  /// Best-effort only: denial merely hides the foreground download progress
+  /// notification, the download itself still runs.
   static const MethodChannel _notificationsChannel = MethodChannel(
     'com.agenta.agenta/notifications',
   );
 
-  /// The effective download URL (env override wins). Shared by the install
-  /// path and [ensureModelActive] so the plugin's idempotency key (derived
-  /// from the URL filename) always matches.
-  static String get resolvedModelUrl =>
-      AppConfig.gemmaModelUrl.isNotEmpty ? AppConfig.gemmaModelUrl : _modelUrl;
+  /// The effective download URL for [spec] (env override wins WITHIN the
+  /// selected class).
+  ///
+  /// The override substitutes the URL while the class keeps its own
+  /// modelType/fileType — a CROSS-FORMAT override (a `.litertlm` URL forced
+  /// onto the Qwen `.task` class) still fails at engine claim: the
+  /// debug/enterprise escape hatch, accepted and recorded (contract §7
+  /// override_caveat_amended).
+  ///
+  /// Shared by the install path and [ensureModelActive] so the plugin's
+  /// idempotency key (derived from the URL filename) always matches.
+  static String resolvedModelUrlFor(OfflineModelSpec spec) =>
+      AppConfig.gemmaModelUrl.isNotEmpty ? AppConfig.gemmaModelUrl : spec.url;
 
   void _notifyStateChanged(ModelStatus oldStatus, double oldProgress) {
     if (oldStatus != _status || oldProgress != _progress) {
@@ -176,6 +189,7 @@ class ModelDownloadService extends ChangeNotifier {
     // so the gate re-downloads the current asset instead of serving the
     // superseded one.
     await _migrateLegacyAssetIfPresent();
+    await _migrateStrandedE2bAssetIfPresent();
 
     try {
       final sqliteReady = await _dao.isModelReady();
@@ -298,6 +312,101 @@ class ModelDownloadService extends ChangeNotifier {
   @visibleForTesting
   static Future<void> Function(String modelId)? uninstallOverrideForTest;
 
+  /// One-time migration (generation 4): the stranded E2B bundle.
+  ///
+  /// E2B LEFT MODEL SELECTION (plan §4.9): no device is offered the asset
+  /// any more — the LiteRT-LM engine fails to load it on real arm64
+  /// devices too (the lived evidence), and the MediaPipe `.task` engine is
+  /// the multi-ABI engine. So EVERY device holding the E2B asset holds a
+  /// STRANDED one: wasted 2.59 GB and a dead asset. Uninstall it and reset
+  /// the DB row so the gate re-offers the selected spec (the Qwen `.task`
+  /// flow on a device that clears the RAM floor, the honest message on the
+  /// message-only class).
+  ///
+  /// The trigger is the STRANDED ASSET ITSELF — NEVER a generic "any model
+  /// is present" condition (the v3 self-reset lesson of cycle-38 §4.8, in
+  /// its GENERALIZED form): a Qwen-asset user must never fire v4, because
+  /// both probe legs are false for them. The capability-verdict clause of
+  /// the first cut is DELETED: no device is eligible for E2B any more, so
+  /// the verdict is universal and the asset's presence is the whole
+  /// trigger. Marker set BEFORE the uninstall so a crash never loops the
+  /// download.
+  static Future<void> _migrateStrandedE2bAssetIfPresent() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('model_asset_v4') == true) return;
+      if (!await _e2bAssetPresent()) return;
+      await prefs.setBool('model_asset_v4', true);
+      await _uninstallE2bAsset();
+      await _resetDaoRowAfterE2bRemoval();
+    } catch (e) {
+      // A migration must never break the download gate. The marker is set
+      // BEFORE the uninstall (a crash mid-migration never loops the
+      // download), so a failed uninstall is not retried on the next launch.
+      if (kDebugMode) {
+        debugPrint('[ModelDownload] stranded E2B migration failed: $e');
+      }
+    }
+  }
+
+  /// The DAO row after the stranded E2B asset is gone.
+  ///
+  /// The row is reset to the SELECTED spec's identity — universally
+  /// `qwen2.5-1.5b-it` (contract §2 identity_sites) — so the gate
+  /// re-offers the selected asset.
+  ///
+  /// A row that already records the SELECTED spec as INSTALLED is NOT
+  /// reset: that row describes the Qwen asset, which is still on the
+  /// device, and resetting it would force a redundant 1.6 GB re-download
+  /// of an asset the device already has (the both-assets composition —
+  /// contract §4: "the gate's readiness read FINDS QWEN: no Qwen
+  /// re-download is forced"). The durable truth is the DAO row — the same
+  /// one the gate's readiness read consults.
+  static Future<void> _resetDaoRowAfterE2bRemoval() async {
+    final dao = OfflineModelDao();
+    final row = await dao.getModelStatus();
+    final rowDescribesSelectedAsset =
+        row != null &&
+        row['model_type'] == OfflineModelSpecTable.appIdentity &&
+        await dao.isModelInstalled();
+    if (rowDescribesSelectedAsset) return;
+    await dao.setModelNotInstalled();
+  }
+
+  /// Whether the stranded E2B asset is still present: installed in the
+  /// plugin's storage, or the active model on this run.
+  ///
+  /// The probe keys on the asset's FILENAME — the pinned core keys a model
+  /// by its persisted filename (`isModelInstalled` takes a filename, and
+  /// `activeModelSpec.name` IS the persisted filename on restore).
+  static Future<bool> _e2bAssetPresent() async {
+    final override = e2bAssetPresentOverrideForTest;
+    if (override != null) return override();
+    final active = FlutterEdgeAi.activeModelSpec?.name == _e2bModelFileName;
+    if (active) return true;
+    return FlutterEdgeAi.isModelInstalled(_e2bModelFileName);
+  }
+
+  /// Removes the stranded E2B asset. Tolerant: an already-unregistered or
+  /// already-missing model/file is safe to continue.
+  static Future<void> _uninstallE2bAsset() async {
+    final override = uninstallOverrideForTest;
+    if (override != null) {
+      await override(_e2bModelFileName);
+      return;
+    }
+    try {
+      await FlutterEdgeAi.uninstallModel(_e2bModelFileName);
+    } catch (_) {
+      // Already unregistered / file missing — safe to continue.
+    }
+  }
+
+  /// Overrides the stranded-E2B presence probe (test-only). When set, the
+  /// v4 migration uses it instead of asking the plugin.
+  @visibleForTesting
+  static Future<bool> Function()? e2bAssetPresentOverrideForTest;
+
   Future<void> installModel() async {
     if (_status == ModelStatus.installing || _status == ModelStatus.ready) {
       return;
@@ -305,6 +414,18 @@ class ModelDownloadService extends ChangeNotifier {
     await _migrateStaleAssetIfPresent();
     await checkModelExists();
     if (_status == ModelStatus.ready) return;
+
+    // The asset this device installs: the selection table decides (the Qwen
+    // `.task` bundle on the single selection class). The message-only class
+    // has NO asset — the gate never offers a download there, so this is a
+    // defensive no-op.
+    final spec = await OfflineModelSpecTable.currentSpec();
+    if (spec == null) {
+      if (kDebugMode) {
+        debugPrint('[ModelDownload] no model asset for this device class');
+      }
+      return;
+    }
 
     _status = ModelStatus.installing;
     _progress = 0.0;
@@ -341,11 +462,11 @@ class ModelDownloadService extends ChangeNotifier {
       final installFuture = installOverrideForTest != null
           ? installOverrideForTest!(token)
           : FlutterEdgeAi.installModel(
-                  modelType: ModelType.gemma4,
-                  fileType: ModelFileType.litertlm,
+                  modelType: spec.modelType,
+                  fileType: spec.fileType,
                 )
                 .fromNetwork(
-                  resolvedModelUrl,
+                  resolvedModelUrlFor(spec),
                   token: AppConfig.hfToken.trim(),
                   foreground: AppConfig.foregroundDownload,
                 )
@@ -359,7 +480,7 @@ class ModelDownloadService extends ChangeNotifier {
       _cancelStallWatchdog();
       _activeCancelToken = null;
       _progress = 100.0;
-      await _dao.setModelReady(modelType: _modelType);
+      await _dao.setModelReady(modelType: spec.identity);
       _status = ModelStatus.ready;
     } catch (e) {
       _cancelStallWatchdog();
@@ -380,7 +501,7 @@ class ModelDownloadService extends ChangeNotifier {
         // (load-time rehydration covers any residual plugin-side
         // finalization).
         await Future.delayed(const Duration(seconds: 2));
-        await _dao.setModelReady(modelType: _modelType);
+        await _dao.setModelReady(modelType: spec.identity);
         _status = ModelStatus.ready;
         if (kDebugMode) {
           debugPrint(
@@ -568,14 +689,19 @@ class ModelDownloadService extends ChangeNotifier {
   static Future<bool> ensureModelActive() async {
     await _migrateStaleAssetIfPresent();
     await _migrateLegacyAssetIfPresent();
+    await _migrateStrandedE2bAssetIfPresent();
     if (FlutterEdgeAi.hasActiveModel()) return true;
+    // The asset this device runs — the selection table decides. The
+    // message-only class has none: nothing can be rehydrated there.
+    final spec = await OfflineModelSpecTable.currentSpec();
+    if (spec == null) return false;
     try {
       await FlutterEdgeAi.installModel(
-            modelType: ModelType.gemma4,
-            fileType: ModelFileType.litertlm,
+            modelType: spec.modelType,
+            fileType: spec.fileType,
           )
           .fromNetwork(
-            resolvedModelUrl,
+            resolvedModelUrlFor(spec),
             token: AppConfig.hfToken.trim(),
             foreground: AppConfig.foregroundDownload,
           )

@@ -13,6 +13,7 @@ import '../../services/ai/ai_model.dart';
 import '../../services/ai/device_capabilities.dart';
 import '../../services/ai/gemma_service.dart';
 import '../../services/ai/model_download_service.dart';
+import '../../services/ai/offline_model_spec.dart';
 import '../../data/local/offline_model_dao.dart';
 import '../shared/offline_model_banner.dart';
 import '../ai/download_prompt_screen.dart';
@@ -638,11 +639,17 @@ class _ChatScreenState extends State<Chats> {
   /// The durable install marker decides (S7): an installed model always
   /// routes to RETRY LOAD. When the marker cannot be read, the service's
   /// own verdict is the fallback — a failed load must never leave the user
-  /// without an affordance. A device that cannot run the model has no
-  /// affordance at all (cycle-40 P1).
+  /// without an affordance. The per-device selection decides whether the
+  /// device has a model AT ALL (cycle-42 P2): the message-only class offers
+  /// NO affordance — no download, no retry (cycle-40 P1).
   Future<OfflineModelAction> _resolveOfflineAction(BuildContext context) async {
     final gemmaService = context.read<GemmaService>();
-    final compatible = await DeviceCapabilities.isOfflineAiSupported();
+    // The selection table: the message-only class has no model, so no
+    // download and no retry could ever succeed there. Every other class
+    // has an asset (the Qwen `.task` bundle) and keeps the normal
+    // affordances.
+    final selection = await OfflineModelSpecTable.resolve();
+    final compatible = selection.hasModel;
     try {
       final installed = await OfflineModelDao().isModelInstalled();
       return resolveOfflineModelAction(

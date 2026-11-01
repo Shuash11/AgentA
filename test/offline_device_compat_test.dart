@@ -3,10 +3,14 @@
 //
 // Two guarantees are locked here:
 //
-// 1. A device that cannot run the offline model (non-arm64) NEVER sees a
-//    download CTA and NEVER sees a retry — it sees one honest message on
-//    every offline surface (the app gate, the download screen, the chat
-//    card, the model picker).
+// 1. A device that cannot run the offline model NEVER sees a download CTA
+//    and NEVER sees a retry — it sees one honest message on every offline
+//    surface (the app gate, the download screen, the chat card, the model
+//    picker). Cycle-42 P2b re-keys that guarantee to the RAM floor: the
+//    ABI decides nothing about the selection any more (the MediaPipe
+//    `.task` engine is the multi-ABI engine), so the ONE requirement left
+//    is 4 GB of total memory — and the message says so, with no ABI
+//    mention.
 // 2. Every load failure persists its CLASS (unsupportedAbi / notInstalled /
 //    file / engineInit / unknown). A shipped build tree-shakes every
 //    raw-exception log, so the persisted class is the only field-visible
@@ -16,6 +20,9 @@
 // * The DB is opened with `databaseFactoryFfiNoIsolate`: the isolate-backed
 //   factory's futures never resolve inside testWidgets' fake-async zone.
 // * The legacy-asset probe is stubbed so no plugin call is attempted.
+// * The RAM verdict is stubbed: the total-memory read is an ANDROID fact,
+//   so an unstubbed host could not report RAM and would fail the floor —
+//   every surface test states the RAM it simulates.
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -40,6 +47,7 @@ import 'package:aiproject/services/ai/groq_service.dart';
 import 'package:aiproject/services/ai/huggingface_image_service.dart';
 import 'package:aiproject/services/ai/model_download_service.dart';
 import 'package:aiproject/services/ai/offline_ai_service.dart';
+import 'package:aiproject/services/ai/offline_model_spec.dart';
 import 'package:aiproject/services/ai/online_ai_service.dart';
 import 'package:aiproject/services/ai/openrouter_service.dart';
 import 'package:aiproject/services/ai/pollinations_service.dart';
@@ -228,7 +236,7 @@ void main() {
         OfflineModelFailureClass.unsupportedAbi,
       );
 
-      await dao.setModelReady(modelType: 'gemma-4-e2b-it');
+      await dao.setModelReady(modelType: OfflineModelSpecTable.appIdentity);
       expect(await dao.getFailureClass(), isNull);
     });
 
@@ -303,12 +311,19 @@ void main() {
       // No plugin call: the legacy asset is absent on this device.
       ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
           false;
+      ModelDownloadService.e2bAssetPresentOverrideForTest = () async => false;
+      // The default device clears the 4 GB RAM floor — it may run the
+      // offline model. A test that simulates a below-floor device lowers it.
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          6 * 1024 * 1024 * 1024;
     });
 
     tearDown(() async {
       ModelDownloadService.legacyAssetPresentOverrideForTest = null;
+      ModelDownloadService.e2bAssetPresentOverrideForTest = null;
       ModelDownloadService.uninstallOverrideForTest = null;
       DeviceCapabilities.offlineAiSupportedOverrideForTest = null;
+      DeviceCapabilities.totalMemoryOverrideForTest = null;
       await connectivity.close();
       await theme.close();
       modelDownload.dispose();
@@ -331,10 +346,13 @@ void main() {
       );
     }
 
-    testWidgets('an incompatible device sees the message and NO retry', (
+    testWidgets('a device below the RAM floor sees the message and NO retry', (
       tester,
     ) async {
-      DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => false;
+      // The ONE requirement left (plan §4.9): 4 GB of total memory. The
+      // ABI is irrelevant here — the RAM floor is the whole table.
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          2 * 1024 * 1024 * 1024;
 
       await tester.pumpWidget(buildGate());
 
@@ -351,27 +369,32 @@ void main() {
       expect(find.text('Failed to load offline model'), findsNothing);
     });
 
-    testWidgets('an incompatible device never reaches the download gate', (
+    testWidgets(
+      'a device below the RAM floor never reaches the download gate',
+      (tester) async {
+        DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+            2 * 1024 * 1024 * 1024;
+
+        await tester.pumpWidget(buildGate());
+
+        await _pumpUntilFound(
+          tester,
+          find.text(DeviceCapabilities.incompatibleDeviceMessage),
+        );
+        // No download offer: the 1.6 GB transfer would be wasted here.
+        expect(find.byType(DownloadPromptScreen), findsNothing);
+        expect(find.text('Download Offline AI'), findsNothing);
+        expect(find.text('Model size: ~1.6GB'), findsNothing);
+        // The app child is not revealed either: the gate is mandatory.
+        expect(find.byKey(_appChildKey), findsNothing);
+      },
+    );
+
+    testWidgets('a device below the RAM floor never attempts a load', (
       tester,
     ) async {
-      DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => false;
-
-      await tester.pumpWidget(buildGate());
-
-      await _pumpUntilFound(
-        tester,
-        find.text(DeviceCapabilities.incompatibleDeviceMessage),
-      );
-      // No download offer: the 2.59 GB transfer would be wasted here.
-      expect(find.byType(DownloadPromptScreen), findsNothing);
-      expect(find.text('Download Offline AI'), findsNothing);
-      expect(find.text('Model size: ~2.6GB'), findsNothing);
-      // The app child is not revealed either: the gate is mandatory.
-      expect(find.byKey(_appChildKey), findsNothing);
-    });
-
-    testWidgets('an incompatible device never attempts a load', (tester) async {
-      DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => false;
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          2 * 1024 * 1024 * 1024;
       var attempts = 0;
       gemmaService.chatOverrideForTest = () async {
         attempts++;
@@ -387,39 +410,61 @@ void main() {
       expect(attempts, 0);
     });
 
-    testWidgets('a compatible device keeps the P6 retry surface', (
+    testWidgets(
+      'a device that clears the RAM floor keeps the P6 retry surface',
+      (tester) async {
+        // The install wrote the ready row (with the download marker).
+        await dao.setModelReady(modelType: OfflineModelSpecTable.appIdentity);
+        gemmaService.chatOverrideForTest = () async =>
+            throw Exception('engine init');
+
+        await tester.pumpWidget(buildGate());
+
+        await _pumpUntilFound(
+          tester,
+          find.text('Failed to load offline model'),
+        );
+        expect(find.text('Retry'), findsOneWidget);
+        expect(
+          find.text(DeviceCapabilities.incompatibleDeviceMessage),
+          findsNothing,
+        );
+        expect(find.byType(DownloadPromptScreen), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'a device that clears the RAM floor with no model keeps the download gate',
+      (tester) async {
+        await tester.pumpWidget(buildGate());
+
+        await _pumpUntilFound(tester, find.byType(DownloadPromptScreen));
+        expect(find.byType(DownloadPromptScreen), findsOneWidget);
+        expect(
+          find.text(DeviceCapabilities.incompatibleDeviceMessage),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets('the ABI verdict does not change the selection any more', (
       tester,
     ) async {
+      // An arm64 device (the ABI the old table routed to E2B) now gets the
+      // Qwen flow exactly like every other device — the ABI is not a
+      // selection input (plan §4.9).
       DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => true;
-      // The install wrote the ready row (with the download marker).
-      await dao.setModelReady(modelType: 'gemma-4-e2b-it');
-      gemmaService.chatOverrideForTest = () async =>
-          throw Exception('engine init');
-
-      await tester.pumpWidget(buildGate());
-
-      await _pumpUntilFound(tester, find.text('Failed to load offline model'));
-      expect(find.text('Retry'), findsOneWidget);
-      expect(
-        find.text(DeviceCapabilities.incompatibleDeviceMessage),
-        findsNothing,
-      );
-      expect(find.byType(DownloadPromptScreen), findsNothing);
-    });
-
-    testWidgets('a compatible device with no model keeps the download gate', (
-      tester,
-    ) async {
-      DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => true;
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          6 * 1024 * 1024 * 1024;
 
       await tester.pumpWidget(buildGate());
 
       await _pumpUntilFound(tester, find.byType(DownloadPromptScreen));
       expect(find.byType(DownloadPromptScreen), findsOneWidget);
-      expect(
-        find.text(DeviceCapabilities.incompatibleDeviceMessage),
-        findsNothing,
-      );
+      // The chip renders once the screen's own selection resolves.
+      await _pumpUntilFound(tester, find.text('Model size: ~1.6GB'));
+      expect(find.text('Model size: ~1.6GB'), findsOneWidget);
+      expect(find.text('Model size: ~2.6GB'), findsNothing);
     });
   });
 
@@ -438,12 +483,19 @@ void main() {
       theme = ThemeCubit();
       ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
           false;
+      ModelDownloadService.e2bAssetPresentOverrideForTest = () async => false;
+      // The default device clears the 4 GB RAM floor — it may run the
+      // offline model.
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          6 * 1024 * 1024 * 1024;
     });
 
     tearDown(() async {
       ModelDownloadService.legacyAssetPresentOverrideForTest = null;
+      ModelDownloadService.e2bAssetPresentOverrideForTest = null;
       ModelDownloadService.uninstallOverrideForTest = null;
       DeviceCapabilities.offlineAiSupportedOverrideForTest = null;
+      DeviceCapabilities.totalMemoryOverrideForTest = null;
       await connectivity.close();
       await theme.close();
       modelDownload.dispose();
@@ -464,31 +516,34 @@ void main() {
       );
     }
 
-    testWidgets('an incompatible device sees the message and NO download CTA', (
+    testWidgets(
+      'a device below the RAM floor sees the message and NO download CTA',
+      (tester) async {
+        DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+            2 * 1024 * 1024 * 1024;
+
+        await tester.pumpWidget(buildDownloadScreen());
+
+        await _pumpUntilFound(
+          tester,
+          find.text(DeviceCapabilities.incompatibleDeviceMessage),
+        );
+        expect(
+          find.text(DeviceCapabilities.incompatibleDeviceMessage),
+          findsOneWidget,
+        );
+        // No download affordance at all.
+        expect(find.text('Download Offline AI'), findsNothing);
+        expect(find.text('Model size: ~1.6GB'), findsNothing);
+        expect(find.byType(ElevatedButton), findsNothing);
+      },
+    );
+
+    testWidgets('a device below the RAM floor never starts the download', (
       tester,
     ) async {
-      DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => false;
-
-      await tester.pumpWidget(buildDownloadScreen());
-
-      await _pumpUntilFound(
-        tester,
-        find.text(DeviceCapabilities.incompatibleDeviceMessage),
-      );
-      expect(
-        find.text(DeviceCapabilities.incompatibleDeviceMessage),
-        findsOneWidget,
-      );
-      // No download affordance at all.
-      expect(find.text('Download Offline AI'), findsNothing);
-      expect(find.text('Model size: ~2.6GB'), findsNothing);
-      expect(find.byType(ElevatedButton), findsNothing);
-    });
-
-    testWidgets('an incompatible device never starts the download', (
-      tester,
-    ) async {
-      DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => false;
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          2 * 1024 * 1024 * 1024;
 
       await tester.pumpWidget(buildDownloadScreen());
 
@@ -501,17 +556,100 @@ void main() {
       expect(modelDownload.progress, 0.0);
     });
 
-    testWidgets('a compatible device keeps the download offer', (tester) async {
-      DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => true;
-
+    testWidgets('every device class keeps the download offer', (tester) async {
       await tester.pumpWidget(buildDownloadScreen());
 
-      await _pumpUntilFound(tester, find.text('Model size: ~2.6GB'));
+      await _pumpUntilFound(tester, find.text('Model size: ~1.6GB'));
       expect(
         find.text(DeviceCapabilities.incompatibleDeviceMessage),
         findsNothing,
       );
-      expect(find.text('Model size: ~2.6GB'), findsOneWidget);
+      // The ~1.6GB chip is UNIVERSAL (contract §6): the E2B chip is gone
+      // with the E2B class.
+      expect(find.text('Model size: ~1.6GB'), findsOneWidget);
+      expect(find.text('Model size: ~2.6GB'), findsNothing);
+    });
+
+    testWidgets(
+      'an arm64 device offers the SAME Qwen bundle with the ~1.6GB chip',
+      (tester) async {
+        // The ABI is NOT a selection input any more (plan §4.9): the arm64
+        // device that the old table routed to E2B gets the Qwen `.task`
+        // bundle — the MediaPipe `.task` engine is the multi-ABI engine.
+        DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => true;
+        DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+            6 * 1024 * 1024 * 1024;
+
+        await tester.pumpWidget(buildDownloadScreen());
+
+        await _pumpUntilFound(tester, find.text('Model size: ~1.6GB'));
+        expect(find.text('Model size: ~1.6GB'), findsOneWidget);
+        // The E2B chip never appears anywhere.
+        expect(find.text('Model size: ~2.6GB'), findsNothing);
+        expect(
+          find.text(DeviceCapabilities.incompatibleDeviceMessage),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets('the message-only class sees the honest message and NO chip', (
+      tester,
+    ) async {
+      // A device BELOW the 4 GB RAM floor.
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          2 * 1024 * 1024 * 1024;
+
+      await tester.pumpWidget(buildDownloadScreen());
+
+      await _pumpUntilFound(
+        tester,
+        find.text(DeviceCapabilities.incompatibleDeviceMessage),
+      );
+      expect(
+        find.text(DeviceCapabilities.incompatibleDeviceMessage),
+        findsOneWidget,
+      );
+      // No size chip and no download affordance at all.
+      expect(find.text('Model size: ~1.6GB'), findsNothing);
+      expect(find.text('Model size: ~2.6GB'), findsNothing);
+      expect(find.text('Download Offline AI'), findsNothing);
+      expect(find.byType(ElevatedButton), findsNothing);
+    });
+
+    testWidgets('a device with UNREADABLE RAM gets the honest message', (
+      tester,
+    ) async {
+      // The fail-closed rule (S8): a device that cannot report its RAM is
+      // not offered the asset.
+      DeviceCapabilities.totalMemoryOverrideForTest = () async => null;
+
+      await tester.pumpWidget(buildDownloadScreen());
+
+      await _pumpUntilFound(
+        tester,
+        find.text(DeviceCapabilities.incompatibleDeviceMessage),
+      );
+      expect(
+        find.text(DeviceCapabilities.incompatibleDeviceMessage),
+        findsOneWidget,
+      );
+      expect(find.text('Model size: ~1.6GB'), findsNothing);
+      expect(find.text('Download Offline AI'), findsNothing);
+    });
+
+    test('the honest message states the RAM reason and no ABI', () {
+      // The wording is GENERALIZED to the RAM reason (plan §4.9): the ABI
+      // decides nothing about the selection, so it is not mentioned.
+      expect(DeviceCapabilities.incompatibleDeviceMessage, contains('4 GB'));
+      expect(
+        DeviceCapabilities.incompatibleDeviceMessage,
+        isNot(contains('ARM')),
+      );
+      expect(
+        DeviceCapabilities.incompatibleDeviceMessage,
+        isNot(contains('arm64')),
+      );
     });
   });
 
@@ -579,9 +717,179 @@ void main() {
     });
   });
 
-  group('the model picker tile (cycle-40 P1)', () {
+  group('the one-class selection table (cycle-42 P2b)', () {
+    test('EVERY device class resolves to the single Qwen spec', () {
+      // ONE selection key (the RAM verdict): the ABI decides nothing
+      // (plan §4.9), so there is no ABI input to the table at all.
+      expect(
+        OfflineModelSpecTable.resolveClass(hasMemoryCapacity: true),
+        OfflineModelClass.singleQwen,
+      );
+      expect(
+        OfflineModelSpecTable.specFor(OfflineModelClass.singleQwen),
+        OfflineModelSpecTable.qwen15b,
+      );
+      final spec = OfflineModelSpecTable.specFor(OfflineModelClass.singleQwen)!;
+      expect(spec.identity, 'qwen2.5-1.5b-it');
+      expect(spec.modelType, ModelType.qwen);
+      expect(spec.fileType, ModelFileType.task);
+      expect(
+        spec.url,
+        'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task',
+      );
+      expect(spec.sizeChip, 'Model size: ~1.6GB');
+    });
+
+    test('a device below the floor gets NO model at all', () {
+      expect(
+        OfflineModelSpecTable.resolveClass(hasMemoryCapacity: false),
+        OfflineModelClass.messageOnly,
+      );
+      expect(
+        OfflineModelSpecTable.specFor(OfflineModelClass.messageOnly),
+        isNull,
+      );
+    });
+
+    test('the E2B asset left the table — only its uninstall id survives', () {
+      final table = File(
+        'lib/services/ai/offline_model_spec.dart',
+      ).readAsStringSync();
+      // No E2B row survives in the selection table: the asset is offered on
+      // NO device any more (plan §4.9).
+      expect(table, isNot(contains('gemma-4-e2b-it')));
+      expect(table, isNot(contains('ModelType.gemma4')));
+      expect(table, isNot(contains('ModelFileType.litertlm')));
+      expect(table, isNot(contains('gemma-4-E2B-it.litertlm')));
+      expect(table, isNot(contains('~2.6GB')));
+
+      // The uninstall id survives ONLY where migration v4 needs it.
+      final service = File(
+        'lib/services/ai/model_download_service.dart',
+      ).readAsStringSync();
+      expect(
+        service,
+        contains("_e2bModelFileName = 'gemma-4-E2B-it.litertlm'"),
+      );
+      // The E2B identity survives nowhere: the app's identity is Qwen-wide.
+      expect(service, isNot(contains('gemma-4-e2b-it')));
+    });
+
+    test('the identity is app-wide — the message-only row carries it too', () {
+      expect(OfflineModelSpecTable.appIdentity, 'qwen2.5-1.5b-it');
+      expect(OfflineModelSpecTable.qwen15b.identity, 'qwen2.5-1.5b-it');
+      // The identity string is written ONCE in the whole app — the spec
+      // table (contract §2 identity_invariant).
+      final table = File(
+        'lib/services/ai/offline_model_spec.dart',
+      ).readAsStringSync();
+      expect("'qwen2.5-1.5b-it'".allMatches(table).length, 1);
+    });
+
     test(
-      'an incompatible device carries the message and offers no download',
+      'the RAM floor is exactly 4 GB and an unreadable size never clears it',
+      () {
+        expect(
+          DeviceCapabilities.minimumTotalMemoryBytes,
+          4 * 1024 * 1024 * 1024,
+        );
+        expect(
+          DeviceCapabilities.clearsMemoryFloor(4 * 1024 * 1024 * 1024),
+          isTrue,
+        );
+        expect(
+          DeviceCapabilities.clearsMemoryFloor(4 * 1024 * 1024 * 1024 - 1),
+          isFalse,
+        );
+        expect(DeviceCapabilities.clearsMemoryFloor(null), isFalse);
+      },
+    );
+
+    test('the device resolution follows the table', () async {
+      // An arm64 device (the class the old table routed to E2B) now gets
+      // the Qwen spec — the ABI is not consulted for the selection.
+      DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => true;
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          6 * 1024 * 1024 * 1024;
+      final arm64 = await OfflineModelSpecTable.resolve();
+      expect(arm64.deviceClass, OfflineModelClass.singleQwen);
+      expect(arm64.spec, OfflineModelSpecTable.qwen15b);
+      expect(arm64.hasModel, isTrue);
+      expect(arm64.isMessageOnly, isFalse);
+
+      // A non-arm64 device with 6 GB → the SAME spec.
+      DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => false;
+      final nonArm64 = await OfflineModelSpecTable.resolve();
+      expect(nonArm64.deviceClass, OfflineModelClass.singleQwen);
+      expect(nonArm64.spec, OfflineModelSpecTable.qwen15b);
+      expect(nonArm64.hasModel, isTrue);
+      expect(nonArm64.isMessageOnly, isFalse);
+
+      // 2 GB → the message-only class (no model).
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          2 * 1024 * 1024 * 1024;
+      final messageOnly = await OfflineModelSpecTable.resolve();
+      expect(messageOnly.deviceClass, OfflineModelClass.messageOnly);
+      expect(messageOnly.spec, isNull);
+      expect(messageOnly.hasModel, isFalse);
+      expect(messageOnly.isMessageOnly, isTrue);
+
+      // Unreadable RAM → the message-only class too (the fail-closed rule).
+      DeviceCapabilities.totalMemoryOverrideForTest = () async => null;
+      final unreadable = await OfflineModelSpecTable.resolve();
+      expect(unreadable.deviceClass, OfflineModelClass.messageOnly);
+      expect(unreadable.spec, isNull);
+      expect(unreadable.hasModel, isFalse);
+
+      DeviceCapabilities.offlineAiSupportedOverrideForTest = null;
+      DeviceCapabilities.totalMemoryOverrideForTest = null;
+    });
+
+    test('the chat card offers the download on the selection class', () {
+      // The selection decides whether the device has a model at all: the
+      // selection class HAS one, so the card keeps the download affordance
+      // (only the message-only class has none).
+      final selectionClass = OfflineModelSpecTable.resolveClass(
+        hasMemoryCapacity: true,
+      );
+      expect(
+        resolveOfflineModelAction(
+          state: OfflineModelState.modelMissing,
+          isInstalled: false,
+          isDeviceCompatible: selectionClass != OfflineModelClass.messageOnly,
+        ),
+        OfflineModelAction.getModel,
+      );
+
+      final messageOnlyClass = OfflineModelSpecTable.resolveClass(
+        hasMemoryCapacity: false,
+      );
+      expect(
+        resolveOfflineModelAction(
+          state: OfflineModelState.modelMissing,
+          isInstalled: false,
+          isDeviceCompatible: messageOnlyClass != OfflineModelClass.messageOnly,
+        ),
+        OfflineModelAction.incompatibleDevice,
+      );
+    });
+  });
+
+  group('the model picker tile (cycle-40 P1)', () {
+    setUp(() {
+      // The default device clears the 4 GB RAM floor — it may run the
+      // offline model.
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          6 * 1024 * 1024 * 1024;
+    });
+
+    tearDown(() {
+      DeviceCapabilities.offlineAiSupportedOverrideForTest = null;
+      DeviceCapabilities.totalMemoryOverrideForTest = null;
+    });
+
+    test(
+      'a device below the RAM floor carries the message and offers no download',
       () {
         final state = offlineTileUnavailableState(isDeviceCompatible: false);
         expect(state.subtitle, DeviceCapabilities.incompatibleDeviceMessage);
@@ -589,17 +897,20 @@ void main() {
       },
     );
 
-    test('a compatible device keeps the download invitation', () {
-      final state = offlineTileUnavailableState(isDeviceCompatible: true);
-      expect(state.subtitle, 'Download to use offline');
-      expect(state.canDownload, isTrue);
-    });
+    test(
+      'a device that clears the RAM floor keeps the download invitation',
+      () {
+        final state = offlineTileUnavailableState(isDeviceCompatible: true);
+        expect(state.subtitle, 'Download to use offline');
+        expect(state.canDownload, isTrue);
+      },
+    );
 
     testWidgets(
-      'the offline tile shows the message on an incompatible device',
+      'the offline tile shows the message on a device below the RAM floor',
       (tester) async {
-        DeviceCapabilities.offlineAiSupportedOverrideForTest = () async =>
-            false;
+        DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+            2 * 1024 * 1024 * 1024;
         var downloadRequested = false;
 
         await tester.pumpWidget(
@@ -640,10 +951,8 @@ void main() {
     );
 
     testWidgets(
-      'the offline tile keeps the download invitation on a compatible device',
+      'the offline tile keeps the download invitation on a device that clears the RAM floor',
       (tester) async {
-        DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => true;
-
         await tester.pumpWidget(
           MaterialApp(
             home: Builder(

@@ -1,4 +1,5 @@
 import 'package:sqflite/sqflite.dart';
+import '../../services/ai/offline_model_spec.dart';
 import 'database_helper.dart';
 
 enum ModelDbStatus { notInstalled, ready, error, skipped }
@@ -53,13 +54,21 @@ class OfflineModelDao {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<void> setModelNotInstalled() async {
+  /// Records that the model is NOT installed.
+  ///
+  /// The row's identity is the app's offline-model identity (the spec table
+  /// is the only place the identity string is written — contract §2): it is
+  /// `qwen2.5-1.5b-it` APP-WIDE, the message-only class included — the
+  /// identity is the app's offline-model NAME, not the installed asset. A
+  /// caller that already knows the identity may pass it explicitly;
+  /// otherwise the app-wide identity is recorded.
+  Future<void> setModelNotInstalled({String? modelType}) async {
     final db = await _dbHelper.database;
     final now = DateTime.now().millisecondsSinceEpoch;
 
     await db.insert(_tableName, {
       'id': _singleRowId,
-      'model_type': 'gemma-4-e2b-it',
+      'model_type': modelType ?? OfflineModelSpecTable.appIdentity,
       'status': ModelDbStatus.notInstalled.name,
       'downloaded_at': null,
       'file_path': null,
@@ -78,14 +87,17 @@ class OfflineModelDao {
   /// would strand the user behind a spurious 2.6 GB re-download. An error row
   /// WITHOUT a download marker means the download itself failed, so the model
   /// is genuinely not installed.
-  Future<void> setModelError(String? errorMessage) async {
+  ///
+  /// The row's identity is the app's offline-model identity (contract §2),
+  /// the same rule [setModelNotInstalled] follows.
+  Future<void> setModelError(String? errorMessage, {String? modelType}) async {
     final db = await _dbHelper.database;
     final now = DateTime.now().millisecondsSinceEpoch;
     final current = await getModelStatus();
 
     await db.insert(_tableName, {
       'id': _singleRowId,
-      'model_type': 'gemma-4-e2b-it',
+      'model_type': modelType ?? OfflineModelSpecTable.appIdentity,
       'status': ModelDbStatus.error.name,
       'downloaded_at': current?['downloaded_at'],
       'file_path': current?['file_path'],

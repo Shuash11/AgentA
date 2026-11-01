@@ -1,0 +1,594 @@
+# Offline-model contract — Qwen 2.5 1.5B Instruct via the MediaPipe .task engine (cycle-42 P1)
+#
+# Single source of truth for the app's OFFLINE MODEL (cycle-42): v1.0.0
+# recorded the per-device FALLBACK class implemented by P2; the v1.1.0
+# amendment (plan §4.9) collapses selection to THIS ONE spec for every
+# device — "make the qwen the main model offline" — consumed by P2b and P3
+# (evidence). Authoritative file — code, comments and delegation prompts are
+# never the contract. No second copy exists anywhere. A reader implements
+# P2b from this file (as amended) plus offline-model-e2b.yaml (v1.3.0) alone,
+# without touching the web (the plan §5-P1 item 8c discipline; plan §5-P2b
+# carries the mechanical checklist and test list). Every figure cites
+# plans/cycle-42 §1/§4 — all plan figures verified live 2026-10-31 (plan §1
+# search-or-skip record); the code sites cited were re-verified against the
+# tree at recording time (2026-10-31) — line anchors are as-of that read and
+# P2 re-verifies them at implementation (the cycle-38 anchor-drift
+# precedent, E2B contract §5 download_service_comment).
+#
+# Recorded 2026-10-31 (cycle-42 P1, contractor) — initial recording v1.0.0.
+# No secret material: token VALUES never appear here; only config KEY names
+# (GEMMA_MODEL_URL / HF_TOKEN as dart-define keys via AppConfig). The Qwen
+# asset needs NO HF token (plan §4.7) and the token threading stays
+# no-op-preserving per the E2B contract §1 token_threading.
+
+contract: offline-model-qwen15b
+version: 1.1.0
+status: active
+# v1.1.0 (2026-10-31, cycle-42 §4.9 lived-evidence amendment, contractor):
+# the Adviser's amendment ruling — the user directive (VERBATIM): "make the
+# qwen the main model offline" — with the lived evidence: v1.8.2 on the
+# user's arm64 phone routed them to the E2B .litertlm asset and the
+# LiteRT-LM engine failed to load (download complete → load failed; user
+# report 2026-10-31; the full two-input record with the verbatim diagnostic
+# quotes is plans/cycle-42 §4.9 + the §11 governance row). Cycle-38's S4
+# condition FIRED on lived evidence; the F7 pre-authorization to the Qwen
+# .task row is INVOKED. Changes (§3/§4 + this record only): §3 selection
+# COLLAPSED to ONE class — the universal Qwen spec for EVERY device (any
+# ABI) with totalMem >= 4 GB, plus the RAM-floor message-only row; ABI is
+# NO LONGER CONSULTED FOR SELECTION (the unsupportedAbi failure-class
+# mapping STAYS in code — rarely-reachable, zero-risk); the unreadable-RAM
+# fail-closed is KEPT; the message-only identity is 'qwen2.5-1.5b-it'
+# APP-WIDE (the app's offline-model name, not the installed asset); §4
+# migration v4 WIDENED — fires for ANY stranded E2B asset (the
+# capability-verdict clause DELETED); E2B EXITS SELECTION ENTIRELY (the
+# exit record: offline-model-e2b.yaml v1.3.0 §11). §1/§2/§5/§6/§7 are
+# unchanged — the §3 supersedes record names the per-class phrasing those
+# sections carry as superseded (no figure, string, or anchor change there).
+# Consumers: P2b consumes the amended table per plans/cycle-42 §5-P2b; no
+# consumer break beyond the ruled semantics.
+
+# §1  asset_identity — the fallback artifact and its verified provenance (plan §1.2 verbatim)
+# §2  engine_contract — ModelType.qwen + ModelFileType.task on the EXISTING MediaPipeEngine; install/load shapes; identity
+# §3  selection_table — the binding ONE-class RAM-floor table (plan §4.9 amendment; supersedes §4.3's two-key matrix)
+# §4  migration_v4 — model_asset_v4 marker; the WIDENED stranded-E2B uninstall — ANY stranded E2B asset (plan §4.4 as widened by §4.9)
+# §5  ram_budget — vendor peak RSS vs the 4 GB floor and the ≤ 6 GB cap (plan §1.2)
+# §6  ux_copy — the strings P2 implements verbatim (plan §4.5)
+# §7  error_surface — reused classes, no new branches, the per-class override caveat
+# §8  acceptance_criteria — P1's own gate (a-d) + the P2 invariants this contract pins
+
+# ---------------------------------------------------------------------------
+# 1. Asset identity (verified live: HF API GET /api/models/…?blobs=true,
+#    fetched 2026-10-31 — plan §1.2 verbatim; candidate ruling plan §4.1)
+# ---------------------------------------------------------------------------
+
+asset_identity:
+  repo: litert-community/Qwen2.5-1.5B-Instruct                          # HF API, plan §1.2
+  file: Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task         # plan §1.2
+  install_url: >-
+    https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task
+  size_bytes: 1598556720                                                # ≈1.60 GB — plan §1.2 (HF API blob size; §1.1 row "1.6 GB")
+  sha256: 82968d0a6c3872cf016fdbcfc591571605f4c7fd2b0f64d2533df502cc6596b3   # plan §1.2 (HF API)
+  gated: false                                                          # no license gate — plan §1.2
+  license: apache-2.0                                                   # plan §1.2
+  last_modified: "2026-10-25"                                           # plan §1.2 (HF API)
+  downloads_context: 89186                                              # plan §1.2 — catalog context only, not consumed
+  hf_token_required: false                                              # plan §1.2 + §4.7 — no token surface this cycle
+  token_threading: >-
+    Both install chains KEEP passing token: AppConfig.hfToken.trim()
+    exactly as the E2B contract §1 token_threading records: passing a token
+    to an ungated repo is a no-op, and it keeps GEMMA_MODEL_URL overrides
+    functional against gated assets (e.g. ladder rungs). No new secret
+    surface (plan §4.7: no security phase — the Qwen asset needs NO HF token).
+  build_rationale: >-
+    WHY the q8_ekv4096 build (plan §1.2): the repo ships f32 (~6.18 GB —
+    rejected), q8_ekv1280 (1,597,913,616 B) and q8_ekv4096 (the file above).
+    The suffix is the bundle's KV-cache ceiling: ekv1280 = a 1280-token
+    context, ekv4096 = 4096. The app installs maxTokens: 2048 (§2
+    load_shape; plan §4.6), which EXCEEDS the ekv1280 ceiling — the ekv4096
+    build is therefore MANDATORY, and maxTokens stays 2048 (dropping the
+    context to 1280 to save a 0.6 MB file difference — 1,598,556,720 −
+    1,597,913,616 = 643,104 B — would be a behavior regression; rejected,
+    plan §1.2).
+  not_for_this_path: >-
+    The repo also ships: the f32 builds (~6.18 GB — over the ~2.5–3 GB
+    ceiling, plan §1.2); the q8_ekv1280 build (1,597,913,616 B — its
+    1280-token KV ceiling is BELOW maxTokens 2048, plan §1.2); and the
+    .litertlm variants (the WRONG ENGINE CLASS for this fallback path — the
+    litertlm engine is the arm64-only stack this cycle routes AROUND, plan
+    §1.1/§1.4; its Jinja template also carries the empty-preface defect,
+    plan §1.2 known-issue scan — not the .task file this contract installs).
+  provenance_note: >-
+    Selected from the plan §1.1 catalog survey (every mobile-✅ .task model
+    in litert-community, 2026-10-31) as the best-balanced candidate within
+    every binding constraint (plan §4.1): capability step-up vs the
+    rejected 1B class ✓ (the user's directive), 1.60 GB < the tolerated
+    2.59 GB ✓, ungated ✓, multilingual + function calling ✓, peak RSS ≈
+    2.2 GB ≤ 6 GB ✓. Repo-state context (plan §1.2): snapshot sha prefix
+    2f23bacf…, lastModified 2026-10-25. NOT selected (plan §1.1 verdict
+    column): Phi-4 Mini 3.9 GB (over ceiling), Gemma3n E2B/E4B 3.1/4.4 GB
+    (over ceiling + gated), Gemma 3 1B 0.5 GB (capability rejected — ladder
+    rung (c) only), the 0.17–0.3 GB micro class (below the capability
+    floor), the Gemma 4 E2B/E4B .task pair (web-only, ❌ Android MediaPipe).
+  fallback_ladder: >-
+    STOP-rule ladder ONLY — no rung is installed by this contract; invoked
+    per plan §4.1 only if the primary is rejected in practice (plan §6;
+    backlog F6/F7): (a) litert-community/DeepSeek-R1-Distill-Qwen-1.5B,
+    DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.task,
+    1,834,078,546 B ≈ 1.86 GB, gated: false, MIT, lastModified 2026-10-19 —
+    the math/reasoning specialist; its think-tag stripping is verified in
+    pinned core (plan §1.3a/§1.6); benchmark numbers are UNVERIFIED this
+    session (plan §1.3a records the class, not the scores). (b) Qwen 2.5
+    0.5B Instruct .task, ~0.5 GB, ungated — the under-floor degradation
+    rung; exact filename UNVERIFIED — verify at invoke time (the cycle-38
+    ladder convention, plan §1.3b). (c) litert-community/Gemma3-1B-IT,
+    gemma3-1b-it-int4.task, 0.5 GB, gated — the PROVEN file (shipped
+    v1.7.x); last resort ONLY on explicit user ask (plan §1.3c).
+  env_override: >-
+    GEMMA_MODEL_URL (dart-define → AppConfig.gemmaModelUrl,
+    app_config.dart:17/:61 — verified 2026-10-31; override seam
+    model_download_service.dart:95) now applies PER-CLASS — see §7
+    override_caveat_amended (the amended successor of the E2B contract §7
+    f13_override_caveat).
+
+# ---------------------------------------------------------------------------
+# 2. Engine contract (plan §5-P1 item 2 + §1.6 + §4.6; code sites
+#    re-verified 2026-10-31)
+# ---------------------------------------------------------------------------
+
+engine_contract:
+  engine: MediaPipeEngine
+  engine_registration: >-
+    UNCHANGED — lib/main.dart:180 already registers BOTH engines since
+    cycle-38 ("inferenceEngines: const [MediaPipeEngine(),
+    LiteRtLmEngine()]", verified 2026-10-31); NO engine-registration change
+    this cycle (plan §1.6, §5-P1 item 2). MediaPipeEngine claims this spec.
+  engine_choice_rationale: >-
+    the MediaPipe .task engine is the only engine PROVEN on the user's
+    (non-arm64) device class — the old 1B .task ran fine there while the
+    LiteRT-LM stack is PROVEN-BROKEN there (arm64-only native stack,
+    litertlm 1.8.6, cycle-40; plan header constraint 3, §1.4). The cycle-40
+    byte-scan proves the MediaPipe llm jni ships for armeabi-v7a AND x86_64
+    — .task is the multi-ABI engine (plan §1.6).
+  model_type: ModelType.qwen            # pinned core 1.11.4 — pub-cache flutter_edge_ai-1.11.4/lib/core/model.dart:6 (plan §1.6); the plugin docs' ModelType table maps Qwen 2.5 → ModelType.qwen (plan §1.6)
+  file_type: ModelFileType.task         # ".task files — MediaPipe handles chat templates internally" (pinned core model.dart:15, plan §1.6); selects the ENGINE — never inferred from a filename (the E2B contract §2 file_type discipline carries)
+  enum_completeness: >-
+    the pinned core enum (general, gemmaIt, gemma4, deepSeek, qwen, qwen3,
+    llama, hammer, functionGemma, phi) already contains BOTH values — NO
+    package change (plan §1.6).
+  dependency: NONE_ADDED
+  dependency_note: >-
+    no new package enters pubspec; the three engine pins stay untouched —
+    flutter_edge_ai ^1.11.4 (:21), flutter_edge_ai_mediapipe ^1.0.8 (:22),
+    flutter_edge_ai_litertlm 1.8.6 (:24) (pubspec.yaml, verified
+    2026-10-31; plan §1.6). Divergence = STOP S1 (plan §6).
+  install_shape: >-
+    MIRRORS the E2B contract §2 install_shape with the SPEC-DRIVEN
+    substitution: BOTH install chains (lib/services/ai/
+    model_download_service.dart:344-345 and :574-575 — currently hardcoded
+    ModelType.gemma4 + ModelFileType.litertlm, verified 2026-10-31) take
+    the SELECTED spec's modelType/fileType — for THIS class: ModelType.qwen
+    + ModelFileType.task. token/foreground/progress/cancel wiring
+    unchanged (token stays AppConfig.hfToken.trim() — a no-op on this
+    ungated repo, §1 token_threading; foreground
+    AppConfig.foregroundDownload; progress/cancel per the existing chain).
+  load_shape: >-
+    UNCHANGED for both classes (plan §4.6): FlutterEdgeAi.getActiveModel(
+    maxTokens: 2048, preferredBackend: PreferredBackend.cpu) —
+    gemma_service.dart:200-201 (_maxTokens = 2048 at :67, CPU at :201,
+    verified 2026-10-31) — and the createChat sampler parameters
+    (temperature 0.3, randomSeed 1, topK 30, topP 0.85, systemInstruction
+    _systemInstruction — gemma_service.dart:71/:209) are UNCHANGED. The
+    60-min _installTimeout ceiling (model_download_service.dart:47; plan
+    §1.6 (:47), §2 F12 — ample for 1.6 GB ≈ 18 min at 1.5 MB/s) and the
+    3-min stall watchdog are reused as-is.
+  max_tokens_semantics: >-
+    maxTokens: 2048 is the context window and stays 2048 BECAUSE the
+    installed build is ekv4096 (KV ceiling 4096 ≥ 2048 — no clamp); the
+    ekv1280 variant's 1280 ceiling would clamp a 2048 window — the reason
+    §1 build_rationale fixes the build (plan §1.2, §4.6).
+  thinking_filter: >-
+    ModelThinkingFilter is a NO-OP for this model — "Qwen2.5 emits
+    nothing" (pinned core source comment; the filter exists for the
+    DeepSeek/Qwen3 think tags — extensions.dart:252-523 + chat.dart:205/
+    :365-383, plan §1.5/§1.6). No thinking parameter is set; ladder rung
+    (a)'s think-tags are the only reason the filter exists (bounded by
+    core code).
+  system_prompt: >-
+    on .task, MediaPipe handles the chat template internally (pinned core
+    model.dart:15, plan §1.6); createChat(systemInstruction:
+    _systemInstruction) keeps its parameter and lands natively in the
+    template (the E2B contract §8 pattern carries; the app ALWAYS carries
+    a system instruction — gemma_service.dart:71 _systemInstruction — so
+    the litertlm empty-preface defect is not our path, plan §1.2). NO code
+    change to the system-instruction path.
+  identity_string: qwen2.5-1.5b-it      # plan §4.1/§4.3
+  identity_sites:                       # the four-site invariant of the E2B contract §2 — NOW SPEC-DRIVEN, never hardcoded twice (plan §5-P1 item 2); anchors verified 2026-10-31
+    - lib/services/ai/model_download_service.dart:77 (_modelType —
+      currently the hardcoded 'gemma-4-e2b-it'; becomes the SELECTED spec's
+      identity; feeds _dao.setModelReady(modelType: _modelType) at :362
+      and :383)
+    - lib/services/ai/gemma_service.dart:213 (currently the hardcoded
+      setModelReady(modelType: 'gemma-4-e2b-it'); becomes the SELECTED
+      spec's identity — plan §5-P2 item 5)
+    - lib/data/local/offline_model_dao.dart:62 (setModelNotInstalled's
+      'model_type' row — currently hardcoded; becomes spec-driven, plan
+      §5-P2 item 6)
+    - lib/data/local/offline_model_dao.dart:88 (setModelError's
+      'model_type' row — same)
+  identity_invariant: >-
+    all four sites carry the SELECTED spec's identity string —
+    'qwen2.5-1.5b-it' on the fallback class, 'gemma-4-e2b-it' on the E2B
+    class — with NO hardcoded duplicate: the spec table (§3 → the new
+    lib/services/ai/offline_model_spec.dart, plan §5-P2 item 3) is the
+    ONLY place the string is written; DAO/plugin identity and the DB must
+    not drift (the E2B contract §2 identity_invariant discipline; the
+    cycle-38 F5 lesson). Coherence is a P2 acceptance grep — plan §5-P2
+    criterion 5, plan §10 grep 1.
+
+# ---------------------------------------------------------------------------
+# 3. Selection table (plan §4.3 as AMENDED by §4.9 — BINDING; §5-P2b item 1;
+#    the lived-evidence directive collapsed the two-key matrix to ONE class)
+# ---------------------------------------------------------------------------
+
+selection_table:
+  amendment_record: >-
+    COLLAPSED by the Adviser's lived-evidence amendment (plan §4.9,
+    2026-10-31; §11 governance row): the user directive (VERBATIM) "make
+    the qwen the main model offline" — with the lived evidence: v1.8.2 on
+    the user's arm64 phone routed them to the E2B .litertlm asset and the
+    LiteRT-LM engine failed to load (download complete → load failed; the
+    full two-input record with the verbatim diagnostic quotes is plan
+    §4.9 + §11). Cycle-38's S4 condition FIRED on lived evidence; the F7
+    pre-authorization to the Qwen .task row is INVOKED. The v1.0.0
+    two-class table (arm64_primary / fallback_class) is COLLAPSED to one
+    selection class — the simplest table satisfying the tests' intent;
+    two classes with identical specs would be pure churn (plan §4.9).
+  shape: >-
+    ONE SELECTION CLASS, AUTOMATIC, RUNTIME SELF-REPORTING: the model spec
+    resolves ONCE per device from the EXISTING DeviceCapabilities seam
+    (lib/services/ai/device_capabilities.dart — the cached-verdict pattern,
+    verified 2026-10-31; plan §1.6). NO user input; NO dependency on
+    receiving device specs — each device self-reports totalMem at runtime.
+    P2's implemented machinery (spec table, totalMem read, v4, spec-driven
+    chains/identity/UI) is exactly what this single-spec ruling needs —
+    the amendment is the cheap reshaping of an already-built surface
+    (plan §4.9, §5-P2b).
+  keys: >-
+    ONE selection key: totalMem (the P2-implemented read —
+    ActivityManager.MemoryInfo.totalMem beside supportedAbis in
+    MainActivity.kt, via the com.agenta.agenta/device MethodChannel; the
+    @visibleForTesting seams per device_capabilities.dart's established
+    pattern, as recorded at v1.0.0). ABI IS NO LONGER CONSULTED FOR
+    SELECTION (plan §4.9): the MediaPipe .task engine is the multi-ABI
+    engine (cycle-40 §1.1), so the ABI verdict is irrelevant to which
+    model a device is offered. The verdict machinery STAYS in code — see
+    unsupportedAbi_mapping_note below.
+  classes:                              # the table — binding, plan §4.9
+    single_qwen_class: >-
+      EVERY device (any ABI) with totalMem >= 4 GB → Qwen 2.5 1.5B Instruct
+      .task — THIS contract (§1/§2): identity qwen2.5-1.5b-it, install
+      URL/size/sha per §1, engine per §2. The 'Model size: ~1.6GB' chip is
+      UNIVERSAL on this class (the §6 gate_size_chip e2b_class row is
+      superseded — no E2B class exists in selection anymore).
+    message_only_class: >-
+      totalMem < 4 GB OR totalMem UNREADABLE (the fail-closed KEPT, S8
+      carries — a device that cannot report RAM gets the message-only
+      honesty, plan §4.9) → NO model — the honest message, its wording
+      GENERALIZED to the RAM reason (NO ABI mention): NO download CTA,
+      NO retry (cycle-40's discipline; P2b acceptance criterion 5; the
+      message constant DeviceCapabilities.incompatibleDeviceMessage,
+      device_capabilities.dart:28 as-of the v1.0.0 recording — re-verify
+      the site at P2b per the header anchor policy). The IDENTITY on this
+      row is 'qwen2.5-1.5b-it' APP-WIDE — the identity is the app's
+      offline-model NAME, not the installed asset (the row never installs)
+      (plan §4.9).
+  floor_rationale: >-
+    the 4 GB totalMem floor exists because the vendor peak RSS for this
+    asset is ≈ 2.2 GB (§5) — a device under 4 GB total RAM cannot hold the
+    runtime with margin (plan §4.3/§4.9, §5-P1 item 5); the floor keeps
+    the ONE offer RAM-honest (the 2.2 GB peak-RSS honesty, plan §4.9).
+  one_active_model: >-
+    the plugin holds ONE active model — satisfied by construction: each
+    device resolves exactly ONE spec from this table and installs exactly
+    that model (plan §4.3/§4.9).
+  unsupportedAbi_mapping_note: >-
+    the unsupportedAbi failure-class mapping STAYS IN CODE
+    (gemma_service.dart:314/:367 as-of the v1.0.0 recording) —
+    rarely-reachable, zero-risk; less churn than removal (plan §4.9). It
+    is a failure-class mapping only — NOT a selection input (§ keys).
+  s4_invoked: >-
+    the armed cycle-38 S4 ladder (arm64-primary + PERSISTENT E2B load
+    failure on the fixed build) has FIRED on lived evidence — the user's
+    v1.8.2 arm64 phone, download complete → load failed, user report
+    2026-10-31 (plan §4.9); the F7 pre-authorization to THIS contract's
+    Qwen .task spec is INVOKED — no separate re-ruling was needed for the
+    Qwen asset (plan §2 F7, §4.9). With the table now single-class, the
+    Qwen spec IS the selection; this field records the invocation (the
+    pre-authorization mechanism is spent).
+  stranded_e2b_rule_amended: >-
+    SUPERSEDED (the v1.0.0 keep-rule — "a device IN A SUPPORTED CLASS that
+    downloaded E2B pre-gate KEEPS it" — is DELETED): every device holding
+    the E2B asset is now INELIGIBLE for it — selection no longer offers
+    E2B on any device — so migration v4 (§4, WIDENED) fires for ANY
+    stranded E2B asset and uninstalls it (plan §4.9). No device keeps
+    E2B anymore.
+  e2b_exit_pointer: >-
+    E2B EXITS SELECTION ENTIRELY (plan §4.9): the exit record — the
+    S4-fired lived evidence, the widened-v4 cross-reference and the future
+    opt-in status — is contracts/offline-model-e2b.yaml v1.3.0 §11
+    (selection_exit_record; the v1.2.0 §10 arm64-primary-class pointer is
+    superseded there). The E2B ASSET stays at source — P3's Shard B
+    re-verifies it unchanged even though unselected (plan §5-P3 Shard B).
+    Future opt-in under the plugin's one-active-model constraint is the
+    cycle-38 F8 lineage (plan §2 F8) — backlog, future cycle.
+  consumers: >-
+    the resolved spec feeds: both install chains (§2 install_shape), the
+    identity sites (§2 identity_sites), the gate/download/card/picker
+    states (§6), and the migration trigger (§4) — now from the SINGLE
+    class. Consumer sites as recorded at v1.0.0 (verified 2026-10-31:
+    main.dart:551 the gate, download_prompt_screen.dart:101 the screen,
+    chats.dart:645 the card, model_picker_sheet.dart:36 the picker) —
+    re-verify at P2b per the header anchor policy.
+  supersedes: >-
+    the per-class phrasing recorded at v1.0.0 elsewhere in this file is
+    SUPERSEDED by THIS table (kept in place as the P2-era record; those
+    sections' figures, shapes, anchors and strings are otherwise
+    UNCHANGED): §2 identity_invariant's "'qwen2.5-1.5b-it' on the fallback
+    class, 'gemma-4-e2b-it' on the E2B class" → the identity is
+    'qwen2.5-1.5b-it' APP-WIDE, message-only row included; §6
+    gate_size_chip's e2b_class row ('~2.6GB') → the '~1.6GB' chip is
+    UNIVERSAL (no E2B class in selection); §6 picker_chat_card_states'
+    arm64_primary/fallback_class enumeration → the SINGLE class's
+    affordances (its own "per the §3 table" deference inherits this
+    amendment); §7 failure_classes'
+    "non-arm64-ineligible / < 4 GB case" reason → the RAM-only wording
+    (§ message_only_class); §8 p2_selection_tests/p2_identity_invariant's
+    per-class framing → single-class per plan §5-P2b items 1/3/5. This
+    amendment touches §3/§4 and the header record ONLY (plan §4.9's
+    contract path).
+
+# ---------------------------------------------------------------------------
+# 4. Migration contract v4 (plan §4.4 as WIDENED by §4.9 — BINDING;
+#    §5-P2b item 2; the no-stranded-downloads rule with the v3 self-reset
+#    lesson GENERALIZED to the asset-presence trigger)
+# ---------------------------------------------------------------------------
+
+migration_v4:
+  owner: >-
+    lib/services/ai/model_download_service.dart — a v4 migration alongside
+    the untouched v2 (:227/:232) and v3 (:251/:253) logic (verified
+    2026-10-31; plan §4.4, §5-P2 item 4).
+  marker: "model_asset_v4"              # new SharedPreferences bool — plan §4.4
+  call_site: >-
+    the SAME gate seam as v3 — checkModelExists(), invoked BEFORE the
+    readiness read (the v3 §4.8 call-site ruling carried; plan §4.4) — so
+    the DAO reset lands before the status decision on the very launch it
+    fires, on EVERY launch path (the E2B contract §3 call_site enumerates
+    the seam's reach).
+  trigger: >-
+    WIDENED (plan §4.9 — the v1.0.0 capability-verdict clause "AND the
+    device fails the E2B-eligibility verdict" is DELETED; the verdict is
+    universal): marker absent AND the E2B ASSET ITSELF is present —
+    FlutterEdgeAi.activeModelSpec?.name == 'gemma-4-E2B-it.litertlm' OR
+    FlutterEdgeAi.isModelInstalled('gemma-4-E2B-it.litertlm') (the v3 §4.8
+    probe semantics carried — the persisted-name rationale, E2B contract
+    §3 trigger). Every device holding the E2B asset is now ineligible for
+    it (§3: E2B left selection), so ANY stranded E2B asset fires v4 —
+    including an arm64 device that downloaded E2B on v1.8.2 (the
+    S4-fired lived-evidence population, §3 s4_invoked). The v3 self-reset
+    lesson GENERALIZED and BINDING (plan §4.9): the trigger keys on the
+    E2B ASSET's presence, NEVER on a generic has-model condition — a
+    Qwen-asset user must NEVER fire v4 (no E2B asset → both probe legs
+    false → no trigger; the never-fire proof is a P2b test, plan §5-P2b
+    criterion 2); the S7 loop/strand hazards carry (plans/cycle-42 §6).
+  steps:                                # ORDER IS NORMATIVE — plan §4.4/§4.9
+    - "1. set marker model_asset_v4 = true FIRST (a crash can never loop the download — the v2/v3 marker-first pattern, E2B contract §3 steps)"
+    - "2. FlutterEdgeAi.uninstallModel('gemma-4-E2B-it.litertlm') inside try/catch, tolerant of already-unregistered / file-missing — safe to continue (plan §4.4)"
+    - "3. dao.setModelNotInstalled() — resets the DB row (the row's identity becomes the SELECTED spec's identity per §2 identity_sites — universally 'qwen2.5-1.5b-it')"
+    - "4. the gate re-offers per the §3 selection table — UNIVERSALLY the Qwen flow (the ~1.6GB chip) on a >= 4 GB device, or the message-only class; no user-facing migration UI"
+  both_assets_composition: >-
+    TEST-REQUIRED (plan §4.9, §5-P2b item 2 + criterion 2): a device
+    holding BOTH assets (E2B stranded + Qwen already downloaded) fires v4
+    ONCE — the marker is absent and the E2B asset is present (the trigger
+    does not require Qwen's absence) — cleans E2B (tolerant uninstall +
+    DAO reset), and the gate's readiness read FINDS QWEN: no Qwen
+    re-download is forced.
+  uninstall_id: >-
+    'gemma-4-E2B-it.litertlm' — the E2B asset's filename (the E2B contract
+    §1 file, exact case; plan §4.4). VERIFY-AT-P2 NOTE (plan §5-P1 item 4):
+    verify the exact id at P2 against the pinned core's persisted-name
+    semantics (the cycle-38 §4.8 probe precedent — activeModelSpec.name is
+    the persisted filename on restore); a case-mismatched probe is a
+    silent no-migration.
+  untouched: >-
+    v2 AND v3 markers and their logic stay exactly as-is (plan §4.4; the
+    E2B contract §3 untouched). SUPERSEDED (deleted from v1.0.0): "a
+    supported-class device that downloaded E2B pre-gate keeps it" — under
+    the widened trigger NO device keeps E2B (§3
+    stranded_e2b_rule_amended); v2/v3's own target populations and logic
+    are unaffected.
+  why_needed: >-
+    two waves (plan §4.4 + §4.9): (1) devices that downloaded the 2.59 GB
+    .litertlm BEFORE the v1.8.1 ABI gate (the install path never checked
+    ABI then — cycle-40 §1.2) hold a file they can NEVER load: wasted
+    2.59 GB + a dead asset (F2, plan §2); (2) the lived evidence (§3
+    s4_invoked) proves the E2B engine fails on real arm64 devices too —
+    with selection collapsed to the Qwen spec, EVERY E2B asset in the
+    wild is stranded. v4 moves the dead asset out and the gate offers the
+    working Qwen class.
+
+# ---------------------------------------------------------------------------
+# 5. RAM budget (plan §1.2 vendor measurements + §5-P1 item 5; the ≤ 6 GB
+#    binding cap carries from the E2B contract §6)
+# ---------------------------------------------------------------------------
+
+ram_budget:
+  binding_cap: "runtime RAM ≤ 6 GB (user directive — the E2B contract §6 binding_cap carries; plan §1.2)"
+  selection_floor: >-
+    totalMem >= 4 GB is the OFFER floor (§3): a device under the floor is
+    NEVER offered this asset (plan §4.3; the S8 honesty discipline —
+    plan §6).
+  measurement_source: >-
+    the repo's own README — VENDOR-MEASURED on Samsung S25 Ultra,
+    CPU/XNNPACK, 4 threads (plan §1.2).
+  vendor_figures_q8_ekv4096:            # plan §1.2, verbatim — the INSTALLED build (§1)
+    prefill_tok_s: 162.72
+    decode_tok_s: 26.06
+    ttft_s: 6.57
+    peak_rss_mb: 2216
+  vendor_figures_q8_ekv1280:            # plan §1.2 — comparative context only; NOT the installed build
+    ttft_s: 3.71
+    peak_rss_mb: 1997
+  verdict: >-
+    peak RSS ≈ 2.2 GB — the ≤ 6 GB cap holds with wide margin (plan
+    §1.2); file size ≠ RAM — the mmap precedent of the E2B contract §6
+    (the RAM cost is the mapped-weights working set plus anonymous
+    heap/KV/activations, NOT the file size) re-confirmed by the vendor's
+    own peak-RSS column (plan §1.2).
+  backend_ruling: >-
+    CPU (§2 load_shape) — the CPU figures above are what the cap ruling
+    rests on (plan §1.2; the E2B contract §6 backend_ruling discipline).
+  caveat_32bit: >-
+    recorded HONESTLY (plan §5-P1 item 5): a ~2.2 GB peak RSS on an
+    armeabi-v7a process is at the edge of the 32-bit address space. The
+    designed answer is NEVER a silent failure: the load-failure class (the
+    cycle-40 failure classes, §7) plus ladder rung (b) (Qwen 0.5B — the
+    under-floor degradation rung, §1 fallback_ladder) are the designed
+    answers (plan §5-P1 item 5). Refinement path: Reviewer search 4 (plan
+    §10) checks MediaPipe's 32-bit posture; the user's device facts (F10)
+    may refine the floor or this caveat — a fact REFINES, never blocks
+    (plan §6 refinement clause); a contradicting fact re-opens the PLAN,
+    not the phase.
+
+# ---------------------------------------------------------------------------
+# 6. UX copy table (plan §4.5 — BINDING; §5-P1 item 6; consumed VERBATIM —
+#    these exact strings, no re-wording; the E2B contract §5 discipline)
+# ---------------------------------------------------------------------------
+
+ux_copy:
+  gate_size_chip:                       # SPEC-DRIVEN (plan §4.5) — site download_prompt_screen.dart:265 (currently the hardcoded 'Model size: ~2.6GB', verified 2026-10-31)
+    e2b_class: 'Model size: ~2.6GB'     # unchanged string — the E2B contract §5 gate_size_chip contract_string
+    fallback_class: 'Model size: ~1.6GB'   # NEW string — plan §4.5
+    anchor_note: >-
+      the E2B contract §5 recorded the chip's PRE-P2 site (:184, current
+      'Model size: ~529MB'); the shipped v1.8.x state (post-cycle-38-P2)
+      is :265 with '~2.6GB' — the plan's 2026-10-31 anchor and this
+      contract's (plan §1.6; the anchor-drift precedent, E2B contract §5
+      download_service_comment).
+  gate_data_caution: >-
+    UNCHANGED and rendered for BOTH classes — the E2B contract §5
+    gate_data_caution line ("Large download — Wi-Fi recommended. You can
+    keep using your phone while it downloads.") stays (plan §4.5).
+  picker_chat_card_states: >-
+    the picker tile + chat card render the SELECTED spec's affordances per
+    the §3 table (plan §4.5): arm64_primary → the existing E2B affordances
+    (unchanged); fallback_class → the Qwen affordances (the selected
+    identity surfaces via the spec; the ~1.6GB chip on the download flow);
+    message_only_class → cycle-40's message-only state (the honest
+    incompatible message, NO CTA, NO retry —
+    download_prompt_screen.dart:211, verified 2026-10-31).
+  excluded_file: >-
+    lib/services/ai/ai_model.dart is EXCLUDED from this cycle's change
+    surface AND its commits (F9 — cycle-39's uncommitted edits share the
+    file; plan §1.6 hazard note, §2 F9, §4.5, §4.8): the picker
+    description stays BYTE-UNCHANGED (E2B-worded) until a later cycle
+    whose surface includes the file after cycle-39's push resolves it.
+    Residual RECORDED (plan §2 F9): the per-model size chip lives on the
+    download screen, which is free of the hazard.
+  out_of_scope: >-
+    the slow-connection banner copy and every other string on these
+    surfaces is unchanged (the E2B contract §5 out_of_scope discipline;
+    plan §4.5).
+
+# ---------------------------------------------------------------------------
+# 7. Error surface (plan §5-P1 item 7 + §4.6; the E2B contract §7
+#    discipline carried; the failure-class sites verified 2026-10-31 —
+#    model_download_service.dart:442 area (the DownloadException mapping)
+#    and gemma_service.dart:314-379)
+# ---------------------------------------------------------------------------
+
+error_surface:
+  download_errors: UNCHANGED            # the sealed DownloadException mapping (the E2B contract §7 friendly_mapping) is REUSED verbatim for this class — no variant added or reworded
+  download_errors_note: >-
+    the 401/403 copy stays cycle-36's verbatim (the E2B contract §7
+    friendly_mapping); this asset is ungated so the class should not fire,
+    but the mapping is untouched (plan §4.7 — no token surface; §5-P1
+    item 7).
+  failure_classes: >-
+    the cycle-40 failure classes are REUSED unchanged (plan §5-P1 item 7):
+    the unsupportedAbi marker/class (gemma_service.dart:314/:367, verified
+    2026-10-31) and the incompatible-message mapping (:379) now key the
+    message-only state to the §3 message_only_class (the
+    non-arm64-ineligible / < 4 GB case) per the table (plan §5-P2 item 5).
+  engine_claim_failures: >-
+    a .task engine-claim failure lands in the EXISTING engineInit/unknown
+    classes — NO new exception branches (the E2B contract §7
+    no_code_change discipline carried; plan §5-P1 item 7). If the pinned
+    core cannot claim ModelType.qwen + ModelFileType.task → STOP S2, no
+    speculative patches (plan §6).
+  override_caveat_amended: >-
+    AMENDED (plan §5-P1 item 7 — the successor of the E2B contract §7
+    f13_override_caveat): with the install chains SPEC-DRIVEN (§2), the
+    GEMMA_MODEL_URL override (dart-define → AppConfig.gemmaModelUrl,
+    app_config.dart:17/:61; resolvedModelUrl + the override seam
+    model_download_service.dart:94-95, verified 2026-10-31 — the E2B
+    contract's :84-85 anchor is its recording-time state) now wins
+    PER-CLASS: the override substitutes the URL WITHIN the class the
+    device selected, keeping that class's modelType/fileType (plan §5-P2
+    item 3). A CROSS-FORMAT override (e.g. a .task URL forced onto the E2B
+    class, or a .litertlm URL onto this class) still FAILS at engine claim
+    — recorded, accepted (debug/enterprise escape hatch; F13-of-cycle-38's
+    successor). No code change — this contract item only documents it
+    (the E2B contract §7 f13_override_caveat documentation-only pattern).
+  token_posture: >-
+    no new secret surface — the HF-token threading is untouched (§1
+    token_threading); this asset needs NO HF token (plan §4.7). Only
+    config KEY names appear anywhere (GEMMA_MODEL_URL / HF_TOKEN via
+    AppConfig, app_config.dart:16-17) — never values.
+  stop_divergences: >-
+    the plan file is authoritative for the STOP rules (the E2B contract §7
+    others_note pattern): S1 (a pin moves or a package is added), S2 (the
+    pinned core cannot claim the spec), S3 (totalMem via anything but the
+    existing channel), S6 (asset drift — the §1 figures), S7 (v4 fires on
+    an eligible device's E2B asset, loops, or strands a download), S8 (the
+    Qwen asset offered on a device failing §3) — plans/cycle-42 §6.
+
+# ---------------------------------------------------------------------------
+# 8. Acceptance criteria (plan §5-P1 item 8 — P1's own gate — plus the P2
+#    invariants this contract pins)
+# ---------------------------------------------------------------------------
+
+acceptance_criteria:
+  a_figures_exact: >-
+    every figure/URL/hash in this file matches plans/cycle-42 §1/§4
+    exactly — each carries its source citation (plan §1.2 asset + vendor
+    figures; §1.1 survey; §1.3 ladder; §1.6 tree anchors, re-verified
+    2026-10-31; §4 rulings).
+  b_no_secrets: >-
+    no secret material — no token values anywhere in this file; only
+    config KEY names appear (GEMMA_MODEL_URL / HF_TOKEN as dart-define
+    keys via AppConfig), which are not secrets.
+  c_p2_standalone: >-
+    a reader can build P2 from THIS file plus the amended E2B contract
+    (v1.2.0) alone, without touching the web — the change surface is fully
+    specified by §1-§7 here plus the E2B contract's unchanged §1-§9; plan
+    §5-P2 carries the mechanical checklist and acceptance greps that
+    implement it.
+  d_e2b_amendment_no_break: >-
+    the E2B amendment (v1.2.0) records the selection pointer + the v4
+    cross-reference with NO consumer break — additive only; v1.1.0
+    consumers read it unchanged (plan §5-P1 criterion d).
+  p2_identity_invariant: >-
+    the selected spec's identity coherent across the FOUR sites (§2
+    identity_sites) for EACH class — grep-proven per class (plan §5-P2
+    criterion 5; plan §10 grep 1).
+  p2_selection_tests: >-
+    the §3 table per class (arm64 → E2B; non-arm64 ≥ 4 GB → the Qwen spec
+    incl. exact URL/modelType/fileType/identity; non-arm64 < 4 GB →
+    ineligible), the v4 semantics (marker-first; legacy-E2B + ineligible →
+    uninstall + DAO reset; eligible-device E2B → NEVER fires; v2/v3
+    unaffected), the ~1.6GB chip on the fallback class, and the
+    override-in-class behavior are TEST-PROVEN (plan §5-P2 item 8).
+  p2_lock_invariant: >-
+    no new package enters pubspec(.lock); the three engine pins unchanged
+    (plan §5-P2 criterion 7; STOP S1).

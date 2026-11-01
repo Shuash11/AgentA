@@ -1,6 +1,8 @@
 package com.agenta.AgentA
 
 import android.Manifest
+import android.app.ActivityManager
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.ActivityCompat
@@ -40,6 +42,15 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             if (call.method == "supportedAbis") {
                 result.success(Build.SUPPORTED_ABIS.toList())
+            } else if (call.method == "totalMem") {
+                // Cycle-42 P2: the RAM floor of the per-device model
+                // selection. The same channel as the ABI probe - no new
+                // package, no new permission.
+                val memoryInfo = ActivityManager.MemoryInfo()
+                val activityManager =
+                    getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                activityManager.getMemoryInfo(memoryInfo)
+                result.success(memoryInfo.totalMem)
             } else {
                 result.notImplemented()
             }

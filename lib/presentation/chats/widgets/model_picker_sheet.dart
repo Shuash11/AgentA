@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../services/ai/ai_model.dart';
 import '../../../services/ai/ai_service.dart';
 import '../../../services/ai/device_capabilities.dart';
+import '../../../services/ai/offline_model_spec.dart';
 import '../../../theme/app_theme.dart';
 
 /// What the offline (Gemma) tile shows while the model is NOT ready, and
@@ -30,11 +31,14 @@ Future<void> showModelPickerSheet({
   required ValueChanged<AIModel> onModelSelected,
   required VoidCallback onDownloadRequested,
 }) async {
-  // The device capability decides whether the offline tile may offer the
-  // download at all (cycle-40 P1) — it is resolved before the sheet opens
-  // so the tile never flashes a download invitation it cannot honour.
-  final isDeviceCompatible = await DeviceCapabilities.isOfflineAiSupported();
+  // The per-device selection decides whether the offline tile may offer the
+  // download at all (cycle-42 P2b) — it is resolved before the sheet opens
+  // so the tile never flashes a download invitation it cannot honour. The
+  // message-only class has NO model: the tile carries the honest message
+  // and tapping it does nothing (cycle-40 P1).
+  final selection = await OfflineModelSpecTable.resolve();
   if (!context.mounted) return;
+  final isDeviceCompatible = selection.hasModel;
 
   return showModalBottomSheet<void>(
     context: context,

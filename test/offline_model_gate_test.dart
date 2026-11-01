@@ -14,6 +14,10 @@
 //   Leaving them unset would let the v2 migration reset the DAO row and
 //   wipe the very state these tests assert.
 // * The legacy-asset probe is stubbed so no plugin call is attempted.
+// * The RAM verdict is stubbed too (cycle-42 P2b): the total-memory read is
+//   an ANDROID fact, so an unstubbed host could not report RAM and would
+//   land on the message-only class. This file simulates a device that
+//   clears the 4 GB floor.
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -29,8 +33,10 @@ import 'package:aiproject/data/local/database_helper.dart';
 import 'package:aiproject/data/local/offline_model_dao.dart';
 import 'package:aiproject/main.dart';
 import 'package:aiproject/presentation/ai/download_prompt_screen.dart';
+import 'package:aiproject/services/ai/device_capabilities.dart';
 import 'package:aiproject/services/ai/gemma_service.dart';
 import 'package:aiproject/services/ai/model_download_service.dart';
+import 'package:aiproject/services/ai/offline_model_spec.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// The key of the widget the gate reveals once the model is loaded.
@@ -101,11 +107,17 @@ void main() {
     theme = ThemeCubit();
     // No plugin call: the legacy asset is absent on this device.
     ModelDownloadService.legacyAssetPresentOverrideForTest = () async => false;
+    ModelDownloadService.e2bAssetPresentOverrideForTest = () async => false;
+    // The simulated device clears the 4 GB RAM floor (cycle-42 P2b).
+    DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+        6 * 1024 * 1024 * 1024;
   });
 
   tearDown(() async {
     ModelDownloadService.legacyAssetPresentOverrideForTest = null;
+    ModelDownloadService.e2bAssetPresentOverrideForTest = null;
     ModelDownloadService.uninstallOverrideForTest = null;
+    DeviceCapabilities.totalMemoryOverrideForTest = null;
     await connectivity.close();
     await theme.close();
     modelDownload.dispose();
@@ -133,7 +145,9 @@ void main() {
       'an installed model that fails to load shows a RETRY, not the download gate',
       (tester) async {
         // The install wrote the ready row (with the download marker).
-        await OfflineModelDao().setModelReady(modelType: 'gemma-4-e2b-it');
+        await OfflineModelDao().setModelReady(
+          modelType: OfflineModelSpecTable.appIdentity,
+        );
         // The engine refuses to load.
         gemmaService.chatOverrideForTest = () async =>
             throw Exception('engine init');
@@ -155,7 +169,9 @@ void main() {
     testWidgets('the retry on the error screen performs a load attempt', (
       tester,
     ) async {
-      await OfflineModelDao().setModelReady(modelType: 'gemma-4-e2b-it');
+      await OfflineModelDao().setModelReady(
+        modelType: OfflineModelSpecTable.appIdentity,
+      );
       var attempts = 0;
       gemmaService.chatOverrideForTest = () async {
         attempts++;
@@ -184,7 +200,9 @@ void main() {
         // The durable install marker outranks that verdict — routing it to
         // the download gate would re-download 2.6 GB of a model already
         // present.
-        await OfflineModelDao().setModelReady(modelType: 'gemma-4-e2b-it');
+        await OfflineModelDao().setModelReady(
+          modelType: OfflineModelSpecTable.appIdentity,
+        );
         gemmaService.chatOverrideForTest = () async =>
             throw StateError('Bad state: No active model');
 

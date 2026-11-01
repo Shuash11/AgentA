@@ -6,6 +6,7 @@ import '../../data/local/offline_model_dao.dart';
 import '../../data/models/chat_message_model.dart';
 import 'device_capabilities.dart';
 import 'model_download_service.dart';
+import 'offline_model_spec.dart';
 
 /// The outcome of classifying a failed model load: a stable failure CLASS
 /// plus the friendly, brand-free copy the UI shows.
@@ -210,7 +211,10 @@ Formatting rules:
         );
       }
 
-      await _dao.setModelReady(modelType: 'gemma-4-e2b-it');
+      // The identity the DB row carries is the app's offline-model identity
+      // (the spec table is the only place the identity string is written —
+      // contract §2): `qwen2.5-1.5b-it` app-wide.
+      await _dao.setModelReady(modelType: OfflineModelSpecTable.appIdentity);
       _state = OfflineModelState.loaded;
       _lastError = null;
       _lastFailureClass = null;

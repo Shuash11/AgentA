@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/ai/device_capabilities.dart';
 import '../../services/ai/model_download_service.dart';
+import '../../services/ai/offline_model_spec.dart';
 import '../../cubit/connectivity/connectivity_cubit.dart';
 import '../../cubit/theme/theme_cubit.dart';
 import '../../theme/app_theme.dart';
@@ -33,10 +34,15 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
   String? _errorMessage;
   bool _hasCompleted = false;
 
-  /// Whether this device can run the offline model (cycle-40 P1). Null until
-  /// the capability check resolves; false means the download must never
-  /// start — the engine ships its native stack for arm64 only.
-  bool? _isDeviceCompatible;
+  /// The per-device model selection (cycle-42 P2b). Null until the selection
+  /// resolves.
+  ///
+  /// The selection decides BOTH the surface and the asset: every device
+  /// that clears the 4 GB RAM floor offers the Qwen `.task` bundle
+  /// (~1.6 GB), and the message-only class offers NOTHING — the honest
+  /// incompatible-device message instead of a download that could never
+  /// succeed.
+  OfflineModelSelection? _selection;
 
   /// The download service, captured while the widget is still active.
   ///
@@ -91,26 +97,24 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
     widget.onComplete();
   }
 
-  /// Resolves the device capability BEFORE anything is downloaded
-  /// (cycle-40 P1).
+  /// Resolves the per-device selection BEFORE anything is downloaded
+  /// (cycle-42 P2b).
   ///
-  /// On a device that cannot run the model the download would waste a
-  /// 2.59 GB transfer and end in a load failure that no retry can recover,
-  /// so the screen shows the incompatible-device message instead.
+  /// On the message-only class the download would waste a transfer and end
+  /// in a load failure that no retry can recover, so the screen shows the
+  /// incompatible-device message instead. On the selection class the screen
+  /// offers the SELECTED asset (the Qwen `.task` bundle, ~1.6 GB).
   Future<void> _resolveDeviceThenStart() async {
-    final compatible = await DeviceCapabilities.isOfflineAiSupported();
+    final selection = await OfflineModelSpecTable.resolve();
     if (!mounted) return;
 
-    if (!compatible) {
-      setState(() {
-        _isDeviceCompatible = false;
-      });
-      return;
-    }
-
     setState(() {
-      _isDeviceCompatible = true;
+      _selection = selection;
     });
+
+    // The message-only class: no asset, no CTA, no download.
+    if (selection.isMessageOnly) return;
+
     await _startAutoDownload();
   }
 
@@ -182,10 +186,11 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
       (ConnectivityCubit c) => c.state.hasNoInternet,
     );
 
-    // Cycle-40 P1: an incompatible device never sees the download offer —
+    // Cycle-42 P2: the message-only class never sees the download offer —
     // no size chip, no download button, no progress. Only the honest
     // message.
-    if (_isDeviceCompatible == false) {
+    final selection = _selection;
+    if (selection != null && selection.isMessageOnly) {
       return Scaffold(
         backgroundColor: colors.base,
         body: SafeArea(
@@ -262,7 +267,11 @@ class _DownloadPromptScreenState extends State<DownloadPromptScreen> {
                     boxShadow: AppShadows.well,
                   ),
                   child: Text(
-                    'Model size: ~2.6GB',
+                    // The SELECTED spec's size (contract §6): '~1.6GB' on
+                    // the one selection class. Empty until the selection
+                    // resolves — a WRONG size is worse than no size for a
+                    // frame.
+                    selection?.spec?.sizeChip ?? '',
                     style: AppTypography.labelSm.copyWith(
                       color: colors.subtext,
                     ),

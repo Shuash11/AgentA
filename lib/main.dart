@@ -24,6 +24,7 @@ import 'services/ai/pollinations_service.dart';
 import 'services/ai/ai_service.dart';
 import 'services/ai/device_capabilities.dart';
 import 'services/ai/model_download_service.dart';
+import 'services/ai/offline_model_spec.dart';
 import 'services/sync/sync_service.dart';
 import 'services/update/version_check_service.dart';
 import 'core/utils/connectivity_service.dart';
@@ -168,9 +169,10 @@ class _AppLoaderState extends State<AppLoader> {
 
     try {
       // flutter_edge_ai 1.x: core registers NO engine by default — every
-      // engine must be registered explicitly. MediaPipe (.task) stays
-      // registered so the legacy 1B asset's uninstall id still resolves;
-      // LiteRT-LM (.litertlm) runs the current Gemma 4 E2B bundle.
+      // engine must be registered explicitly. MediaPipe (.task) runs the
+      // current Qwen bundle; LiteRT-LM (.litertlm) stays registered so the
+      // stranded Gemma 4 E2B asset's uninstall id still resolves (migration
+      // v4 — E2B left model selection, plan §4.9).
       // Retry budget: 3. Each attempt can run up to the 60-min install
       // ceiling in ModelDownloadService (the 3-min stall watchdog covers
       // the silent case), so a larger budget could never complete within
@@ -519,13 +521,16 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
   /// S7). It is the routing authority for the retry surface.
   bool _isInstalled = false;
 
-  /// Whether this device can run the offline model at all (cycle-40 P1).
+  /// Whether this device keeps the honest message-only state (cycle-42 P2b).
   ///
-  /// The engine ships its native stack for arm64 only: on every other ABI
-  /// the model can never load, so the gate must not offer the 2.59 GB
-  /// download and must not offer a retry that cannot succeed. It shows the
-  /// honest incompatible-device message instead.
-  bool _isDeviceCompatible = true;
+  /// The per-device selection decides: every device that clears the 4 GB
+  /// RAM floor runs the Qwen `.task` bundle (any ABI — the ABI decides
+  /// nothing about the selection), and a device that fails the table (too
+  /// little RAM, or RAM that cannot be read) can run NO model at all — the
+  /// gate must not offer a download and must not offer a retry that could
+  /// never succeed. It shows the honest incompatible-device message
+  /// instead.
+  bool _isMessageOnly = false;
 
   /// Readiness state of the on-device model. Drives the gate surface:
   /// loaded → the app, loadFailed → the retry surface, idle/modelMissing →
@@ -545,25 +550,31 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
   /// "installed" can never mean "declared ready but never loaded" (the
   /// cycle-38 P6 dead-end).
   Future<void> _checkModelStatus() async {
-    // The ABI gate comes FIRST (cycle-40 P1): on a device that cannot run
-    // the model there is nothing to download and nothing to retry — the
-    // honest surface is the incompatible-device message.
-    final compatible = await DeviceCapabilities.isOfflineAiSupported();
+    // The selection decides the surface (cycle-42 P2b): the single Qwen
+    // class or the message-only class.
+    final selection = await OfflineModelSpecTable.resolve();
     if (!mounted) return;
-    if (!compatible) {
+
+    // The download service's gate seam runs on EVERY launch path — also on a
+    // device that can run no model at all — so the one-time migrations
+    // reach it: a stranded E2B asset must be uninstalled even where no
+    // asset can replace it (contract §4).
+    final modelDownload = context.read<ModelDownloadService>();
+    await modelDownload.checkModelExists();
+    if (!mounted) return;
+
+    // The message-only class: there is nothing to download and nothing to
+    // retry — the honest surface is the incompatible-device message.
+    if (selection.isMessageOnly) {
       setState(() {
         _isChecking = false;
         _isLoadingModel = false;
         _isInstalled = false;
-        _isDeviceCompatible = false;
+        _isMessageOnly = true;
         _modelState = OfflineModelState.idle;
       });
       return;
     }
-
-    final modelDownload = context.read<ModelDownloadService>();
-    await modelDownload.checkModelExists();
-    if (!mounted) return;
 
     // The DAO row is the durable truth: an error row that still carries the
     // download marker means the asset IS installed (it only failed to load)
@@ -688,10 +699,11 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
       return widget.child;
     }
 
-    // Cycle-40 P1: a device that cannot run the model at all. There is
+    // Cycle-40 P1 / cycle-42 P2b: a device that can run no model at all
+    // (below the 4 GB RAM floor, or RAM that cannot be read). There is
     // nothing to download and no retry that could ever succeed, so the
     // gate shows the honest message and nothing else.
-    if (!_isDeviceCompatible) {
+    if (_isMessageOnly) {
       return const _IncompatibleDeviceSurface();
     }
 

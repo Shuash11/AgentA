@@ -7,7 +7,9 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:aiproject/core/config/app_config.dart';
 import 'package:aiproject/data/local/database_helper.dart';
 import 'package:aiproject/data/local/offline_model_dao.dart';
+import 'package:aiproject/services/ai/device_capabilities.dart';
 import 'package:aiproject/services/ai/model_download_service.dart';
+import 'package:aiproject/services/ai/offline_model_spec.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -278,12 +280,19 @@ void main() {
     setUp(() async {
       service = ModelDownloadService();
       await db.delete('offline_model_status');
+      // Cycle-42 P2b: a device that clears the RAM floor resolves the ONE
+      // selection class - the install chain under test is the Qwen chain.
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          6 * 1024 * 1024 * 1024;
     });
 
     tearDown(() {
       service.dispose();
       ModelDownloadService.legacyAssetPresentOverrideForTest = null;
+      ModelDownloadService.e2bAssetPresentOverrideForTest = null;
       ModelDownloadService.uninstallOverrideForTest = null;
+      DeviceCapabilities.offlineAiSupportedOverrideForTest = null;
+      DeviceCapabilities.totalMemoryOverrideForTest = null;
     });
 
     test('production ceilings: permission 10s, stall 3min, install 60min', () {
@@ -453,7 +462,9 @@ void main() {
         final row = await db.query('offline_model_status');
         expect(row, hasLength(1));
         expect(row.first['status'], 'notInstalled');
-        expect(row.first['model_type'], 'gemma-4-e2b-it');
+        // The row's identity is the app's offline-model identity — app-wide
+        // (contract §2).
+        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
       },
     );
 
@@ -490,6 +501,289 @@ void main() {
       expect(await db.query('offline_model_status'), isEmpty);
     });
 
+    // ── cycle-42 P2b: migration v4 (the stranded E2B bundle) ───────────────
+    //
+    // The trigger is WIDENED: the capability-verdict clause is DELETED, so
+    // v4 fires for ANY device holding the E2B asset — the asset's presence
+    // is the whole trigger. The v3 self-reset lesson carries in its
+    // GENERALIZED form: a Qwen-asset user must NEVER fire v4.
+
+    test(
+      'v4 migration: a stranded E2B asset → marker first, uninstall, DAO reset',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('model_asset_v4');
+        final uninstalled = <String>[];
+        bool? markerAtUninstall;
+        DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+            6 * 1024 * 1024 * 1024;
+        ModelDownloadService.e2bAssetPresentOverrideForTest = () async => true;
+        ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+            false;
+        ModelDownloadService.uninstallOverrideForTest = (modelId) async {
+          uninstalled.add(modelId);
+          markerAtUninstall = prefs.getBool('model_asset_v4');
+        };
+
+        await service.checkModelExists();
+
+        // The EXACT uninstall id: the persisted filename of the E2B asset
+        // (the pinned core keys a model by its filename — a case-mismatched
+        // id would be a silent no-migration).
+        expect(uninstalled, ['gemma-4-E2B-it.litertlm']);
+        // The marker is set BEFORE the uninstall so a crash never loops the
+        // download.
+        expect(markerAtUninstall, isTrue);
+        expect(prefs.getBool('model_asset_v4'), isTrue);
+        // The DB row is reset so the gate re-offers per the selection table.
+        final row = await db.query('offline_model_status');
+        expect(row, hasLength(1));
+        expect(row.first['status'], 'notInstalled');
+      },
+    );
+
+    test(
+      'v4 migration: the reset row carries the app-wide Qwen identity',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('model_asset_v4');
+        DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+            6 * 1024 * 1024 * 1024;
+        ModelDownloadService.e2bAssetPresentOverrideForTest = () async => true;
+        ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+            false;
+        ModelDownloadService.uninstallOverrideForTest = (modelId) async {};
+
+        await service.checkModelExists();
+
+        // The row's identity is the app's offline-model identity — app-wide
+        // (contract §2).
+        final row = await db.query('offline_model_status');
+        expect(row, hasLength(1));
+        expect(row.first['status'], 'notInstalled');
+        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
+      },
+    );
+
+    test(
+      'v4 migration: an arm64 device with a stranded E2B asset ALSO fires — the trigger is class-independent',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('model_asset_v4');
+        final uninstalled = <String>[];
+        // The old trigger skipped an arm64 device (the capability-verdict
+        // conjunct). E2B left selection (plan §4.9): EVERY device holding
+        // the asset is ineligible for it now.
+        DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => true;
+        DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+            6 * 1024 * 1024 * 1024;
+        ModelDownloadService.e2bAssetPresentOverrideForTest = () async => true;
+        ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+            false;
+        ModelDownloadService.uninstallOverrideForTest = (modelId) async {
+          uninstalled.add(modelId);
+        };
+
+        await service.checkModelExists();
+
+        expect(uninstalled, ['gemma-4-E2B-it.litertlm']);
+        expect(prefs.getBool('model_asset_v4'), isTrue);
+      },
+    );
+
+    test(
+      'v4 migration: a device below the RAM floor with a stranded E2B asset ALSO fires',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('model_asset_v4');
+        final uninstalled = <String>[];
+        // The message-only class: the asset is dead weight there too — it
+        // must still be cleaned up (no stranded download).
+        DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+            2 * 1024 * 1024 * 1024;
+        ModelDownloadService.e2bAssetPresentOverrideForTest = () async => true;
+        ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+            false;
+        ModelDownloadService.uninstallOverrideForTest = (modelId) async {
+          uninstalled.add(modelId);
+        };
+
+        await service.checkModelExists();
+
+        expect(uninstalled, ['gemma-4-E2B-it.litertlm']);
+        expect(prefs.getBool('model_asset_v4'), isTrue);
+      },
+    );
+
+    test(
+      'v4 migration: the both-assets composition fires ONCE, cleans E2B and the readiness read finds Qwen',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('model_asset_v4');
+        final uninstalled = <String>[];
+        // The device already downloaded Qwen (its DB row is the durable
+        // truth the gate's readiness read consults) AND still holds the
+        // stranded E2B asset.
+        await OfflineModelDao().setModelReady(
+          modelType: OfflineModelSpecTable.appIdentity,
+        );
+        DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+            6 * 1024 * 1024 * 1024;
+        ModelDownloadService.e2bAssetPresentOverrideForTest = () async => true;
+        ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+            false;
+        ModelDownloadService.uninstallOverrideForTest = (modelId) async {
+          uninstalled.add(modelId);
+        };
+
+        await service.checkModelExists();
+
+        // v4 FIRED: the stranded E2B asset is cleaned up.
+        expect(uninstalled, ['gemma-4-E2B-it.litertlm']);
+        expect(prefs.getBool('model_asset_v4'), isTrue);
+        // The readiness read FINDS QWEN: no Qwen re-download is forced.
+        expect(service.status, ModelStatus.ready);
+        final row = await db.query('offline_model_status');
+        expect(row.first['status'], 'ready');
+        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
+
+        // It fires ONCE: the marker gates the second run.
+        await service.checkModelExists();
+        expect(uninstalled, ['gemma-4-E2B-it.litertlm']);
+        expect(service.status, ModelStatus.ready);
+      },
+    );
+
+    test('v4 migration: a Qwen-only user NEVER fires v4', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('model_asset_v4');
+      final uninstalled = <String>[];
+      // The device holds the Qwen asset only: both probe legs of the
+      // trigger are false (the v3 self-reset lesson, generalized).
+      await OfflineModelDao().setModelReady(
+        modelType: OfflineModelSpecTable.appIdentity,
+      );
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          6 * 1024 * 1024 * 1024;
+      ModelDownloadService.e2bAssetPresentOverrideForTest = () async => false;
+      ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+          false;
+      ModelDownloadService.uninstallOverrideForTest = (modelId) async {
+        uninstalled.add(modelId);
+      };
+
+      await service.checkModelExists();
+
+      expect(uninstalled, isEmpty);
+      expect(prefs.getBool('model_asset_v4'), isNull);
+      // The Qwen asset is untouched: the readiness read still finds it.
+      expect(service.status, ModelStatus.ready);
+    });
+
+    test('v4 migration: the marker gates a second run', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('model_asset_v4', true);
+      final uninstalled = <String>[];
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          6 * 1024 * 1024 * 1024;
+      ModelDownloadService.e2bAssetPresentOverrideForTest = () async => true;
+      ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+          false;
+      ModelDownloadService.uninstallOverrideForTest = (modelId) async {
+        uninstalled.add(modelId);
+      };
+
+      await service.checkModelExists();
+
+      expect(uninstalled, isEmpty);
+    });
+
+    test(
+      'v4 migration: no stranded E2B asset → no uninstall, no marker',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('model_asset_v4');
+        final uninstalled = <String>[];
+        DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+            6 * 1024 * 1024 * 1024;
+        ModelDownloadService.e2bAssetPresentOverrideForTest = () async => false;
+        ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+            false;
+        ModelDownloadService.uninstallOverrideForTest = (modelId) async {
+          uninstalled.add(modelId);
+        };
+
+        await service.checkModelExists();
+
+        expect(uninstalled, isEmpty);
+        expect(prefs.getBool('model_asset_v4'), isNull);
+      },
+    );
+
+    test('v4 migration: the v2 and v3 markers stay untouched', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('model_asset_v2');
+      await prefs.remove('model_asset_v3');
+      await prefs.remove('model_asset_v4');
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          6 * 1024 * 1024 * 1024;
+      ModelDownloadService.e2bAssetPresentOverrideForTest = () async => false;
+      ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+          false;
+      ModelDownloadService.uninstallOverrideForTest = (modelId) async {};
+
+      await service.checkModelExists();
+
+      // v4 is its own generation: it neither writes nor reads the v2/v3
+      // markers (the contract's untouched rule).
+      expect(prefs.getBool('model_asset_v2'), isNull);
+      expect(prefs.getBool('model_asset_v3'), isNull);
+      expect(prefs.getBool('model_asset_v4'), isNull);
+    });
+
+    test(
+      'the install path writes the app-wide Qwen identity — the selection class',
+      () async {
+        DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+            6 * 1024 * 1024 * 1024;
+        ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+            false;
+        ModelDownloadService.e2bAssetPresentOverrideForTest = () async => false;
+        service.installOverrideForTest = (token) async {};
+
+        await service.installModel();
+
+        expect(service.status, ModelStatus.ready);
+        final row = await db.query('offline_model_status');
+        expect(row, hasLength(1));
+        expect(row.first['status'], 'ready');
+        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
+      },
+    );
+
+    test(
+      'the install path writes the SAME identity on an arm64 device',
+      () async {
+        // The identity is the app's offline-model NAME — app-wide, whatever
+        // the device's ABI (contract §3).
+        DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => true;
+        DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+            6 * 1024 * 1024 * 1024;
+        ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+            false;
+        ModelDownloadService.e2bAssetPresentOverrideForTest = () async => false;
+        service.installOverrideForTest = (token) async {};
+
+        await service.installModel();
+
+        expect(service.status, ModelStatus.ready);
+        final row = await db.query('offline_model_status');
+        expect(row, hasLength(1));
+        expect(row.first['status'], 'ready');
+        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
+      },
+    );
+
     test(
       'cycle-38 P6: a load-error row neither triggers nor is reset by a migration',
       () async {
@@ -497,7 +791,7 @@ void main() {
         // error row — the download marker survives, so the asset is still on
         // the device.
         final dao = OfflineModelDao();
-        await dao.setModelReady(modelType: 'gemma-4-e2b-it');
+        await dao.setModelReady(modelType: OfflineModelSpecTable.appIdentity);
         await dao.setModelError('Offline model failed to load.');
 
         final prefs = await SharedPreferences.getInstance();
@@ -533,21 +827,28 @@ void main() {
   });
 
   group('P1 cycle-36 offline fix assertions', () {
-    test('_modelUrl points at the Gemma 4 E2B litert-community repo', () {
-      // The URL is a static const; verify via reflection-free access
-      // by reading the source behavior through resolvedModelUrl.
+    test('the install URL points at the litert-community repo', () {
+      // The URL moved into the spec table (cycle-42 P2) — it is the ONLY
+      // place the asset URLs are written now. E2B left selection (P2b): the
+      // ONE install URL is the Qwen 2.5 1.5B Instruct `.task` asset.
       expect(
-        ModelDownloadService.resolvedModelUrl,
-        contains('litert-community/gemma-4-E2B-it-litert-lm'),
+        OfflineModelSpecTable.qwen15b.url,
+        contains('litert-community/Qwen2.5-1.5B-Instruct'),
       );
       expect(
-        ModelDownloadService.resolvedModelUrl,
-        endsWith('/gemma-4-E2B-it.litertlm'),
+        OfflineModelSpecTable.qwen15b.url,
+        endsWith('/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task'),
       );
       expect(
-        ModelDownloadService.resolvedModelUrl,
+        OfflineModelSpecTable.qwen15b.url,
         startsWith('https://huggingface.co/litert-community/'),
       );
+      // The E2B install URL survives nowhere: the asset is not offered any
+      // more — only its uninstall id remains (migration v4).
+      final lib = File(
+        'lib/services/ai/model_download_service.dart',
+      ).readAsStringSync();
+      expect(lib, isNot(contains('gemma-4-E2B-it-litert-lm')));
     });
 
     test('token is threaded when configured (source hygiene + no echo)', () {
@@ -589,15 +890,22 @@ void main() {
   });
 
   group('Cycle-38 P2 offline-model swap assertions', () {
-    test('both install chains target the gemma4 + litertlm spec', () {
+    test('both install chains target the SELECTED spec (cycle-42 P2b)', () {
       // The installOverrideForTest seam bypasses the real chain by design —
       // assert the spec constants in the source, not the plugin call graph.
+      // The chains are spec-driven: the table's ONE row carries the
+      // qwen + task claim.
       final source = File(
         'lib/services/ai/model_download_service.dart',
       ).readAsStringSync();
-      expect('ModelType.gemma4'.allMatches(source).length, 2);
-      expect('ModelFileType.litertlm'.allMatches(source).length, 2);
+      expect('modelType: spec.modelType'.allMatches(source).length, 2);
+      expect('fileType: spec.fileType'.allMatches(source).length, 2);
+      // No hardcoded spec survives in the service — the table decides.
+      expect(source, isNot(contains('ModelType.gemma4')));
+      expect(source, isNot(contains('ModelFileType.litertlm')));
       expect(source, isNot(contains('ModelType.gemmaIt')));
+      expect(OfflineModelSpecTable.qwen15b.modelType, ModelType.qwen);
+      expect(OfflineModelSpecTable.qwen15b.fileType, ModelFileType.task);
     });
 
     test('the HF token stays threaded in both install chains', () {
@@ -614,13 +922,26 @@ void main() {
       expect(
         source,
         contains(
-          'AppConfig.gemmaModelUrl.isNotEmpty ? AppConfig.gemmaModelUrl : _modelUrl',
+          'AppConfig.gemmaModelUrl.isNotEmpty ? AppConfig.gemmaModelUrl : spec.url',
         ),
+      );
+      // The override substitutes the URL WITHIN the selected class: the
+      // class keeps its own modelType/fileType (contract §7
+      // override_caveat_amended). With no override configured the spec URL
+      // is what the chain installs.
+      expect(
+        ModelDownloadService.resolvedModelUrlFor(OfflineModelSpecTable.qwen15b),
+        OfflineModelSpecTable.qwen15b.url,
       );
     });
 
     test('the model identity is coherent across the four sites', () {
-      const identity = 'gemma-4-e2b-it';
+      // The spec table is the ONLY place the identity string is written
+      // (contract §2 identity_invariant) — the four sites reference the
+      // resolved spec, so the DAO row and the plugin identity cannot drift.
+      final table = File(
+        'lib/services/ai/offline_model_spec.dart',
+      ).readAsStringSync();
       final service = File(
         'lib/services/ai/model_download_service.dart',
       ).readAsStringSync();
@@ -630,10 +951,33 @@ void main() {
       final dao = File(
         'lib/data/local/offline_model_dao.dart',
       ).readAsStringSync();
-      expect(service, contains("_modelType = '$identity'"));
-      expect(gemma, contains("setModelReady(modelType: '$identity')"));
-      expect("'model_type': '$identity'".allMatches(dao).length, 2);
-      // The superseded identity survives only as the migration uninstall id.
+
+      // The identity lives in the table — once.
+      expect("identity: 'qwen2.5-1.5b-it'".allMatches(table).length, 1);
+      expect(OfflineModelSpecTable.qwen15b.identity, 'qwen2.5-1.5b-it');
+      expect(OfflineModelSpecTable.appIdentity, 'qwen2.5-1.5b-it');
+      // The E2B identity is GONE from the table (E2B left selection).
+      expect(table, isNot(contains("'gemma-4-e2b-it'")));
+
+      // No duplicate identity string survives in any consumer.
+      for (final source in [service, gemma, dao]) {
+        expect(source, isNot(contains("'gemma-4-e2b-it'")));
+        expect(source, isNot(contains("'qwen2.5-1.5b-it'")));
+      }
+
+      // The four sites resolve the identity from the spec.
+      expect(
+        'setModelReady(modelType: spec.identity)'.allMatches(service).length,
+        2,
+      );
+      expect(gemma, contains('OfflineModelSpecTable.appIdentity'));
+      expect(
+        "'model_type': modelType ?? OfflineModelSpecTable.appIdentity"
+            .allMatches(dao)
+            .length,
+        2,
+      );
+      // The superseded 1B asset survives only as the v3 uninstall id.
       expect(service, contains("'gemma3-1b-it-int4.task'"));
       expect(service, isNot(contains("'gemma3-1b-it-int4'")));
     });

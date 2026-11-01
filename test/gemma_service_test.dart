@@ -8,6 +8,7 @@ import 'package:aiproject/data/local/offline_model_dao.dart';
 import 'package:aiproject/data/models/chat_message_model.dart';
 import 'package:aiproject/presentation/chats/chats.dart';
 import 'package:aiproject/services/ai/gemma_service.dart';
+import 'package:aiproject/services/ai/offline_model_spec.dart';
 
 ChatMessageModel _msg(String text, {bool isUser = true, String id = 'm'}) {
   return ChatMessageModel(
@@ -235,16 +236,32 @@ void main() {
       expect(source, contains('static const int _maxTokens = 2048;'));
       expect(source, contains('maxTokens: _maxTokens'));
       expect(source, contains('preferredBackend: PreferredBackend.cpu'));
-      // Identity coherence across the three files that carry it.
-      expect(source, contains("setModelReady(modelType: 'gemma-4-e2b-it')"));
+      // Identity coherence across the files that carry it (cycle-42 P2b: the
+      // spec table is the ONLY place the identity string is written — the
+      // consumers resolve the app's offline-model identity, which is
+      // app-wide).
+      expect(source, contains('OfflineModelSpecTable.appIdentity'));
       final service = File(
         'lib/services/ai/model_download_service.dart',
       ).readAsStringSync();
-      expect(service, contains("_modelType = 'gemma-4-e2b-it'"));
+      expect(
+        'setModelReady(modelType: spec.identity)'.allMatches(service).length,
+        2,
+      );
       final dao = File(
         'lib/data/local/offline_model_dao.dart',
       ).readAsStringSync();
-      expect(dao, contains("'model_type': 'gemma-4-e2b-it'"));
+      expect(
+        "'model_type': modelType ?? OfflineModelSpecTable.appIdentity"
+            .allMatches(dao)
+            .length,
+        2,
+      );
+      // No consumer carries a hardcoded identity any more.
+      for (final consumer in [source, service, dao]) {
+        expect(consumer, isNot(contains("'gemma-4-e2b-it'")));
+        expect(consumer, isNot(contains("'qwen2.5-1.5b-it'")));
+      }
     });
   });
 
@@ -349,7 +366,7 @@ void main() {
       () async {
         // Installed: the install wrote the ready row (with the download
         // marker) before the load was ever attempted.
-        await dao.setModelReady(modelType: 'gemma-4-e2b-it');
+        await dao.setModelReady(modelType: OfflineModelSpecTable.appIdentity);
         service.chatOverrideForTest = () async =>
             throw Exception('engine init');
 
@@ -358,7 +375,7 @@ void main() {
         var row = await dao.getModelStatus();
         expect(row, isNotNull);
         expect(row!['status'], 'error');
-        expect(row['model_type'], 'gemma-4-e2b-it');
+        expect(row['model_type'], OfflineModelSpecTable.appIdentity);
         // The friendly reason only — never the raw exception text.
         expect(row['version'], 'Offline model failed to load.');
         expect(row['version'], isNot(contains('engine init')));
@@ -406,7 +423,7 @@ void main() {
         // would strand the user behind a spurious 2.6 GB re-download of a
         // model the device already has — the durable marker outranks the
         // in-memory verdict.
-        await dao.setModelReady(modelType: 'gemma-4-e2b-it');
+        await dao.setModelReady(modelType: OfflineModelSpecTable.appIdentity);
         service.chatOverrideForTest = () async =>
             throw StateError('Bad state: No active model');
 
@@ -426,7 +443,7 @@ void main() {
     test(
       'a repeated failure stays honest and retryable (no spinner loop)',
       () async {
-        await dao.setModelReady(modelType: 'gemma-4-e2b-it');
+        await dao.setModelReady(modelType: OfflineModelSpecTable.appIdentity);
         var attempts = 0;
         service.chatOverrideForTest = () async {
           attempts++;
@@ -519,14 +536,14 @@ void main() {
     test(
       'a failed LOAD on a downloaded model means installed-but-broken',
       () async {
-        await dao.setModelReady(modelType: 'gemma-4-e2b-it');
+        await dao.setModelReady(modelType: OfflineModelSpecTable.appIdentity);
         await dao.setModelError('Offline model failed to load.');
         expect(await dao.isModelInstalled(), isTrue);
       },
     );
 
     test('a reset row means not installed', () async {
-      await dao.setModelReady(modelType: 'gemma-4-e2b-it');
+      await dao.setModelReady(modelType: OfflineModelSpecTable.appIdentity);
       await dao.setModelNotInstalled();
       expect(await dao.isModelInstalled(), isFalse);
     });
