@@ -23,6 +23,96 @@ class DownloadStalledException implements Exception {
   String toString() => 'DownloadStalledException: $message';
 }
 
+/// The plugin-side facts the load-path repair reads (cycle-44 P2, branch A).
+///
+/// ONE seam for every probe, so the gate seam ([ModelDownloadService
+/// .checkModelExists]) and the load seam ([ModelDownloadService
+/// .ensureModelActive]) can never disagree about the state — a
+/// self-inconsistent repair is exactly the loop the ruling forbids.
+///
+/// Every read answers "unknown" (null) rather than guessing when the
+/// plugin cannot be reached: an UNREAD state is not a clean state, and the
+/// repair must never turn an unknown into a destructive decision.
+abstract class OfflineModelPlugin {
+  /// The ids of every installed model — the persisted filenames.
+  ///
+  /// Null when the plugin could not be read (never "no models").
+  Future<List<String>?> listInstalledModels();
+
+  /// Whether the plugin holds an active inference model.
+  bool hasActiveModel();
+
+  /// The active model's identity (the plugin's spec name), or null when
+  /// there is no active model.
+  String? activeModelSpecName();
+
+  /// Whether the model FILE [fileName] is installed.
+  ///
+  /// The plugin keys a model by its persisted filename. Null when the probe
+  /// could not answer.
+  Future<bool?> isModelInstalled(String fileName);
+
+  /// Removes a model's files and metadata. Throws on an unknown id.
+  Future<void> uninstallModel(String modelId);
+
+  /// Clears the active inference identity (in-memory spec + persisted
+  /// preferences).
+  Future<void> clearActiveInferenceIdentity();
+}
+
+/// The production [OfflineModelPlugin] — the pinned flutter_edge_ai facade.
+///
+/// The reads are wrapped: the plugin is not initialized in a unit test and
+/// a platform call can fail. A failed read yields "unknown", never a
+/// destructive guess.
+class FlutterEdgeAiModelPlugin implements OfflineModelPlugin {
+  const FlutterEdgeAiModelPlugin();
+
+  @override
+  Future<List<String>?> listInstalledModels() async {
+    try {
+      return await FlutterEdgeAi.listInstalledModels();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  bool hasActiveModel() {
+    try {
+      return FlutterEdgeAi.hasActiveModel();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  String? activeModelSpecName() {
+    try {
+      return FlutterEdgeAi.activeModelSpec?.name;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<bool?> isModelInstalled(String fileName) async {
+    try {
+      return await FlutterEdgeAi.isModelInstalled(fileName);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> uninstallModel(String modelId) =>
+      FlutterEdgeAi.uninstallModel(modelId);
+
+  @override
+  Future<void> clearActiveInferenceIdentity() =>
+      FlutterEdgeAi.clearActiveInferenceIdentity();
+}
+
 class ModelDownloadService extends ChangeNotifier {
   final OfflineModelDao _dao = OfflineModelDao();
   ModelStatus _status = ModelStatus.notInstalled;
@@ -107,6 +197,201 @@ class ModelDownloadService extends ChangeNotifier {
   static String resolvedModelUrlFor(OfflineModelSpec spec) =>
       AppConfig.gemmaModelUrl.isNotEmpty ? AppConfig.gemmaModelUrl : spec.url;
 
+  // ── cycle-44 P2 (branch A): the load-path repair ─────────────────────────
+  //
+  // The plugin restores the previously-active model from the persisted
+  // FILENAME alone (`mobile_model_manager.dart:155-222`) — it never checks
+  // that filename against the app's SELECTED spec. A surviving legacy
+  // `gemma3-1b-it-int4.task` was therefore resurrected as the answering
+  // model while the app believed the Qwen asset was ready. The repair lives
+  // at TWO seams (the gate seam and the load seam) and reads the plugin
+  // through ONE seam, so the two never disagree.
+
+  /// The plugin seam the repair reads (test-only override).
+  ///
+  /// Production talks to the pinned plugin; a test injects a fake so the
+  /// repair's decisions are driven by a KNOWN state, never by a platform
+  /// channel that is absent in a unit test.
+  @visibleForTesting
+  static OfflineModelPlugin? pluginOverrideForTest;
+
+  static OfflineModelPlugin get _plugin =>
+      pluginOverrideForTest ?? const FlutterEdgeAiModelPlugin();
+
+  /// The selected asset's persisted filename — the id the plugin keys the
+  /// model by.
+  ///
+  /// The derivation is the plugin's OWN: the install builder takes the
+  /// model file's name from the source URL's last path segment
+  /// (`inference_model_spec.dart:32` — `Uri.parse(url).pathSegments.last`)
+  /// and uses it as BOTH the download target and the persisted model id
+  /// (`inference_installation_builder.dart:435-438`), so the app's selected
+  /// filename and the plugin's model id are the SAME string. The
+  /// `AppConfig.gemmaModelUrl` override derives the same way, so the
+  /// override stays legal (its own filename becomes the selected one).
+  ///
+  /// An EMPTY result means the URL carries no file name: the selected
+  /// identity is UNKNOWN then, and the reconciliation treats that as
+  /// unknown state (no mutation, no marker) — never as "everything is
+  /// foreign".
+  static String selectedFileNameFor(OfflineModelSpec spec) {
+    final segments = Uri.parse(resolvedModelUrlFor(spec)).pathSegments;
+    return segments.isEmpty ? '' : segments.last;
+  }
+
+  /// Whether [candidate] names the same model FILE as [fileName].
+  ///
+  /// The pinned plugin names a model in TWO representations (verified
+  /// first-hand against flutter_edge_ai 1.11.4):
+  ///
+  /// * the RESTORE path rebuilds the active spec from the persisted
+  ///   FILENAME (`mobile_model_manager.dart:215-220` —
+  ///   `InferenceModelSpec(name: filename, ...)`), so the active spec's
+  ///   name is `model.task`;
+  /// * the INSTALL path names the spec after the extension-stripped
+  ///   basename (`inference_installation_builder.dart:419` —
+  ///   `FileNameUtils.getBaseName(...)`), so the active spec's name is
+  ///   `model`.
+  ///
+  /// Both name the SAME file, so the repair compares MODEL IDENTITIES and
+  /// never raw strings: a raw-string comparison would call the app's own
+  /// freshly installed model "foreign" and clear a healthy identity (and
+  /// would re-run the install chain on every load).
+  ///
+  /// The comparison is deliberately one-directional: [candidate] may be the
+  /// stripped form of [fileName], but a candidate that carries a DIFFERENT
+  /// extension is a different model and never matches.
+  static bool isSameModelIdentity(String? candidate, String? fileName) {
+    if (candidate == null || fileName == null) return false;
+    if (candidate == fileName) return true;
+    return candidate == _pluginBaseName(fileName);
+  }
+
+  /// The model's identity without its file extension — the plugin's own
+  /// `FileNameUtils.getBaseName` (`file_name_utils.dart:47-53`), which
+  /// strips every supported extension, in the plugin's own order.
+  static String _pluginBaseName(String fileName) => fileName
+      .replaceAll('.task', '')
+      .replaceAll('.bin', '')
+      .replaceAll('.tflite', '')
+      .replaceAll('.json', '')
+      .replaceAll('.model', '')
+      .replaceAll('.litertlm', '');
+
+  /// Migration v5 — the load-path reconciliation (cycle-44 P2, branch A).
+  ///
+  /// Three state-keyed legs, ONE pass per call:
+  ///
+  /// * **(a) foreign FILE** — every installed id that is not the selected
+  ///   spec's filename is swept. The id-set comparison covers the
+  ///   both-assets and any-legacy compositions by construction — there is
+  ///   no hardcoded filename list. On the message-only class (no legal
+  ///   asset) EVERY id is foreign.
+  /// * **(b) foreign ACTIVE** — the plugin's active model is not the
+  ///   selected spec. The identity is cleared: the plugin's
+  ///   `uninstallModel` does NOT clear the identity, so this call is what
+  ///   stops the in-process binding AND the next-launch resurrection.
+  /// * **(c) the LIE** — the DAO row claims the asset is installed while
+  ///   BOTH plugin probes agree it is gone. The composite probe is
+  ///   normative: a single lying probe can then never loop the download
+  ///   (after a real install the restore re-activates the selected file,
+  ///   which makes the third conjunct false).
+  ///
+  /// The marker `model_asset_v5` is the VERIFIED-CLEAN record — a ruled
+  /// deviation from the marker-first pattern (v2/v3/v4 needed marker-first
+  /// because their bodies could trigger a download; v5's body never
+  /// downloads, and marker-first would strand a needed repair after a
+  /// partial failure — the exact defect class that produced this bug). It
+  /// is written ONLY after the body proved the state clean, and when it is
+  /// set ONLY leg (a) is skipped: legs (b) and (c) are state-keyed and run
+  /// on every launch, so a needed repair is never stranded behind a stale
+  /// marker.
+  static Future<void> _reconcileSelectedSpecIfPresent() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final spec = await OfflineModelSpecTable.currentSpec();
+      final selectedFileName = spec == null ? null : selectedFileNameFor(spec);
+      // A selected asset whose filename cannot be derived is an UNKNOWN
+      // state: never sweep (every id would look foreign), never mark.
+      if (selectedFileName != null && selectedFileName.isEmpty) return;
+      final markerSet = prefs.getBool('model_asset_v5') == true;
+
+      // The plugin facts, read ONCE — the three legs must agree.
+      final installedIds = await _plugin.listInstalledModels();
+      if (installedIds == null) return; // UNKNOWN state: no mutation, no marker
+      final activeName = _plugin.activeModelSpecName();
+      final hasActive = _plugin.hasActiveModel();
+
+      // leg (a) — the foreign files.
+      final foreignIds = installedIds
+          .where((id) => id != selectedFileName)
+          .toList(growable: false);
+
+      // leg (b) — the foreign active model.
+      final foreignActive =
+          hasActive && !isSameModelIdentity(activeName, selectedFileName);
+
+      // leg (c) — the lie. BOTH plugin probes must agree that the selected
+      // asset is gone; a single lying probe can never loop the download.
+      final fileInstalled = selectedFileName == null
+          ? null
+          : await _plugin.isModelInstalled(selectedFileName);
+      final daoClaimsInstalled = await OfflineModelDao().isModelInstalled();
+      final lie =
+          daoClaimsInstalled &&
+          fileInstalled == false &&
+          !isSameModelIdentity(activeName, selectedFileName);
+
+      // 1. SWEEP (leg a) — skipped only when the marker records a clean
+      //    state. Tolerant: the plugin throws 'Model not found' on an
+      //    unknown id, and a failed uninstall is retried on the next
+      //    launch, never inside this call.
+      final sweptIds = <String>[];
+      if (!markerSet) {
+        for (final id in foreignIds) {
+          try {
+            await _plugin.uninstallModel(id);
+            sweptIds.add(id);
+          } catch (_) {
+            // Already unregistered / file missing — safe to continue.
+          }
+        }
+      }
+
+      // 2. IDENTITY — cleared when the active model is foreign, or when the
+      //    sweep removed the active model's OWN file (the plugin leaves the
+      //    identity pointing at a deleted file otherwise).
+      final sweptTheActiveFile = sweptIds.any(
+        (id) => isSameModelIdentity(activeName, id),
+      );
+      if (foreignActive || sweptTheActiveFile) {
+        await _plugin.clearActiveInferenceIdentity();
+      }
+
+      // 3. THE LIE — the DAO reconciles to plugin truth, so the gate's
+      //    readiness read honestly offers the fresh install.
+      if (lie) {
+        await OfflineModelDao().setModelNotInstalled();
+      }
+
+      // 4. VERIFY + MARKER — the marker is the verified-clean record. A
+      //    state that is still not clean is NOT marked and NOT retried
+      //    within the call (one pass per invocation; the next launch
+      //    retries — idempotent, bounded).
+      final remaining = await _plugin.listInstalledModels();
+      if (remaining == null) return;
+      final clean = remaining.every((id) => id == selectedFileName);
+      if (clean) await prefs.setBool('model_asset_v5', true);
+    } catch (e) {
+      // A reconciliation must never break the download gate. The marker is
+      // written only after a verified-clean state, so a failed pass is
+      // retried on the next launch.
+      if (kDebugMode) {
+        debugPrint('[ModelDownload] v5 reconciliation failed: $e');
+      }
+    }
+  }
+
   void _notifyStateChanged(ModelStatus oldStatus, double oldProgress) {
     if (oldStatus != _status || oldProgress != _progress) {
       notifyListeners();
@@ -190,6 +475,11 @@ class ModelDownloadService extends ChangeNotifier {
     // superseded one.
     await _migrateLegacyAssetIfPresent();
     await _migrateStrandedE2bAssetIfPresent();
+    // The v5 reconciliation (cycle-44 P2, branch A) runs at the SAME seam —
+    // after v3/v4, BEFORE the readiness read: it sweeps a foreign file,
+    // clears a foreign active identity and resets a lying DB row, so the
+    // readiness read below reads a reconciled state.
+    await _reconcileSelectedSpecIfPresent();
 
     try {
       final sqliteReady = await _dao.isModelReady();
@@ -447,7 +737,7 @@ class ModelDownloadService extends ChangeNotifier {
     _armStallWatchdog();
     try {
       // Foreground (AppConfig.foregroundDownload, default true) keeps the
-      // ~2.6GB transfer alive when the app is backgrounded (WorkManager
+      // ~1.6GB transfer alive when the app is backgrounded (WorkManager
       // alone is subject to background limits). FOREGROUND_DOWNLOAD=false
       // is the no-rebuild workaround when the foreground path fails.
       // Timeout stays as belt-and-braces.
@@ -677,37 +967,54 @@ class ModelDownloadService extends ChangeNotifier {
   @visibleForTesting
   bool get stallFiredForTest => _stallFired;
 
-  /// Re-establishes the plugin's active-model spec for this process.
-  /// On flutter_edge_ai 1.11.4, initialize() already auto-restores the
-  /// previously-active model identity from SharedPreferences, so
-  /// hasActiveModel() is usually true at startup and this returns early.
-  /// The install() below is the defensive remainder: it is idempotent
-  /// (skips the download when the file is already in the plugin's storage)
-  /// and transparently re-downloads — foreground per
-  /// [AppConfig.foregroundDownload] — when the storage was lost or prefs
-  /// restore failed.
+  /// Re-establishes the plugin's active-model spec for this process — and
+  /// VERIFY that the active model IS the app's selected asset
+  /// (cycle-44 P2, branch A).
+  ///
+  /// On flutter_edge_ai 1.11.4, initialize() auto-restores the
+  /// previously-active model identity from SharedPreferences — from the
+  /// persisted FILENAME alone (`mobile_model_manager.dart:155-222`), never
+  /// checked against the app's selected spec. A surviving legacy
+  /// `gemma3-1b-it-int4.task` was therefore resurrected as the answering
+  /// model while the app believed the Qwen asset was ready, and the old
+  /// `hasActiveModel()` early-return below blessed that mismatch forever.
+  ///
+  /// The early return is therefore a VERIFIED match: the active model must
+  /// BE the selected asset AND the asset's file must be present. Anything
+  /// else runs the repair sequence — clear the foreign identity, then the
+  /// idempotent install, which ends in the plugin's own `setActiveModel`
+  /// (the activation) and overwrites the stale persisted identity.
+  ///
+  /// ONE repair pass per call (S1): the reconciliation and the install run
+  /// at most once here, never in a loop.
   static Future<bool> ensureModelActive() async {
     await _migrateStaleAssetIfPresent();
     await _migrateLegacyAssetIfPresent();
     await _migrateStrandedE2bAssetIfPresent();
-    if (FlutterEdgeAi.hasActiveModel()) return true;
+    // The v5 reconciliation runs at the LOAD seam too — the same shared
+    // helper the gate seam calls, so the two seams can never disagree about
+    // the state (a self-inconsistent repair is the loop the ruling forbids).
+    await _reconcileSelectedSpecIfPresent();
+
     // The asset this device runs — the selection table decides. The
     // message-only class has none: nothing can be rehydrated there.
     final spec = await OfflineModelSpecTable.currentSpec();
     if (spec == null) return false;
+
+    final selectedFileName = selectedFileNameFor(spec);
+    if (await _activeModelIsSelected(selectedFileName)) return true;
+
     try {
-      await FlutterEdgeAi.installModel(
-            modelType: spec.modelType,
-            fileType: spec.fileType,
-          )
-          .fromNetwork(
-            resolvedModelUrlFor(spec),
-            token: AppConfig.hfToken.trim(),
-            foreground: AppConfig.foregroundDownload,
-          )
-          .install()
-          .timeout(const Duration(minutes: 60));
-      return FlutterEdgeAi.hasActiveModel();
+      // A foreign active spec is cleared BEFORE the install: the plugin's
+      // uninstallModel does NOT clear the identity, so this call is what
+      // stops the in-process binding and the next-launch resurrection. The
+      // install chain below then ends in setActiveModel, which overwrites
+      // the stale persisted identity.
+      if (_plugin.hasActiveModel()) {
+        await _plugin.clearActiveInferenceIdentity();
+      }
+      await _installSelectedSpec(spec);
+      return _plugin.hasActiveModel();
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[ModelDownload] ensureModelActive failed: $e');
@@ -715,6 +1022,51 @@ class ModelDownloadService extends ChangeNotifier {
       return false;
     }
   }
+
+  /// Whether the plugin's active model IS the selected asset and the
+  /// asset's file is present.
+  ///
+  /// BOTH conjuncts are needed: a restored identity can name the right
+  /// model while the file is gone (the DAO/plugin lie the device scout
+  /// found), and the file can be present while a FOREIGN model is active.
+  static Future<bool> _activeModelIsSelected(String selectedFileName) async {
+    if (!_plugin.hasActiveModel()) return false;
+    if (!isSameModelIdentity(_plugin.activeModelSpecName(), selectedFileName)) {
+      return false;
+    }
+    final installed = await _plugin.isModelInstalled(selectedFileName);
+    return installed == true;
+  }
+
+  /// The idempotent install chain of the selected spec.
+  ///
+  /// The plugin's own path: it skips the download when the file is already
+  /// in the plugin's storage and ends in `setActiveModel` — the activation
+  /// (the modern install path, `inference_installation_builder.dart:478`).
+  static Future<void> _installSelectedSpec(OfflineModelSpec spec) async {
+    final override = ensureInstallOverrideForTest;
+    if (override != null) {
+      await override(spec);
+      return;
+    }
+    await FlutterEdgeAi.installModel(
+          modelType: spec.modelType,
+          fileType: spec.fileType,
+        )
+        .fromNetwork(
+          resolvedModelUrlFor(spec),
+          token: AppConfig.hfToken.trim(),
+          foreground: AppConfig.foregroundDownload,
+        )
+        .install()
+        .timeout(const Duration(minutes: 60));
+  }
+
+  /// Overrides the load-path install chain (test-only). When set,
+  /// [_installSelectedSpec] calls it instead of the plugin.
+  @visibleForTesting
+  static Future<void> Function(OfflineModelSpec spec)?
+  ensureInstallOverrideForTest;
 
   String? get errorMessage => _errorMessage;
 }

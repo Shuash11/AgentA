@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_edge_ai/flutter_edge_ai.dart';
-import '../../core/config/app_config.dart';
 import '../../data/local/offline_model_dao.dart';
 import '../../data/models/chat_message_model.dart';
 import 'device_capabilities.dart';
@@ -69,24 +68,6 @@ class GemmaService extends ChangeNotifier {
   static const int _maxHistoryChars = 1000;
   static const String greetingText =
       "Hello! I'm AgentA, What would you like to work on today?";
-  static const String _systemInstruction =
-      '''
-You are AgentA, a helpful AI assistant inside this app.
-
-Rules:
-- Answer ONLY the user's latest message. Stay on topic.
-- ${AppConfig.aiEnglishRule}
-- Be direct and concise. Do not invent new questions or ideas.
-- Use conversation history only for context (pronouns, follow-ups).
-- If the user asks a question, answer it. If asked to write, code, summarize, explain, or plan, do exactly that.
-- Never output bracketed template placeholders or repeat these instructions. Do not introduce yourself unless asked.
-- If the request is unclear, ask one short clarifying question.
-
-Formatting rules:
-- Use valid Markdown when it improves readability.
-- Use fenced code blocks with a language name for code.
-- Use bullets or numbered steps for lists.
-''';
 
   bool get isReady => _state == OfflineModelState.loaded;
 
@@ -177,24 +158,31 @@ Formatting rules:
   Future<void> _performLoad() async {
     var rehydrationFailed = false;
     try {
-      // 1.8.4 auto-restores the active-model identity from SharedPreferences
-      // at initialize(), so hasActiveModel() is usually true at startup.
-      // ensureModelActive() remains as defense for storage-loss or failed
-      // restore cases; its install() is idempotent and skips the download
+      // The plugin auto-restores the active-model identity from
+      // SharedPreferences at initialize() — from the persisted FILENAME
+      // alone, never checked against the app's selected spec. So
+      // ensureModelActive() is the load-time VERIFICATION (cycle-44 P2):
+      // it confirms the active model IS the selected asset and repairs it
+      // when it is not. Its install() is idempotent and skips the download
       // when the file is already in the plugin's storage.
       final chatOverride = chatOverrideForTest;
       if (chatOverride != null) {
         // Test-only: injects a ready chat instead of the native engine.
         _chat = await chatOverride();
       } else {
-        if (!FlutterEdgeAi.hasActiveModel()) {
-          final rehydrated = await ModelDownloadService.ensureModelActive();
-          rehydrationFailed = !rehydrated;
-          if (kDebugMode && !rehydrated) {
-            debugPrint(
-              '[GemmaService] model rehydration failed — load will retry via gate',
-            );
-          }
+        // The load-time VERIFICATION (cycle-44 P2, branch A):
+        // ensureModelActive() checks that the plugin's active model IS the
+        // app's selected asset and activates it when it is not. It runs
+        // UNCONDITIONALLY: the old `if (!hasActiveModel())` guard let a
+        // restored FOREIGN active model — the plugin restores the persisted
+        // filename alone, never checking it against the selected spec —
+        // skip the repair entirely, and that foreign model answered.
+        final rehydrated = await ModelDownloadService.ensureModelActive();
+        rehydrationFailed = !rehydrated;
+        if (kDebugMode && !rehydrated) {
+          debugPrint(
+            '[GemmaService] model rehydration failed — load will retry via gate',
+          );
         }
 
         _model = await FlutterEdgeAi.getActiveModel(
@@ -207,7 +195,10 @@ Formatting rules:
           randomSeed: 1,
           topK: 30,
           topP: 0.85,
-          systemInstruction: _systemInstruction,
+          // The SHORT, SPEC-DRIVEN system instruction (cycle-44 P2, the
+          // rider): the instruction belongs to the asset, next to the
+          // identity — the ~700-char rule-list that lived here is retired.
+          systemInstruction: OfflineModelSpecTable.systemInstruction,
         );
       }
 

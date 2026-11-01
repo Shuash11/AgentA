@@ -6,7 +6,11 @@
 # device — "make the qwen the main model offline" — consumed by P2b and P3
 # (evidence); the v1.2.0 amendment (cycle-43) adds the under-floor
 # "Download anyway" RAM override to the SAME spec — consent-gated,
-# warning-first (plans/cycle-43 §4.1-§4.3) — consumed by P2. Authoritative
+# warning-first (plans/cycle-43 §4.1-§4.3) — consumed by P2; the v1.3.0
+# amendment (cycle-44) records the Branch-A load-path fix AS BUILT —
+# migration v5, the verified-match load seam, the caller-guard drop, the
+# spec-driven short instruction and the honest picker copy
+# (plans/cycle-44 §5-P2; the §4b + header records below). Authoritative
 # file — code, comments and delegation prompts are
 # never the contract. No second copy exists anywhere. A reader implements
 # P2b from this file (as amended) plus offline-model-e2b.yaml (v1.3.0) alone,
@@ -16,7 +20,11 @@
 # search-or-skip record); the code sites cited were re-verified against the
 # tree at recording time (2026-10-31) — line anchors are as-of that read and
 # P2 re-verifies them at implementation (the cycle-38 anchor-drift
-# precedent, E2B contract §5 download_service_comment).
+# precedent, E2B contract §5 download_service_comment). The v1.3.0
+# amendment re-verified every anchor it touches against the post-P2 tree
+# (2026-11-01 — the cycle-44 CR-4 sweep); the touched sections carry
+# post-P2 anchors as-of that read, and untouched sections keep their
+# recording-time anchors under the same re-verify policy.
 #
 # Recorded 2026-10-31 (cycle-42 P1, contractor) — initial recording v1.0.0.
 # No secret material: token VALUES never appear here; only config KEY names
@@ -25,8 +33,77 @@
 # no-op-preserving per the E2B contract §1 token_threading.
 
 contract: offline-model-qwen15b
-version: 1.2.0
+version: 1.3.0
 status: active
+# v1.3.0 (2026-11-01, cycle-44 §5-P2 Branch-A amendment, contractor): the
+# Adviser's Branch-A ruling (plan §5-P2, BINDING, issued 2026-11-01 on the
+# device scout's verdict (A) — S0 SATISFIED) records the cycle-44 P2 fix
+# AS BUILT. THE EMPIRICAL BASIS (plan §5-P2 verdict basis + §11, quoted
+# evidence): on the user's device (OPPO CPH2591, v1.9.1) the offline
+# assistant self-identified as Gemma-2 ("an open-source language model
+# created by Google DeepMind Gemma-2") TWICE — the owner's persisted
+# transcript, reproduced live by the scout's re-probes — the math probe
+# (20 ÷ 5) deflected into canned assistant framing, the history probe
+# (my name is test123 → what is my name) failed to recall, and `dumpsys
+# diskstats` put app data at 556,179,456 B ≈ 530.4 MB — far too small for
+# the 1.6 GB Qwen .task (§1 size 1,598,556,720 B), exactly a 1B int4
+# bundle: a LEGACY GEMMA FILE WAS ANSWERING. DIRECTIVE LINEAGE: the owner
+# rejected static analysis and ruled USB debugging first ("check if this
+# is really a qwen model cause i think its not" — plan header/§4.8; the
+# gemma-eradication directive §4.10) → P1's quoted-evidence verdict (A)
+# (plan §5-P1 protocol, §11) → §5-P2's Branch-A ruling → middle-end P2
+# (as built, verified against this tree 2026-11-01) → this record. THE
+# MECHANISM (plan §1.7, pub-cache verified first-hand): the pinned plugin
+# (flutter_edge_ai 1.11.4) auto-restores the previously-active model from
+# the persisted FILENAME alone at initialize() (mobile_model_manager.dart
+# :155-222) — never checked against the app's SELECTED spec — so a
+# surviving legacy `gemma3-1b-it-int4.task` was resurrected as the
+# answering model, and the app's old `hasActiveModel()` early return
+# (gemma_service.dart, pre-P2 :190) blessed the mismatch forever; the
+# 100%-tolerance path could also mark the DAO ready without the active
+# switch ever flipping (the "picker says ready, 530.4 MB app data, no Qwen
+# file" lie). Changes (§1 anchor, §2, §3 one anchor, §4 owner anchors, §4b
+# NEW, §6, §7 anchors, §8 + this record only; §3/§5 semantics UNTOUCHED):
+# (1) §4b migration_v5 ADDED — the marker `model_asset_v5`, the THREE
+# state-keyed legs ((a) the foreign-file sweep over listInstalledModels(),
+# (b) the foreign-active clear via clearActiveInferenceIdentity(), (c) the
+# missing-file LIE via the COMPOSITE probe — BOTH plugin probes must agree
+# before the DAO is touched), the VERIFIED-CLEAN marker semantics (the
+# RULED DEVIATION from marker-first: the marker is written only after the
+# body proves the state clean, and when set ONLY the sweep leg is skipped —
+# legs (b)/(c) are state-keyed and run EVERY launch; marker-first would
+# strand a needed repair after a partial failure — the exact defect class
+# that produced this bug), the IDENTITY-COMPARISON rule (the plugin names
+# a model in TWO representations — the persisted filename on restore vs
+# the extension-stripped basename on install — so the comparison is
+# IDENTITY-BASED and ONE-DIRECTIONAL, never a raw-string equality), the
+# caller-guard DROP (ensureModelActive() runs UNCONDITIONALLY in the
+# production load branch and VERIFIES — a restored foreign active spec
+# must REACH the repair), and the UNKNOWN-state doctrine (a plugin read
+# that cannot answer is UNKNOWN, never clean — no mutation, no marker).
+# (2) §2 load_shape/system_prompt SUPERSEDED in the instruction operand:
+# the system instruction is now SPEC-DRIVEN and SHORT (home
+# offline_model_spec.dart, consumed at the chat seam), carrying the
+# identity line VERBATIM ("If asked what model you are, say you are
+# AgentA's built-in offline assistant."); the ~700-char rule-list is
+# retired (plan §5-P2 Ruling 4 rider A; the greeting and both send paths
+# untouched). (3) §6 excluded_file SUPERSEDED: the ai_model.dart rider
+# LANDED — the picker description now reads "Smarter offline AI — ~1.6GB
+# download, runs on your device" (ai_model.dart:62; the F9 residual comes
+# due; cycle-39's ratified reasoning-tier hunks carry in the file per the
+# S2 discipline — plan §5-P2 Ruling 4 rider B; cycle-39's §9 amendment
+# stands). (4) ANCHOR REFRESH (CR-4): every anchor in the touched sections
+# re-verified against the post-P2 tree 2026-11-01 — the §2 identity sites
+# are SPEC-DRIVEN (the hardcoded `_modelType` is GONE), the override seam
+# moved to model_download_service.dart:197-198, the engine registration is
+# main.dart:182, and the §3 resolver anchor drifted by rider A's insertion
+# into offline_model_spec.dart and is refreshed in place. Consumers:
+# cycle-44 P2 (as built — the acceptance criteria of plan §5-P2 are
+# test-proven, test/cycle44_p2_load_path_test.dart, §8) and P3's
+# gates/greps; NO consumer break beyond the ruled semantics (v1.2.0
+# readers: the selection/override/copy semantics of §3/§5/§6 are
+# UNTOUCHED — this amendment records the LOAD-path repair and the two
+# supersessions).
 # v1.2.0 (2026-11-01, cycle-43 §4.1-§4.3 under-floor override amendment,
 # contractor): the Adviser's ruling on the user directive (VERBATIM): "if
 # yes then let me still download the offline model like there is a button
@@ -98,6 +175,7 @@ status: active
 # §2  engine_contract — ModelType.qwen + ModelFileType.task on the EXISTING MediaPipeEngine; install/load shapes; identity
 # §3  selection_table — the binding ONE-class RAM-floor table + the under-floor override (plan §4.9; cycle-43 §4.1-§4.3; supersedes §4.3's two-key matrix)
 # §4  migration_v4 — model_asset_v4 marker; the WIDENED stranded-E2B uninstall — ANY stranded E2B asset (plan §4.4 as widened by §4.9)
+# §4b migration_v5 — the model_asset_v5 LOAD-PATH reconciliation (cycle-44 §5-P2, BINDING): the three state-keyed legs, the composite probe, the verified-clean marker (the ruled deviation from marker-first), the identity-comparison rule, the caller-guard drop; shared by BOTH seams
 # §5  ram_budget — vendor peak RSS vs the 4 GB floor and the ≤ 6 GB cap (plan §1.2)
 # §6  ux_copy — the strings P2 implements verbatim (plan §4.5)
 # §7  error_surface — reused classes, no new branches, the per-class override caveat
@@ -172,10 +250,15 @@ asset_identity:
     v1.7.x); last resort ONLY on explicit user ask (plan §1.3c).
   env_override: >-
     GEMMA_MODEL_URL (dart-define → AppConfig.gemmaModelUrl,
-    app_config.dart:17/:61 — verified 2026-10-31; override seam
-    model_download_service.dart:95) now applies PER-CLASS — see §7
-    override_caveat_amended (the amended successor of the E2B contract §7
-    f13_override_caveat).
+    app_config.dart:17/:61 — verified 2026-10-31 and unchanged at the
+    v1.3.0 read; override seam resolvedModelUrlFor,
+    model_download_service.dart:197-198 — moved from the pre-P2 :94-95 by
+    the cycle-42/44 service growth, re-verified 2026-11-01) now applies
+    PER-CLASS — see §7 override_caveat_amended (the amended successor of
+    the E2B contract §7 f13_override_caveat). The v1.3.0 note: the override
+    ALSO feeds the selected-filename derivation (selectedFileNameFor,
+    :237-240) — the override's own filename becomes the selected one and
+    stays legal (§4b no_stranded_downloads; §7).
 
 # ---------------------------------------------------------------------------
 # 2. Engine contract (plan §5-P1 item 2 + §1.6 + §4.6; code sites
@@ -185,10 +268,12 @@ asset_identity:
 engine_contract:
   engine: MediaPipeEngine
   engine_registration: >-
-    UNCHANGED — lib/main.dart:180 already registers BOTH engines since
+    UNCHANGED — lib/main.dart:182 already registers BOTH engines since
     cycle-38 ("inferenceEngines: const [MediaPipeEngine(),
-    LiteRtLmEngine()]", verified 2026-10-31); NO engine-registration change
-    this cycle (plan §1.6, §5-P1 item 2). MediaPipeEngine claims this spec.
+    LiteRtLmEngine()]", verified 2026-10-31; the anchor moved :180 → :182
+    by later file growth, re-verified 2026-11-01); NO engine-registration
+    change in cycles 42-44 (plan §1.6, §5-P1 item 2; cycle-44 §5-P2).
+    MediaPipeEngine claims this spec.
   engine_choice_rationale: >-
     the MediaPipe .task engine is the only engine PROVEN on the user's
     (non-arm64) device class — the old 1B .task ran fine there while the
@@ -210,24 +295,40 @@ engine_contract:
     2026-10-31; plan §1.6). Divergence = STOP S1 (plan §6).
   install_shape: >-
     MIRRORS the E2B contract §2 install_shape with the SPEC-DRIVEN
-    substitution: BOTH install chains (lib/services/ai/
-    model_download_service.dart:344-345 and :574-575 — currently hardcoded
-    ModelType.gemma4 + ModelFileType.litertlm, verified 2026-10-31) take
-    the SELECTED spec's modelType/fileType — for THIS class: ModelType.qwen
-    + ModelFileType.task. token/foreground/progress/cancel wiring
-    unchanged (token stays AppConfig.hfToken.trim() — a no-op on this
-    ungated repo, §1 token_threading; foreground
+    substitution — AS BUILT (re-verified 2026-11-01, post-P2): BOTH install
+    chains take the SELECTED spec's modelType/fileType — for THIS class:
+    ModelType.qwen + ModelFileType.task. The DOWNLOAD chain:
+    model_download_service.dart:754-765 (modelType: spec.modelType at :755,
+    fileType: spec.fileType at :756, fromNetwork at :758 — superseding the
+    v1.0.0 record's "currently hardcoded ModelType.gemma4 +
+    ModelFileType.litertlm at :344-345/:574-575", which described the
+    pre-P2b state). The LOAD-PATH chain (cycle-44 §5-P2): the idempotent
+    _installSelectedSpec at :1046-1063 (:1053-1054, ending in the plugin's
+    setActiveModel — the activation; §4b). token/foreground/progress/cancel
+    wiring unchanged (token stays AppConfig.hfToken.trim() — a no-op on
+    this ungated repo, §1 token_threading; foreground
     AppConfig.foregroundDownload; progress/cancel per the existing chain).
   load_shape: >-
-    UNCHANGED for both classes (plan §4.6): FlutterEdgeAi.getActiveModel(
-    maxTokens: 2048, preferredBackend: PreferredBackend.cpu) —
-    gemma_service.dart:200-201 (_maxTokens = 2048 at :67, CPU at :201,
-    verified 2026-10-31) — and the createChat sampler parameters
-    (temperature 0.3, randomSeed 1, topK 30, topP 0.85, systemInstruction
-    _systemInstruction — gemma_service.dart:71/:209) are UNCHANGED. The
-    60-min _installTimeout ceiling (model_download_service.dart:47; plan
-    §1.6 (:47), §2 F12 — ample for 1.6 GB ≈ 18 min at 1.5 MB/s) and the
-    3-min stall watchdog are reused as-is.
+    UNCHANGED for both classes (plan §4.6) in VALUES, AMENDED at v1.3.0
+    (cycle-44 §5-P2) in the load SEQUENCE and the instruction operand:
+    FlutterEdgeAi.getActiveModel(maxTokens: 2048, preferredBackend:
+    PreferredBackend.cpu) — gemma_service.dart:188-191 (_maxTokens = 2048
+    at :67, CPU at :190 — re-verified 2026-11-01; the pre-P2 anchors
+    :200-201/:201 drifted with the service's growth) — and the createChat
+    sampler parameters (temperature 0.3, randomSeed 1, topK 30, topP 0.85 —
+    gemma_service.dart:193-197) are UNCHANGED; the systemInstruction
+    operand is now SPEC-DRIVEN (OfflineModelSpecTable.systemInstruction,
+    consumed at :201 — see system_prompt; the pre-P2 _systemInstruction
+    const is RETIRED). THE LOAD SEQUENCE GAINS THE VERIFICATION STEP (the
+    ruled caller-guard drop, §4b): ensureModelActive() runs UNCONDITIONALLY
+    in the production branch of _performLoad() (gemma_service.dart:180 —
+    the old `if (!hasActiveModel())` guard at the pre-P2 :190 is DROPPED)
+    and VERIFIES the active model IS the selected asset before the load;
+    `rehydrationFailed = !(await ensureModelActive())` keeps its semantics
+    (:181). The 60-min _installTimeout ceiling
+    (model_download_service.dart:138 — the pre-P2 :47 drifted; plan §1.6,
+    §2 F12 — ample for 1.6 GB ≈ 18 min at 1.5 MB/s) and the 3-min stall
+    watchdog are reused as-is.
   max_tokens_semantics: >-
     maxTokens: 2048 is the context window and stays 2048 BECAUSE the
     installed build is ekv4096 (KV ceiling 4096 ≥ 2048 — no clamp); the
@@ -242,26 +343,47 @@ engine_contract:
     core code).
   system_prompt: >-
     on .task, MediaPipe handles the chat template internally (pinned core
-    model.dart:15, plan §1.6); createChat(systemInstruction:
-    _systemInstruction) keeps its parameter and lands natively in the
-    template (the E2B contract §8 pattern carries; the app ALWAYS carries
-    a system instruction — gemma_service.dart:71 _systemInstruction — so
-    the litertlm empty-preface defect is not our path, plan §1.2). NO code
-    change to the system-instruction path.
+    model.dart:15, plan §1.6); createChat keeps its systemInstruction
+    parameter and it lands natively in the template (the E2B contract §8
+    pattern carries; the app ALWAYS carries a system instruction — so the
+    litertlm empty-preface defect is not our path, plan §1.2). THE
+    INSTRUCTION PATH ITSELF: SUPERSEDED at v1.3.0 (cycle-44 §5-P2 Ruling 4
+    rider A — the v1.0.0 sentence "NO code change to the system-instruction
+    path" is RETIRED): the instruction is SPEC-DRIVEN and SHORT. HOME:
+    offline_model_spec.dart — the OfflineModelSpec.systemInstruction field
+    (:91-103, the doc rationale included) with the value on the ONE spec
+    (:182-188) and the table getter OfflineModelSpecTable.systemInstruction
+    (:283); the chat seam consumes it (gemma_service.dart:201) — exactly
+    ONE copy of the instruction exists in lib/ (the spec table is the
+    single identity site, contract §2; the instruction belongs to the ONE
+    spec). CONTENT (verified verbatim in-tree 2026-11-01): keeps the
+    "You are AgentA, a helpful AI assistant inside this app." opener (the
+    plan §10 grep anchor), keeps ${AppConfig.aiEnglishRule} (app_config
+    .dart:57), carries ONE direct-answer directive ("Answer the user's
+    latest message directly and correctly. Show the working for math." —
+    Bug A's mitigation), and adds the IDENTITY LINE VERBATIM: "If asked
+    what model you are, say you are AgentA's built-in offline assistant."
+    (Bug B's mitigation — the device scout's recorded question). The
+    ~700-char Rules/Formatting rule-list is RETIRED (a 1.5B local model
+    drowns in a long rule-list — its length is itself a cause of the
+    instruction-continuation deflection the scout recorded). The greeting
+    (gemma_service.dart:69-70) and both send paths are UNTOUCHED (plan
+    §5-P2 Ruling 4). Test-proven: the instruction is short, spec-driven
+    and carries the identity line (test/cycle44_p2_load_path_test.dart,
+    the riders group).
   identity_string: qwen2.5-1.5b-it      # plan §4.1/§4.3
-  identity_sites:                       # the four-site invariant of the E2B contract §2 — NOW SPEC-DRIVEN, never hardcoded twice (plan §5-P1 item 2); anchors verified 2026-10-31
-    - lib/services/ai/model_download_service.dart:77 (_modelType —
-      currently the hardcoded 'gemma-4-e2b-it'; becomes the SELECTED spec's
-      identity; feeds _dao.setModelReady(modelType: _modelType) at :362
-      and :383)
-    - lib/services/ai/gemma_service.dart:213 (currently the hardcoded
-      setModelReady(modelType: 'gemma-4-e2b-it'); becomes the SELECTED
-      spec's identity — plan §5-P2 item 5)
-    - lib/data/local/offline_model_dao.dart:62 (setModelNotInstalled's
-      'model_type' row — currently hardcoded; becomes spec-driven, plan
-      §5-P2 item 6)
-    - lib/data/local/offline_model_dao.dart:88 (setModelError's
-      'model_type' row — same)
+  identity_sites:                       # the four-site invariant of the E2B contract §2 — SPEC-DRIVEN AS BUILT (plan §5-P1 item 2; re-verified 2026-11-01 post-P2 — the v1.0.0 "currently hardcoded" framing and anchors are superseded; the `_modelType` symbol is GONE)
+    - lib/services/ai/model_download_service.dart:773 and :794
+      (_dao.setModelReady with modelType = spec.identity on the download
+      chain's completion paths — the SELECTED spec's identity)
+    - lib/services/ai/gemma_service.dart:208
+      (_dao.setModelReady with modelType = OfflineModelSpecTable.appIdentity
+      — the load path's identity write)
+    - lib/data/local/offline_model_dao.dart:65-71 (setModelNotInstalled's
+      'model_type' row — spec-driven, defaulting to
+      OfflineModelSpecTable.appIdentity at :71)
+    - lib/data/local/offline_model_dao.dart:100 (setModelError's
+      'model_type' row — same spec-driven default)
   identity_invariant: >-
     all four sites carry the SELECTED spec's identity string —
     'qwen2.5-1.5b-it' on the fallback class, 'gemma-4-e2b-it' on the E2B
@@ -407,9 +529,12 @@ selection_table:
       "below-floor + ack ⇒ eligible", while its ruled formula
       ("totalMem >= floor OR ack", plan §5-P2 item 1) read literally also
       admits an UNREADABLE-totalMem device whose ack is recorded (at the
-      resolver seam — offline_model_spec.dart:141-144/:168-169, verified
-      2026-11-01 — both below-floor and unreadable arrive as 'floor not
-      cleared'). The ruled test matrix (plan §5-P2 item 3) covers
+      resolver seam — offline_model_spec.dart:216-222/:248-266 as-of the
+      v1.3.0 read, 2026-11-01; the v1.2.0-recorded :141-144/:168-169
+      drifted when the cycle-44 rider A inserted the systemInstruction
+      field above them — the seam's SEMANTICS are unchanged: both
+      below-floor and unreadable arrive as 'floor not cleared'). The
+      ruled test matrix (plan §5-P2 item 3) covers
       below-floor ± ack and above-floor ONLY — no unreadable case; the
       fail-closed primitive (DeviceCapabilities.clearsMemoryFloor's
       null→false, device_capabilities.dart:207-210, verified 2026-11-01)
@@ -519,8 +644,13 @@ selection_table:
 migration_v4:
   owner: >-
     lib/services/ai/model_download_service.dart — a v4 migration alongside
-    the untouched v2 (:227/:232) and v3 (:251/:253) logic (verified
-    2026-10-31; plan §4.4, §5-P2 item 4).
+    the untouched v2 (_migrateStaleAssetIfPresent, :529-551) and v3
+    (_migrateLegacyAssetIfPresent, :552-622) logic (verified 2026-10-31;
+    the v1.0.0 anchors :227/:232/:251/:253 drifted with the service's
+    growth, re-verified 2026-11-01; plan §4.4, §5-P2 item 4). v1.3.0 NOTE:
+    v2/v3/v4 markers and logic remain BYTE-FOR-BYTE UNTOUCHED by cycle-44
+    (plan §5-P2 Ruling 2) — only line positions moved; the v5 sibling is
+    §4b below.
   marker: "model_asset_v4"              # new SharedPreferences bool — plan §4.4
   call_site: >-
     the SAME gate seam as v3 — checkModelExists(), invoked BEFORE the
@@ -579,6 +709,234 @@ migration_v4:
     with selection collapsed to the Qwen spec, EVERY E2B asset in the
     wild is stranded. v4 moves the dead asset out and the gate offers the
     working Qwen class.
+
+# ---------------------------------------------------------------------------
+# 4b. Migration contract v5 — the LOAD-PATH reconciliation (cycle-44 plan
+#     §5-P2 Rulings 1-3 + 6 — BINDING; as built and verified against this
+#     tree 2026-11-01). The v3/v4 asset-presence lesson, state-keyed; the
+#     marker-first pattern is RULED AWAY here (see marker_semantics).
+# ---------------------------------------------------------------------------
+
+migration_v5:
+  owner: >-
+    lib/services/ai/model_download_service.dart — the shared helper
+    _reconcileSelectedSpecIfPresent() (:309-393), invoked from BOTH seams
+    so they can never disagree about the state: the GATE seam
+    checkModelExists() (:467-523 — after the v3/v4 calls :476-477, BEFORE
+    the readiness read :485 — the v3 §4.8 call-site precedent) and the
+    LOAD seam ensureModelActive() (:990-1024 — after the three v2/v3/v4
+    migrations :991-993, per Ruling 1 site 1 step 1).
+  marker: "model_asset_v5"              # a SharedPreferences bool — read :317, written :384 ONLY after verified-clean (marker_semantics below)
+  plugin_seam: >-
+    cycle-44 reads every plugin probe through ONE seam — the
+    OfflineModelPlugin abstraction (:36-61) with the production
+    FlutterEdgeAiModelPlugin (:68-114) and a @visibleForTesting override
+    (:215-219) — so the gate and load seams read the SAME facts. EVERY
+    wrapped read answers UNKNOWN (null) when the plugin cannot be reached,
+    never "no models"/"false-clean": an UNREAD state is not a clean state,
+    and the repair must never turn an unknown into a destructive decision
+    (see the_unknown_doctrine below).
+  filename_derivation: >-
+    the selected asset's persisted filename is selectedFileNameFor(spec)
+    (:237-240) = Uri.parse(resolvedModelUrlFor(spec)).pathSegments.last —
+    the plugin's OWN derivation (the install builder takes the model
+    file's name from the source URL's last path segment and uses it as
+    BOTH the download target and the persisted model id, so the app's
+    selected filename and the plugin's model id are the SAME string; the
+    plan §5-P2 Ruling 1 allowed either package:path's basename or
+    pathSegments.last — the derived string is what matters). The
+    AppConfig.gemmaModelUrl override derives the same way (resolvedModelUrlFor,
+    :197-198), so the override stays legal. An EMPTY result (a URL with no
+    file name) is an UNKNOWN state: the reconciliation never sweeps (every
+    id would look foreign) and never marks (:314-316).
+  identity_comparison: >-
+    THE IDENTITY-COMPARISON RULE (cycle-44 P2, ruled in the P2 report and
+    recorded per the delegation — plan §5-P2's raw-string sketch is
+    superseded by THIS rule): the pinned plugin (flutter_edge_ai 1.11.4)
+    names a model in TWO representations — the RESTORE path rebuilds the
+    active spec from the persisted FILENAME (mobile_model_manager.dart
+    :215-220), so the active spec's name is `model.task`; the INSTALL path
+    names the spec after the EXTENSION-STRIPPED basename
+    (inference_installation_builder.dart:419 — FileNameUtils.getBaseName),
+    so it is `model`. Both name the SAME file. The comparison is therefore
+    IDENTITY-BASED, never a raw-string equality: isSameModelIdentity
+    (candidate, fileName) (:264-268) matches equal strings OR the
+    candidate being the plugin-baseName of the fileName (_pluginBaseName
+    :273-279 — strips the supported extensions in the plugin's own order).
+    ONE-DIRECTIONAL (ruled): the candidate may be the stripped form of
+    fileName, but a candidate carrying a DIFFERENT extension is a
+    different model and never matches. A raw-string comparison would call
+    the app's own freshly installed model "foreign" and clear a healthy
+    identity (and re-run the install chain on every load) — the rule
+    exists to prevent exactly that.
+  trigger: >-
+    THREE STATE-KEYED LEGS (the v3/v4 lesson BINDING: keys on the actual
+    state, never a generic has-model condition), evaluated from the plugin
+    facts read ONCE per pass (:319-343):
+    (a) the FOREIGN-FILE leg — listInstalledModels() (the ids ARE the
+    persisted filenames) contains any id whose identity is not the derived
+    selected filename (:326-328); when spec == null (the message-only
+    class) EVERY id is foreign — the class holds no legal asset (§3
+    message_only_class, §4.10).
+    (b) the FOREIGN-ACTIVE leg — hasActiveModel() AND the active spec's
+    identity is not the selected filename (:330-332).
+    (c) THE LIE leg — the DAO row claims installed (OfflineModelDao()
+    .isModelInstalled(), offline_model_dao.dart:166-178) AND the plugin's
+    file probe says the selected file is NOT installed
+    (isModelInstalled(selectedFileName) — the filename key) AND the active
+    identity is not the selected filename (:334-343). THE COMPOSITE PROBE
+    IS NORMATIVE: BOTH plugin probes must agree the selected asset is gone
+    before the DAO is touched — a single lying probe can then never loop
+    the download (after a real install the restore re-activates the
+    selected file, making the third conjunct false; the lie-isolation is
+    test-proven both ways — a lying file probe alone never resets the row,
+    a lying active probe alone never resets it). Timing verified safe: the
+    restore is awaited inside the plugin's initialize() and the app awaits
+    initialize() pre-gate (main.dart:181, verified 2026-11-01), so
+    activeModelSpec is meaningful at the seam (plan §5-P2 Ruling 2).
+  body:                                 # ORDER IS NORMATIVE — as built :349-384
+    - >-
+      1. SWEEP (leg a) — for every foreign id: uninstallModel(id) inside
+      try/catch, TOLERANT (the pinned core throws 'Model not found: $id'
+      on an unknown id — a failed uninstall never breaks the pass and is
+      retried on the NEXT launch, never within the call; :349-359). This
+      step is the ONLY one the marker skips (marker_semantics). The
+      id-set comparison handles the both-assets AND any-legacy
+      compositions BY CONSTRUCTION — no hardcoded filename list beyond
+      what v2/v3/v4 already carry.
+    - >-
+      2. IDENTITY — clearActiveInferenceIdentity() (in-memory + persisted
+      prefs) when leg (b) fired OR the sweep removed the active model's
+      OWN file (the plugin leaves the identity pointing at a deleted file
+      otherwise; :361-369). The plugin's uninstallModel does NOT clear the
+      identity, so this call is what stops the in-process binding AND the
+      next-launch resurrection.
+    - >-
+      3. THE LIE — when leg (c) fired: dao.setModelNotInstalled()
+      (:371-375) — the DAO reconciles to plugin truth, and the gate's
+      readiness read then honestly offers the fresh install through the
+      EXISTING download flow (the gate re-offers; the normal
+      progress/watchdog/timeout machinery — NO new install path; plan
+      §5-P2 Ruling 3).
+    - >-
+      4. VERIFY + MARKER — re-list listInstalledModels(); clean = every
+      remaining id's identity equals the selected filename (or the list is
+      empty; :377-384). Clean → prefs.setBool('model_asset_v5', true).
+      NOT clean → the marker is NOT set and there is NO retry within the
+      call (one pass per invocation; the next launch retries — idempotent,
+      bounded). The whole body is wrapped in the migration try/catch
+      discipline — a reconciliation must never break the download gate
+      (:310-392).
+  marker_semantics: >-
+    THE RULED DEVIATION FROM MARKER-FIRST — never marker-first (plan
+    §5-P2 Ruling 2, binding): v2/v3/v4 needed marker-first because their
+    triggers were broad and their bodies could trigger a download; v5's
+    body NEVER downloads, and marker-first would strand a needed repair
+    after a partial failure — the exact defect class that produced this
+    bug (a swallowed v3 uninstall + an already-set marker leaves the
+    foreign file on disk forever — the leading archaeology for the user's
+    device). The marker is the VERIFIED-CLEAN record: written ONLY after
+    body step 4 passes; when set, ONLY the sweep leg (a) is skipped
+    (:350) — legs (b) and (c) are STATE-KEYED and run on EVERY launch
+    regardless of the marker (both behaviors test-proven: with the marker
+    set, a foreign active model is still repaired AND the lie is still
+    detected). Recorded edge (ACCEPTED, ruled): with the marker set, a
+    foreign file introduced via the AppConfig.gemmaModelUrl debug
+    override lingers unless active — the override is the contract §7
+    escape hatch, accepted and recorded (plan §5-P2 Ruling 2).
+  the_unknown_doctrine: >-
+    a pass that cannot READ the state performs NO mutation and writes NO
+    marker: a null installedIds list (:321), an empty derived filename
+    (:314-316), or a null re-list at verification (:382) each return the
+    pass untouched. UNKNOWN is never treated as clean (no marker) and
+    never as all-foreign (no sweep) — the repair never guesses.
+  no_stranded_downloads: >-
+    (plan §5-P2 Ruling 6) the sweep NEVER uninstalls the derived selected
+    filename (the AppConfig.gemmaModelUrl override derives its own
+    filename and stays legal — §1 env_override, §7
+    override_caveat_amended); the both-assets composition preserves the
+    Qwen file + row; the reset leg never fires when the composite probe
+    disagrees.
+  stop_discipline: >-
+    S1 carries (plan §5-P2 Ruling 6): ONE reconciliation pass per call;
+    failed uninstalls are tolerated and retried only across launches; the
+    composite probe bounds the reset leg; the marker only after
+    verified-clean — never an infinite fix loop. S2-P2 (pinned-source,
+    binding): any divergence found against the actually-resolved
+    flutter_edge_ai source → STOP, report, re-rule.
+  load_seam: >-
+    ensureModelActive() (plan §5-P2 Ruling 1 site 1 — as built :990-1024):
+    the migrations + the v5 reconciliation run first (:991-997); then
+    spec == null → return false (unchanged — the message-only sweep is the
+    gate seam's job, and the gate returns before load on those devices);
+    then the EARLY RETURN becomes a VERIFIED MATCH, never a blind one:
+    early-return true ONLY on _activeModelIsSelected (:1032-1039) —
+    hasActiveModel() AND the identity matches (per identity_comparison)
+    AND the file is present. BOTH conjuncts are needed: a restored
+    identity can name the right model while the file is gone (the DAO/
+    plugin lie the device scout found), and the file can be present while
+    a FOREIGN model is active. (Ruling refinement recorded: the ruling's
+    step-4 sketch named the identity match; the as-built adds the
+    file-presence conjunct, consistent with the ruling's leg-(c) lie
+    semantics and "verified match, never blind" — test-proven.) Otherwise,
+    when a model is active its (foreign) identity is cleared BEFORE the
+    install (:1013-1015 — uninstallModel does NOT clear the identity, so
+    this stops the in-process binding and the next-launch resurrection),
+    and the flow FALLS THROUGH to the idempotent install chain
+    (_installSelectedSpec, :1046-1063 — it skips the download when the
+    file is present and ends in the plugin's setActiveModel, which
+    overwrites the stale persisted identity; §2 install_shape). Returns
+    hasActiveModel() (:1017). ONE repair pass per call (S1): the
+    reconciliation and the install run at most once here, never in a loop.
+  caller_guard_drop: >-
+    (plan §5-P2 Ruling 1 site 2 — BINDING, as built) the production load
+    branch's old guard `if (!FlutterEdgeAi.hasActiveModel())`
+    (gemma_service.dart pre-P2 :190) is DROPPED — ensureModelActive() is
+    invoked UNCONDITIONALLY in the production branch of _performLoad()
+    (gemma_service.dart:180, verified 2026-11-01). This is not optional:
+    with the guard in place, a restored FOREIGN active spec (exactly the
+    user's device state) never reached the repair function at all.
+    rehydrationFailed keeps its semantics (rehydrationFailed = !(await
+    ensureModelActive()), :181) and its comment (:173-179) describes the
+    verification role. Test-proven both ways: the load calls the
+    verification unconditionally, and a restored foreign active spec
+    REACHES the verification.
+  compositions:                         # each TEST-MANDATED (plan §5-P2 Ruling 2); all four test-proven
+    both_assets: >-
+      a device holding BOTH assets (a legacy gemma file + the Qwen
+      already downloaded) → the gemma file uninstalled, the Qwen file AND
+      DAO row preserved, NO re-download (the readiness read finds Qwen;
+      rehydration activates it idempotently).
+    the_users_device: >-
+      the user's device state (a gemma file active + the DAO row ready +
+      the Qwen absent) → the gemma file uninstalled, the identity cleared,
+      the row reset, and the gate offers the fresh Qwen install.
+    healthy_qwen_device: >-
+      a healthy Qwen device → ZERO mutations (no uninstall, no reset,
+      marker-independent).
+    message_only_holding_a_file: >-
+      a message-only device holding ANY file → swept (every id is foreign
+      when spec == null; the gate seam runs on message-only paths —
+      main.dart:566-586 as-of the v1.3.0 read; the plan's pre-P2 :569-591
+      anchors drifted with main.dart's growth).
+  untouched: >-
+    v2/v3/v4 markers and their logic stay byte-for-byte as-is (§4). The
+    gate's existing path-based readiness check (model_download_service
+    .dart:494-515) STAYS; the ruled leg (c) covers the storedPath == null
+    blind-DB-flag branch whose trust was precisely the lie the scout found
+    (the picker said ready over 530.4 MB of app data with no Qwen file —
+    plan §5-P2 Ruling 3).
+  tests: >-
+    test/cycle44_p2_load_path_test.dart (verified present 2026-11-01): the
+    identity rule, the three legs, the composite-probe lie isolation (both
+    single-lying-probe negatives), the sweep tolerance, the marker
+    semantics (verified-clean only; marker set + foreign-active still
+    repaired; the lie still detected under the marker), the four
+    compositions, the load seam (the verified match, the install-path
+    identity, one repair pass, the message-only refusal), the caller-guard
+    drop (unconditional; the foreign spec reaches the repair), and the
+    riders (the instruction content, the chat-seam consumption, the ~1.6GB
+    picker copy, the 2.6GB retirement).
 
 # ---------------------------------------------------------------------------
 # 5. RAM budget (plan §1.2 vendor measurements + §5-P1 item 5; the ≤ 6 GB
@@ -642,15 +1000,17 @@ ram_budget:
 # ---------------------------------------------------------------------------
 
 ux_copy:
-  gate_size_chip:                       # SPEC-DRIVEN (plan §4.5) — site download_prompt_screen.dart:265 (currently the hardcoded 'Model size: ~2.6GB', verified 2026-10-31)
-    e2b_class: 'Model size: ~2.6GB'     # unchanged string — the E2B contract §5 gate_size_chip contract_string
-    fallback_class: 'Model size: ~1.6GB'   # NEW string — plan §4.5
+  gate_size_chip:                       # SPEC-DRIVEN AS BUILT (plan §4.5) — the string lives on the ONE spec (offline_model_spec.dart:175) and renders at download_prompt_screen.dart:328 (selection?.spec?.sizeChip ?? '' — re-verified 2026-11-01; the v1.0.0-era "hardcoded 'Model size: ~2.6GB' at :265" framing is superseded)
+    e2b_class: 'Model size: ~2.6GB'     # unchanged string — the E2B contract §5 gate_size_chip contract_string (the ROW is superseded by §3: no E2B class exists in selection anymore)
+    fallback_class: 'Model size: ~1.6GB'   # NEW string — plan §4.5; now the spec's sizeChip (offline_model_spec.dart:175)
     anchor_note: >-
       the E2B contract §5 recorded the chip's PRE-P2 site (:184, current
       'Model size: ~529MB'); the shipped v1.8.x state (post-cycle-38-P2)
-      is :265 with '~2.6GB' — the plan's 2026-10-31 anchor and this
-      contract's (plan §1.6; the anchor-drift precedent, E2B contract §5
-      download_service_comment).
+      was :265 with '~2.6GB' (plan §1.6; the anchor-drift precedent, E2B
+      contract §5 download_service_comment). As of cycle-42's P2b the chip
+      is SPEC-DRIVEN and as of the v1.3.0 read (2026-11-01) it renders
+      from the spec table at download_prompt_screen.dart:328 — the '~1.6GB'
+      chip is UNIVERSAL (§3 supersedes).
   gate_data_caution: >-
     UNCHANGED and rendered for BOTH classes — the E2B contract §5
     gate_data_caution line ("Large download — Wi-Fi recommended. You can
@@ -707,13 +1067,22 @@ ux_copy:
     is consent, not a retry (cycle-40's no-retry discipline carries; the
     unreadable disposition is recorded in §3 under_floor_override).
   excluded_file: >-
-    lib/services/ai/ai_model.dart is EXCLUDED from this cycle's change
-    surface AND its commits (F9 — cycle-39's uncommitted edits share the
-    file; plan §1.6 hazard note, §2 F9, §4.5, §4.8): the picker
-    description stays BYTE-UNCHANGED (E2B-worded) until a later cycle
-    whose surface includes the file after cycle-39's push resolves it.
-    Residual RECORDED (plan §2 F9): the per-model size chip lives on the
-    download screen, which is free of the hazard.
+    SUPERSEDED at v1.3.0 (cycle-44 §5-P2 Ruling 4 rider B — the rider
+    LANDED; the v1.0.0 exclusion is RETIRED): lib/services/ai/ai_model.dart
+    entered cycle-44's change surface via the RULED rider — the picker
+    description at ai_model.dart:62 now reads 'Smarter offline AI — ~1.6GB
+    download, runs on your device' (verified verbatim in-tree 2026-11-01;
+    the stale 'larger 2.6GB download' copy is RETIRED — grep-gated zero
+    hits, plan §10). The F9 residual (plan §2 F9) comes DUE and is
+    RESOLVED. Rider discipline S2 unchanged: cycle-39's ratified
+    reasoning-tier hunks carry IN the file (ai_model.dart:10-33 and
+    :68-103, verified in-tree 2026-11-01) — the file is staged WHOLE in
+    cycle-44's commit (plan §9; cycle-39's §9 amendment stands — its
+    commits drop the file). The enum NAME stays contract-frozen
+    (AIModel.gemma unchanged — contracts/openrouter-ai.yaml §3 per
+    ai_model.dart:3-8; §4.10 rules internal identifier renames out of
+    scope). The per-model size chip still lives on the download screen
+    (§6 gate_size_chip — spec-driven).
   out_of_scope: >-
     the slow-connection banner copy and every other string on these
     surfaces is unchanged (the E2B contract §5 out_of_scope discipline;
@@ -721,9 +1090,10 @@ ux_copy:
 
 # ---------------------------------------------------------------------------
 # 7. Error surface (plan §5-P1 item 7 + §4.6; the E2B contract §7
-#    discipline carried; the failure-class sites verified 2026-10-31 —
-#    model_download_service.dart:442 area (the DownloadException mapping)
-#    and gemma_service.dart:314-379)
+#    discipline carried; the failure-class sites verified 2026-10-31 and
+#    re-verified 2026-11-01 (v1.3.0): the DownloadException mapping at
+#    model_download_service.dart:853-879 area (the v1.0.0 ":442 area"
+#    anchor drifted) and gemma_service.dart:309-374)
 # ---------------------------------------------------------------------------
 
 error_surface:
@@ -735,10 +1105,12 @@ error_surface:
     item 7).
   failure_classes: >-
     the cycle-40 failure classes are REUSED unchanged (plan §5-P1 item 7):
-    the unsupportedAbi marker/class (gemma_service.dart:314/:367, verified
-    2026-10-31) and the incompatible-message mapping (:379) now key the
-    message-only state to the §3 message_only_class (the
-    non-arm64-ineligible / < 4 GB case) per the table (plan §5-P2 item 5).
+    the unsupportedAbi marker/class (gemma_service.dart — the detection
+    :309-312, the marker const :362; re-verified 2026-11-01, the v1.0.0
+    anchors :314/:367 drifted with the file's growth) and the
+    incompatible-message mapping (:373-374) now key the message-only
+    state to the §3 message_only_class (the RAM-only case) per the table
+    (plan §5-P2 item 5).
   engine_claim_failures: >-
     a .task engine-claim failure lands in the EXISTING engineInit/unknown
     classes — NO new exception branches (the E2B contract §7
@@ -749,9 +1121,10 @@ error_surface:
     AMENDED (plan §5-P1 item 7 — the successor of the E2B contract §7
     f13_override_caveat): with the install chains SPEC-DRIVEN (§2), the
     GEMMA_MODEL_URL override (dart-define → AppConfig.gemmaModelUrl,
-    app_config.dart:17/:61; resolvedModelUrl + the override seam
-    model_download_service.dart:94-95, verified 2026-10-31 — the E2B
-    contract's :84-85 anchor is its recording-time state) now wins
+    app_config.dart:17/:61 — unchanged at the v1.3.0 read; resolvedModelUrlFor
+    + the override seam model_download_service.dart:197-198, re-verified
+    2026-11-01 — the v1.0.0 :94-95 anchor and the E2B contract's :84-85
+    anchor are their recording-time states) now wins
     PER-CLASS: the override substitutes the URL WITHIN the class the
     device selected, keeping that class's modelType/fileType (plan §5-P2
     item 3). A CROSS-FORMAT override (e.g. a .task URL forced onto the E2B
@@ -824,3 +1197,19 @@ acceptance_criteria:
   p2_lock_invariant: >-
     no new package enters pubspec(.lock); the three engine pins unchanged
     (plan §5-P2 criterion 7; STOP S1).
+  p2_cycle44_branch_a: >-
+    ADDED at v1.3.0 (cycle-44 §5-P2's six acceptance criteria — each
+    independently checkable, ALL TEST-PROVEN as built): (1) the load seam's
+    early return requires the verified identity match and a foreign active
+    spec is cleared + the selected spec reactivated (§4b load_seam); (2)
+    the caller guard is dropped — the verification runs unconditionally in
+    the production branch, rehydrationFailed semantics preserved (§4b
+    caller_guard_drop); (3) v5 present at BOTH seams and the four
+    compositions proven (§4b); (4) the marker written only after
+    verified-clean and skipping ONLY the sweep leg (§4b marker_semantics);
+    (5) the riders as ruled — the identity line verbatim, the ~700-char
+    list and the 2.6GB copy retired (§2 system_prompt, §6 excluded_file);
+    (6) the plan §10 greps green (the branch-A set) with cycle-39's other
+    7 files untouched in the diff. Evidence: test/cycle44_p2_load_path_test
+    .dart (§4b tests); the load-path greps of plan §10 search the §4b
+    symbols in model_download_service.dart.

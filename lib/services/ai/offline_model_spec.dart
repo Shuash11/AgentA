@@ -43,6 +43,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_edge_ai/flutter_edge_ai.dart';
 
+import '../../core/config/app_config.dart';
 import 'device_capabilities.dart';
 
 /// The device classes of the selection table (contract §3).
@@ -87,6 +88,20 @@ class OfflineModelSpec {
   /// The size chip the download gate renders for this asset (contract §6).
   final String sizeChip;
 
+  /// The system instruction the offline chat runs with.
+  ///
+  /// SPEC-DRIVEN (cycle-44 P2, branch A): the instruction belongs to the
+  /// asset, next to the identity — the chat seam reads it from here, so
+  /// there is exactly ONE copy of it in `lib/` (the ~700-char rule-list
+  /// that lived in the chat service is retired).
+  ///
+  /// SHORT by design: a 1.5B local model drowns in a long rule-list — the
+  /// retired list's length is itself a cause of the instruction-continuation
+  /// deflection the device scout recorded. The instruction keeps the
+  /// "You are AgentA" opener (the §10 grep anchor), the English rule, ONE
+  /// direct-answer directive, and the identity line.
+  final String systemInstruction;
+
   const OfflineModelSpec({
     required this.id,
     required this.identity,
@@ -94,6 +109,7 @@ class OfflineModelSpec {
     required this.modelType,
     required this.fileType,
     required this.sizeChip,
+    required this.systemInstruction,
   });
 }
 
@@ -157,6 +173,19 @@ class OfflineModelSpecTable {
     modelType: ModelType.qwen,
     fileType: ModelFileType.task,
     sizeChip: 'Model size: ~1.6GB',
+    // The SHORT system instruction (cycle-44 P2, branch A — the rider):
+    // the ~700-char rule-list is retired (a small local model drowns in
+    // it), the "You are AgentA" opener stays (the §10 grep anchor), the
+    // English rule stays, ONE direct-answer directive replaces the rule
+    // list, and the identity line answers the "what model are you?"
+    // question the device scout recorded VERBATIM.
+    systemInstruction:
+        'You are AgentA, a helpful AI assistant inside this app.\n'
+        '${AppConfig.aiEnglishRule}\n'
+        "Answer the user's latest message directly and correctly. "
+        'Show the working for math.\n'
+        "If asked what model you are, say you are AgentA's built-in "
+        'offline assistant.',
   );
 
   //
@@ -243,6 +272,15 @@ class OfflineModelSpecTable {
   /// class has nothing to install.
   static Future<OfflineModelSpec?> currentSpec() async =>
       (await resolve()).spec;
+
+  /// The system instruction of the ONE asset this table offers.
+  ///
+  /// The table holds exactly ONE asset (contract §3), so the instruction is
+  /// a property of the TABLE, read through the spec that carries it. The
+  /// message-only class never loads a model, so the instruction is only
+  /// ever read on the model path — a caller that has no model never needs
+  /// it.
+  static String get systemInstruction => qwen15b.systemInstruction;
 
   //
   // §4 THE IDENTITY — what the DB rows carry.
