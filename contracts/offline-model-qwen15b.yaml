@@ -10,7 +10,12 @@
 # amendment (cycle-44) records the Branch-A load-path fix AS BUILT —
 # migration v5, the verified-match load seam, the caller-guard drop, the
 # spec-driven short instruction and the honest picker copy
-# (plans/cycle-44 §5-P2; the §4b + header records below). Authoritative
+# (plans/cycle-44 §5-P2; the §4b + header records below); the v1.4.0
+# amendment (cycle-45) records the per-send TURN-PROTOCOL fix — the ruled
+# clearHistory-stays-per-send + role-marked priming-chunk protocol, the
+# 5000-char staged budget, the corrected '[System: …]' prefix mechanics
+# and the send-path-INTERNALS supersession (plans/cycle-45; the
+# turn_protocol + header records below). Authoritative
 # file — code, comments and delegation prompts are
 # never the contract. No second copy exists anywhere. A reader implements
 # P2b from this file (as amended) plus offline-model-e2b.yaml (v1.3.0) alone,
@@ -33,8 +38,68 @@
 # no-op-preserving per the E2B contract §1 token_threading.
 
 contract: offline-model-qwen15b
-version: 1.3.0
+version: 1.4.0
 status: active
+# v1.4.0 (2026-11-02, cycle-45 turn-protocol amendment, contractor): the
+# Adviser's S1-S5 ruling (plans/cycle-45-offline-history-turn-structure.md,
+# the ruling section — BINDING, issued 2026-11-02 post-Phase-0) records
+# the per-send TURN-PROTOCOL fix and orders this amendment BEFORE Phase 1
+# dispatch. THE EMPIRICAL BASIS (the user's live device test, v1.9.2,
+# OPPO CPH2591, verbatim per the plan's finding): NO WORKING
+# CONVERSATIONAL MEMORY — "my name is tester" → "what is my name"
+# returned the identical canned greeting in two independent fresh chats;
+# polluted long chats collapsed into canned `Hola!` repeats and
+# 2,300–2,800-char loops; fresh chats answered cleanly. THE MECHANISM
+# (Phase-0-confirmed at HEAD 5fda352; the history assembly is correct
+# app-side — the delivery mechanism destroys turn structure at the
+# engine boundary): (1) every send calls chat.clearHistory() (the full
+# native session wipe) then re-stages the capped window as chunks
+# (gemma_service.dart:511/:561 + the staging loops :512-516/:562-566);
+# (2) on .task the raw format mode strips EVERY role marker — an
+# assistant message reaches the model as its bare text, indistinguishable
+# from user text (pinned core extensions.dart:57-69/:135-143); (3) every
+# staged chunk accumulates into ONE native buffer and getResponse issues
+# ONE generation over the whole buffer (pinned litertlm/mediapipe
+# sessions). NET: prior user turns + prior assistant turns + the new
+# message reach Qwen2.5-1.5B-Instruct as ONE role-less user string — the
+# 1.5B pattern-completes it to the greeting and parrots/loops on polluted
+# buffers; fresh chats stage nothing (one clean turn), matching the
+# failure record exactly. CHANGES (§2 + this record ONLY; §1/§3-§8
+# UNTOUCHED): (1) §2 system_prompt — TWO CLAIMS RETIRED: "createChat's
+# systemInstruction lands natively in the template" is WRONG for .task
+# (S4: native template injection is LITERTLM-ONLY, pinned
+# mobile_inference_session.dart:40-46; on .task the session prepends
+# '[System: …]\n\n' AS TEXT to the FIRST user chunk staged in the
+# session, :77-86 — under the ruled protocol that chunk is the PRIMING
+# chunk, so the prefix lands DETERMINISTICALLY once per send); and "both
+# send paths UNTOUCHED (cycle-44 §5-P2 Ruling 4)" is SUPERSEDED —
+# cycle-45 reworks the send-path INTERNALS while the PUBLIC signatures of
+# GemmaService.sendMessage/sendMessageStream (history + newMessage) are
+# PRESERVED (ai_service.dart / offline_ai_service.dart / chats.dart call
+# sites keep their signatures). (2) §2 load_shape — the
+# instruction-operand note gains the prefix mechanics. (3) §2
+# turn_protocol — NEW clause recording the ruled per-send protocol
+# (recorded BEFORE Phase 1 dispatch per AC5 — it is the binding spec
+# Phase 1 implements and the Reviewer verifies the build against):
+# clearHistory STAYS per send → ONE role-marked priming chunk
+# (isUser: true) carrying the role-marked capped history → the
+# new-message chunk → generate; the TOTAL staged budget priming + new
+# message ≤ 5000 chars (chars/4 estimator, newest-first fill, complete
+# turns only, the new message never truncated, the 8×1000 caps
+# SECONDARY); S2 DISSOLVED (the plugin's session rotation is unobservable
+# under the per-send wipe — recorded dead scope, NO app-side token
+# accounting); the reset seam stays a BARE WIPE. (4) ANCHOR POLICY: every
+# anchor this amendment touches was re-verified first-hand against the
+# tree at HEAD 5fda352 + the pinned pub-cache (flutter_edge_ai-1.11.4,
+# flutter_edge_ai_mediapipe-1.0.8, flutter_edge_ai_litertlm-1.8.6;
+# 2026-11-02, this amendment's verification pass — it coincides with the
+# plan's Phase-0 confirmation and the ruling's first-hand set).
+# Consumers: cycle-45 Phase 1 (middle-end). NO consumer break beyond the
+# ruled semantics (v1.3.0 readers: the selection/override/copy/load-path
+# semantics of §3/§4b/§5/§6/§7 are UNTOUCHED — this amendment records the
+# send-path protocol and the two supersessions). The contract version is
+# a RECORD version — the APP version stays PATCH 1.9.3+1 (the plan's
+# version decision: bug fix, no API shape change).
 # v1.3.0 (2026-11-01, cycle-44 §5-P2 Branch-A amendment, contractor): the
 # Adviser's Branch-A ruling (plan §5-P2, BINDING, issued 2026-11-01 on the
 # device scout's verdict (A) — S0 SATISFIED) records the cycle-44 P2 fix
@@ -172,7 +237,7 @@ status: active
 # consumer break beyond the ruled semantics.
 
 # §1  asset_identity — the fallback artifact and its verified provenance (plan §1.2 verbatim)
-# §2  engine_contract — ModelType.qwen + ModelFileType.task on the EXISTING MediaPipeEngine; install/load shapes; identity
+# §2  engine_contract — ModelType.qwen + ModelFileType.task on the EXISTING MediaPipeEngine; install/load shapes; identity; the per-send turn_protocol (v1.4.0 — cycle-45)
 # §3  selection_table — the binding ONE-class RAM-floor table + the under-floor override (plan §4.9; cycle-43 §4.1-§4.3; supersedes §4.3's two-key matrix)
 # §4  migration_v4 — model_asset_v4 marker; the WIDENED stranded-E2B uninstall — ANY stranded E2B asset (plan §4.4 as widened by §4.9)
 # §4b migration_v5 — the model_asset_v5 LOAD-PATH reconciliation (cycle-44 §5-P2, BINDING): the three state-keyed legs, the composite probe, the verified-clean marker (the ruled deviation from marker-first), the identity-comparison rule, the caller-guard drop; shared by BOTH seams
@@ -262,7 +327,9 @@ asset_identity:
 
 # ---------------------------------------------------------------------------
 # 2. Engine contract (plan §5-P1 item 2 + §1.6 + §4.6; code sites
-#    re-verified 2026-10-31)
+#    re-verified 2026-10-31; the turn_protocol + prefix mechanics ADDED
+#    at v1.4.0, cycle-45 — the touched send-path/prefix anchors
+#    re-verified 2026-11-02 at HEAD 5fda352)
 # ---------------------------------------------------------------------------
 
 engine_contract:
@@ -310,7 +377,9 @@ engine_contract:
     AppConfig.foregroundDownload; progress/cancel per the existing chain).
   load_shape: >-
     UNCHANGED for both classes (plan §4.6) in VALUES, AMENDED at v1.3.0
-    (cycle-44 §5-P2) in the load SEQUENCE and the instruction operand:
+    (cycle-44 §5-P2) in the load SEQUENCE and the instruction operand, AND
+    AT v1.4.0 (cycle-45) in the instruction operand's DELIVERY note (the
+    prefix mechanics, below):
     FlutterEdgeAi.getActiveModel(maxTokens: 2048, preferredBackend:
     PreferredBackend.cpu) — gemma_service.dart:188-191 (_maxTokens = 2048
     at :67, CPU at :190 — re-verified 2026-11-01; the pre-P2 anchors
@@ -319,7 +388,13 @@ engine_contract:
     gemma_service.dart:193-197) are UNCHANGED; the systemInstruction
     operand is now SPEC-DRIVEN (OfflineModelSpecTable.systemInstruction,
     consumed at :201 — see system_prompt; the pre-P2 _systemInstruction
-    const is RETIRED). THE LOAD SEQUENCE GAINS THE VERIFICATION STEP (the
+    const is RETIRED). v1.4.0 PREFIX-MECHANICS NOTE (cycle-45, the S4
+    ruling): the operand does NOT enter the .task chat template — the
+    pinned session prepends '[System: …]\n\n' AS TEXT to the FIRST user
+    chunk staged in the session (see system_prompt for the full record;
+    under § turn_protocol that chunk is the priming chunk, so the
+    instruction reaches the model exactly once per send, riding it). THE
+    LOAD SEQUENCE GAINS THE VERIFICATION STEP (the
     ruled caller-guard drop, §4b): ensureModelActive() runs UNCONDITIONALLY
     in the production branch of _performLoad() (gemma_service.dart:180 —
     the old `if (!hasActiveModel())` guard at the pre-P2 :190 is DROPPED)
@@ -344,9 +419,22 @@ engine_contract:
   system_prompt: >-
     on .task, MediaPipe handles the chat template internally (pinned core
     model.dart:15, plan §1.6); createChat keeps its systemInstruction
-    parameter and it lands natively in the template (the E2B contract §8
-    pattern carries; the app ALWAYS carries a system instruction — so the
-    litertlm empty-preface defect is not our path, plan §1.2). THE
+    parameter. DELIVERY — AMENDED at v1.4.0 (cycle-45, the S4 ruling):
+    the earlier claim that the instruction "lands natively in the
+    template" is RETIRED — WRONG for .task. Native template injection is
+    LITERTLM-ONLY (the pinned session's _isNativeSystemInstruction gate
+    keys on fileType == ModelFileType.litertlm —
+    flutter_edge_ai_mediapipe-1.0.8 mobile_inference_session.dart:40-46);
+    on .task the session prepends '[System: …]\n\n' AS TEXT to the FIRST
+    user chunk staged in the session, once per session (:77-86 — the
+    _systemInstructionSent flag). Under the ruled per-send protocol
+    (§ turn_protocol) the first user chunk staged into the fresh session
+    IS the priming chunk, so the prefix lands on it DETERMINISTICALLY,
+    once per send (S4 — deliberate and recorded; the stale app comments
+    claiming native prepending, gemma_service.dart:518-519/:568-569, are
+    corrected in Phase 1 — plan Phase-1 item 3; the litertlm
+    empty-preface defect is not our path because the app ALWAYS carries a
+    system instruction, plan §1.2). THE
     INSTRUCTION PATH ITSELF: SUPERSEDED at v1.3.0 (cycle-44 §5-P2 Ruling 4
     rider A — the v1.0.0 sentence "NO code change to the system-instruction
     path" is RETIRED): the instruction is SPEC-DRIVEN and SHORT. HOME:
@@ -367,10 +455,99 @@ engine_contract:
     ~700-char Rules/Formatting rule-list is RETIRED (a 1.5B local model
     drowns in a long rule-list — its length is itself a cause of the
     instruction-continuation deflection the scout recorded). The greeting
-    (gemma_service.dart:69-70) and both send paths are UNTOUCHED (plan
-    §5-P2 Ruling 4). Test-proven: the instruction is short, spec-driven
+    (gemma_service.dart:69-70) is UNTOUCHED. SEND PATHS — SUPERSEDED at
+    v1.4.0 (cycle-45): the cycle-44 §5-P2 Ruling 4 "both send paths
+    UNTOUCHED" rider is retired for INTERNALS — cycle-45 reworks the
+    send-path internals into the per-send turn protocol (§ turn_protocol,
+    the S1-S5 ruling); the PUBLIC signatures of sendMessage/
+    sendMessageStream (history + newMessage) are PRESERVED (plan Phase-1
+    "Explicitly preserved"; the ai_service.dart / offline_ai_service.dart
+    / chats.dart call sites keep their signatures). Test-proven: the
+    instruction is short, spec-driven
     and carries the identity line (test/cycle44_p2_load_path_test.dart,
     the riders group).
+  turn_protocol: >-
+    NEW at v1.4.0 (cycle-45 — the Adviser's S1-S5 ruling, BINDING,
+    recorded BEFORE Phase 1 dispatch per the plan's AC5: this is the
+    binding spec Phase 1 implements, on BOTH send paths, and the Reviewer
+    verifies the build against it; the ruling's delta names it "AS BUILT"
+    in the sense of "exactly this, as Phase 1 builds it"). EVERY SEND
+    (sendMessage and sendMessageStream alike) runs the SAME protocol,
+    app-side and retention-independent — native response-retention is
+    NEVER relied upon (S1; the plugin's retention semantics stay recorded
+    unverified and non-load-bearing):
+    1. WIPE — chat.clearHistory() STAYS per send (gemma_service.dart:511
+       on the non-stream path, :561 on the stream path): the pinned
+       core's FULL native wipe + session recreate — _fullHistory,
+       _prefixes and _modelHistory cleared, _currentTokens = 0,
+       _toolsInstructionSent reset, session.close() + a fresh session
+       (flutter_edge_ai-1.11.4 core chat.dart:966-980; _currentTokens = 0
+       at :970). Dropping the wipe was REJECTED by the ruling (S1): it
+       would bet a perf win nobody asked for on retention nobody can
+       verify off-device.
+    2. PRIME — ONE role-marked priming chunk, Message.text(isUser: true),
+       staged FIRST into the fresh session. Its text carries the capped
+       history window with EXPLICIT 'User: …' / 'Assistant: …' blocks —
+       role-marking is app-side TEXT, not metadata, because the .task RAW
+       boundary strips every role marker (flutter_edge_ai-1.11.4
+       extensions.dart:57-69 — _chatFormatModeFor returns raw for
+       ModelFileType.task — and :135-143 — _formatToolResponseContent
+       returns the plain text; the isUser flag NEVER reaches the prompt).
+       The '[System: …]' prefix rides this chunk deterministically, once
+       per send (S4 — see system_prompt).
+    3. MESSAGE — the new-message chunk (plain user text, isUser: true),
+       staged AFTER the priming chunk (replacing today's bare re-stage,
+       :512-516/:562-566; the per-send staging seam
+       Message.text(text: …, isUser: …) is the same).
+    4. GENERATE — generateChatResponse / generateChatResponseAsync as
+       today.
+    THE TOTAL STAGED BUDGET (S3 — the BINDING rule): priming text + new
+    message ≤ 5000 chars by a chars/4 estimator (≈1250 estimated tokens;
+    ≈1430 at a 3.5-chars/token worst case) — leaving ≈64 tokens for the
+    '[System: …]' prefix, ≥512 response headroom, and slack inside the
+    2048 context (§2 load_shape/max_tokens_semantics). The builder input
+    is _getRecentHistory's output — BOTH de-dup rules run upstream (the
+    empty-text/greeting de-dup and the current-message de-dup,
+    gemma_service.dart:448-455) — filled NEWEST-FIRST, dropping the
+    OLDEST until the budget fits; COMPLETE TURNS ONLY (no dangling role
+    label); the new message is NEVER truncated; the 8-message
+    (_maxHistoryMessages, :66) and 1000-char (_maxHistoryChars, :68) caps
+    become SECONDARY bounds. The budget constants are named consts citing
+    this ruling. The builder gets a @visibleForTesting seam mirroring
+    recentHistoryForTest (:420-424). (The ruling considered and REJECTED
+    passing maxOutputTokens at createChat — a generation-behavior change
+    outside cycle-45's scope.)
+    ROTATION POSTURE (S2 — DISSOLVED, recorded): the plugin's
+    session-rotation (the _currentTokens >= maxTokens − tokenBuffer
+    check, chat.dart:710-724 — threshold 1792 with the app's unpinned
+    defaults: maxTokens 2048 minus createChat's default tokenBuffer 256,
+    flutter_edge_ai_interface.dart:362, forwarded at :399; the app omits
+    tokenBuffer) fires only AFTER a response was returned and replays
+    _modelHistory — user AND assistant messages — role-lessly before the
+    next generate (chat.dart:938-964). Under the per-send wipe
+    _currentTokens resets every send (:970), so the rotation is
+    UNREACHABLE in steady state; even a pathological ≥1792-token single
+    response triggers it only post-response, and the NEXT send's wipe
+    discards the replay — ZERO user-visible damage. Recorded DEAD SCOPE:
+    NO app-side token accounting, and tests must NOT assert rotation
+    behavior (no tokenBuffer parity test either — the test fakes'
+    2000 direct-construction default, chat.dart:94, vs production 256 is
+    recorded-and-accepted; the caveat is RULED CLOSED).
+    RESET SEAM (S5 — UNCHANGED): resetSession() stays a BARE WIPE —
+    clearHistory ONLY, no priming at reset (dead work under the per-send
+    protocol; the priming is per-SEND). Call site: chats.dart:217
+    (resetOfflineSession inside _initializeChat); the wipe itself
+    gemma_service.dart:107-115. Cycle-43's RAM territory untouched; the
+    recorded trade stands — the per-send re-prefill cost is today's
+    status quo, retained in exchange for retention-independence and
+    off-device testability.
+    PUBLIC SURFACE: GemmaService.sendMessage/sendMessageStream signatures
+    (required List<ChatMessageModel> history, required String newMessage)
+    are UNCHANGED (gemma_service.dart:495-498/:535-538) — the
+    ai_service.dart / offline_ai_service.dart / chats.dart call sites
+    keep their signatures; cycle-45 changes ONLY the service internals
+    (the cycle-44 §5-P2 Ruling 4 "both send paths UNTOUCHED" rider is
+    SUPERSEDED for INTERNALS by the cycle-45 S1-S5 ruling).
   identity_string: qwen2.5-1.5b-it      # plan §4.1/§4.3
   identity_sites:                       # the four-site invariant of the E2B contract §2 — SPEC-DRIVEN AS BUILT (plan §5-P1 item 2; re-verified 2026-11-01 post-P2 — the v1.0.0 "currently hardcoded" framing and anchors are superseded; the `_modelType` symbol is GONE)
     - lib/services/ai/model_download_service.dart:773 and :794

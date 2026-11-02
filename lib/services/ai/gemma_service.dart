@@ -6,6 +6,7 @@ import '../../data/models/chat_message_model.dart';
 import 'device_capabilities.dart';
 import 'model_download_service.dart';
 import 'offline_model_spec.dart';
+import 'turn_priming.dart';
 
 /// The outcome of classifying a failed model load: a stable failure CLASS
 /// plus the friendly, brand-free copy the UI shows.
@@ -66,6 +67,11 @@ class GemmaService extends ChangeNotifier {
   static const int _maxHistoryMessages = 8;
   static const int _maxTokens = 2048;
   static const int _maxHistoryChars = 1000;
+
+  /// The role-marked priming builder (cycle-45 Phase 1, the S3 ruling).
+  /// The TOTAL staged budget (priming + new message) lives on the builder.
+  static const TurnPrimingBuilder _primingBuilder = TurnPrimingBuilder();
+
   static const String greetingText =
       "Hello! I'm AgentA, What would you like to work on today?";
 
@@ -104,6 +110,12 @@ class GemmaService extends ChangeNotifier {
     }
   }
 
+  /// Wipes the session so the next turn starts clean (cycle-45 Phase 1, S5).
+  ///
+  /// The reset seam stays a BARE WIPE: `clearHistory()` and nothing else. The
+  /// priming is per-SEND (the ruled protocol), so priming here would be dead
+  /// work — the next send wipes and re-primes anyway. The call site is
+  /// `chats.dart:217` (`resetOfflineSession` inside `_initializeChat`).
   Future<void> resetSession() async {
     final chat = _chat;
     if (chat == null) return;
@@ -423,6 +435,22 @@ class GemmaService extends ChangeNotifier {
     required String currentMessage,
   }) => _getRecentHistory(history, currentMessage: currentMessage);
 
+  /// The role-marked priming text of one send — the EXACT chunk text the
+  /// send paths stage (cycle-45 Phase 1, the S3 ruling).
+  ///
+  /// Mirrors [recentHistoryForTest]: the raw history goes in and the current
+  /// message names the turn being sent. Both de-dup rules run upstream (in
+  /// `_getRecentHistory`), then the builder role-marks the window and fits it
+  /// to the TOTAL staged budget (priming + new message ≤ 5000 chars).
+  @visibleForTesting
+  String primingTextForTest(
+    List<ChatMessageModel> history, {
+    required String currentMessage,
+  }) => _primingBuilder.build(
+    _getRecentHistory(history, currentMessage: currentMessage),
+    stagedNewMessageLength: currentMessage.trim().length,
+  );
+
   Future<bool> ensureReady() async {
     if (isReady) {
       return true;
@@ -492,6 +520,61 @@ class GemmaService extends ChangeNotifier {
     return '$window…';
   }
 
+  /// Stages ONE turn of the per-send protocol (cycle-45 Phase 1 — the S1–S5
+  /// ruling). BOTH send paths run this method, so the two can never diverge.
+  ///
+  /// The order is NORMATIVE:
+  ///   1. WIPE — `chat.clearHistory()`: the pinned core's FULL native wipe +
+  ///      session recreate (`_fullHistory`/`_prefixes`/`_modelHistory`
+  ///      cleared, `_currentTokens = 0`, `session.close()` + a fresh session —
+  ///      `flutter_edge_ai-1.11.4` core `chat.dart:966-980`). The wipe STAYS
+  ///      (S1): the protocol carries every context APP-side, so nothing
+  ///      depends on native response-retention (which stays unverified).
+  ///   2. PRIME — ONE role-marked priming chunk (`isUser: true`), staged
+  ///      FIRST into the fresh session. Its text carries the capped window
+  ///      with explicit `User: …` / `Assistant: …` blocks — role-marking is
+  ///      app-side TEXT, because the `.task` RAW boundary strips every role
+  ///      marker (`extensions.dart:57-69`/`:135-143`).
+  ///   3. MESSAGE — the new-message chunk, staged AFTER the priming chunk.
+  ///
+  /// The `[System: …]` prefix rides the PRIMING chunk deterministically, once
+  /// per send (S4): on `.task` the plugin does NOT inject the system
+  /// instruction natively — native template injection is litertlm-only
+  /// (`mobile_inference_session.dart:40-46`) — it prepends `'[System: …]\n\n'`
+  /// AS TEXT to the FIRST user chunk staged in the session
+  /// (`:77-86`), and the priming chunk is staged first into the fresh
+  /// session. The prefix belongs to the PLUGIN: the app never writes it.
+  ///
+  /// Rotation posture (S2 — dissolved, recorded): the plugin's session
+  /// rotation fires only AFTER a response was returned, and the per-send wipe
+  /// resets `_currentTokens` (`chat.dart:970`), so it is unreachable in
+  /// steady state and the next send's wipe discards any replay. There is NO
+  /// app-side token accounting here.
+  Future<void> _stageTurn(
+    InferenceChat chat, {
+    required List<ChatMessageModel> history,
+    required String newMessage,
+  }) async {
+    final recentHistory = _getRecentHistory(
+      history,
+      currentMessage: newMessage,
+    );
+    final stagedMessage = newMessage.trim();
+    // The TOTAL staged budget (S3): the priming text plus the new message.
+    final primingText = _primingBuilder.build(
+      recentHistory,
+      stagedNewMessageLength: stagedMessage.length,
+    );
+
+    // 1. WIPE — the full native wipe + session recreate.
+    await chat.clearHistory();
+    // 2. PRIME — the role-marked history, staged FIRST (it carries the
+    //    '[System: …]' prefix — see the method doc).
+    await chat.addQueryChunk(Message.text(text: primingText, isUser: true));
+    // 3. MESSAGE — the new message, staged after the priming chunk.
+    await chat.addQueryChunk(Message.text(text: stagedMessage, isUser: true));
+  }
+
   Future<String> sendMessage({
     required List<ChatMessageModel> history,
     required String newMessage,
@@ -504,22 +587,7 @@ class GemmaService extends ChangeNotifier {
     }
 
     try {
-      final recentHistory = _getRecentHistory(
-        history,
-        currentMessage: newMessage,
-      );
-      await chat.clearHistory();
-      for (final msg in recentHistory) {
-        await chat.addQueryChunk(
-          Message.text(text: msg.text, isUser: msg.isUser),
-        );
-      }
-
-      // The .task runtime applies the chat template and prepends the
-      // systemInstruction itself — send the plain user text only.
-      await chat.addQueryChunk(
-        Message.text(text: newMessage.trim(), isUser: true),
-      );
+      await _stageTurn(chat, history: history, newMessage: newMessage);
       final response = await chat.generateChatResponse();
 
       if (response is TextResponse) {
@@ -554,22 +622,7 @@ class GemmaService extends ChangeNotifier {
     }
 
     try {
-      final recentHistory = _getRecentHistory(
-        history,
-        currentMessage: newMessage,
-      );
-      await chat.clearHistory();
-      for (final msg in recentHistory) {
-        await chat.addQueryChunk(
-          Message.text(text: msg.text, isUser: msg.isUser),
-        );
-      }
-
-      // The .task runtime applies the chat template and prepends the
-      // systemInstruction itself — send the plain user text only.
-      await chat.addQueryChunk(
-        Message.text(text: newMessage.trim(), isUser: true),
-      );
+      await _stageTurn(chat, history: history, newMessage: newMessage);
 
       final flushTimer = Stopwatch()..start();
       final tokenBuffer = StringBuffer();
