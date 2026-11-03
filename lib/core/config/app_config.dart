@@ -14,7 +14,6 @@ class AppConfig {
   static const _dGroq = String.fromEnvironment('GROQ_API_KEY');
   static const _dOpenRouter = String.fromEnvironment('OPENROUTER_API_KEY');
   static const _dHf = String.fromEnvironment('HF_TOKEN');
-  static const _dGemmaUrl = String.fromEnvironment('GEMMA_MODEL_URL');
   static const _dForegroundDownload = String.fromEnvironment(
     'FOREGROUND_DOWNLOAD',
   );
@@ -57,9 +56,6 @@ class AppConfig {
   static const String aiEnglishRule =
       'IMPORTANT: Always respond ONLY in English, regardless of the language '
       'the user writes in. Never reply in any other language.';
-
-  static String get gemmaModelUrl => _withFallback(_dGemmaUrl);
-  static const String gemmaModelFilename = 'gemma-offline.task';
 
   /// Foreground-service experiment override for the offline model download.
   /// Env `FOREGROUND_DOWNLOAD`, default true when unset or unrecognised.

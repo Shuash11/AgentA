@@ -912,26 +912,28 @@ void main() {
       expect('token: AppConfig.hfToken.trim()'.allMatches(source).length, 2);
     });
 
-    test('the GEMMA_MODEL_URL override still wins over the default URL', () {
-      final source = File(
+    test('the chain installs exactly the spec URL — no env override exists', () {
+      // The legacy GEMMA_MODEL_URL escape hatch was REMOVED (cycle-46 fix):
+      // a stale override naming another asset downloaded a file the
+      // expectedSize verification then deleted and rejected — the
+      // deterministic "Download failed. Please try again." at ~100% loop.
+      // The app accepts the MiniCPM5 asset the spec names; a ladder rung is
+      // a SPEC change, never an env override.
+      final config = File('lib/core/config/app_config.dart').readAsStringSync();
+      final service = File(
         'lib/services/ai/model_download_service.dart',
       ).readAsStringSync();
+      expect(config.contains('GEMMA_MODEL_URL'), isFalse);
+      expect(config.contains('gemmaModelUrl'), isFalse);
+      expect(service.contains('gemmaModelUrl'), isFalse);
+      expect(service.contains('GEMMA_MODEL_URL'), isFalse);
+      // The install sites and the selected-filename derivation all read the
+      // spec's own URL — the plugin's model id and the app's identity agree.
       expect(
-        source,
-        contains(
-          'AppConfig.gemmaModelUrl.isNotEmpty ? AppConfig.gemmaModelUrl : spec.url',
-        ),
+        ModelDownloadService.selectedFileNameFor(OfflineModelSpecTable.minicpm5),
+        'MiniCPM5-2B-Q4_K_M.gguf',
       );
-      // The override substitutes the URL WITHIN the selected class: the
-      // class keeps its own modelType/fileType (contract §7
-      // override_caveat_amended). With no override configured the spec URL
-      // is what the chain installs.
-      expect(
-        ModelDownloadService.resolvedModelUrlFor(
-          OfflineModelSpecTable.minicpm5,
-        ),
-        OfflineModelSpecTable.minicpm5.url,
-      );
+      expect('spec.url,'.allMatches(service).length, 2);
     });
 
     test('the model identity is coherent across the four sites', () {

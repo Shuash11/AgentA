@@ -183,19 +183,16 @@ class ModelDownloadService extends ChangeNotifier {
     'com.agenta.agenta/notifications',
   );
 
-  /// The effective download URL for [spec] (env override wins WITHIN the
-  /// selected class).
-  ///
-  /// The override substitutes the URL while the class keeps its own
-  /// modelType/fileType — a CROSS-FORMAT override (a `.litertlm` URL forced
-  /// onto the Qwen `.task` class) still fails at engine claim: the
-  /// debug/enterprise escape hatch, accepted and recorded (contract §7
-  /// override_caveat_amended).
+  /// The install URL is ALWAYS the selected spec's own URL — the contract's
+  /// record of record. The legacy env-override escape hatch was removed
+  /// (cycle-46 fix): a stale override naming another asset downloaded a file
+  /// the install's expectedSize verification then deleted and rejected — the
+  /// deterministic "Download failed. Please try again." at ~100% loop. The
+  /// app accepts the MiniCPM5 asset the spec names; a ladder rung is a SPEC
+  /// change, never an env override.
   ///
   /// Shared by the install path and [ensureModelActive] so the plugin's
   /// idempotency key (derived from the URL filename) always matches.
-  static String resolvedModelUrlFor(OfflineModelSpec spec) =>
-      AppConfig.gemmaModelUrl.isNotEmpty ? AppConfig.gemmaModelUrl : spec.url;
 
   // ── cycle-44 P2 (branch A): the load-path repair ─────────────────────────
   //
@@ -226,16 +223,15 @@ class ModelDownloadService extends ChangeNotifier {
   /// (`inference_model_spec.dart:32` — `Uri.parse(url).pathSegments.last`)
   /// and uses it as BOTH the download target and the persisted model id
   /// (`inference_installation_builder.dart:435-438`), so the app's selected
-  /// filename and the plugin's model id are the SAME string. The
-  /// `AppConfig.gemmaModelUrl` override derives the same way, so the
-  /// override stays legal (its own filename becomes the selected one).
+  /// filename and the plugin's model id are the SAME string — derived here
+  /// from the spec's own URL.
   ///
   /// An EMPTY result means the URL carries no file name: the selected
   /// identity is UNKNOWN then, and the reconciliation treats that as
   /// unknown state (no mutation, no marker) — never as "everything is
   /// foreign".
   static String selectedFileNameFor(OfflineModelSpec spec) {
-    final segments = Uri.parse(resolvedModelUrlFor(spec)).pathSegments;
+    final segments = Uri.parse(spec.url).pathSegments;
     return segments.isEmpty ? '' : segments.last;
   }
 
@@ -757,7 +753,7 @@ class ModelDownloadService extends ChangeNotifier {
                   fileType: spec.fileType,
                 )
                 .fromNetwork(
-                  resolvedModelUrlFor(spec),
+                  spec.url,
                   token: AppConfig.hfToken.trim(),
                   foreground: AppConfig.foregroundDownload,
                   expectedSize: spec.expectedSize,
@@ -1056,7 +1052,7 @@ class ModelDownloadService extends ChangeNotifier {
           fileType: spec.fileType,
         )
         .fromNetwork(
-          resolvedModelUrlFor(spec),
+          spec.url,
           token: AppConfig.hfToken.trim(),
           foreground: AppConfig.foregroundDownload,
           expectedSize: spec.expectedSize,

@@ -299,17 +299,14 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          GEMMA_MODEL_URL: ${{ secrets.GEMMA_MODEL_URL }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         run: |
           # M21: trim all dart-defines (use trimmed env from earlier step)
-          GEMMA_MODEL_URL_TRIMMED="$(echo "$GEMMA_MODEL_URL" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r' | xargs)"
           flutter build apk --release \
             --dart-define=GROQ_API_KEY="${GROQ_API_KEY_TRIMMED:-$GROQ_API_KEY}" \
             --dart-define=OPENROUTER_API_KEY="${OPENROUTER_API_KEY_TRIMMED:-$OPENROUTER_API_KEY}" \
-            --dart-define=GEMMA_MODEL_URL="$GEMMA_MODEL_URL_TRIMMED" \
             --dart-define=HF_TOKEN="${HF_TOKEN_TRIMMED:-$HF_TOKEN}" \
             --dart-define=SUPABASE_URL="${SUPABASE_URL_TRIMMED:-$SUPABASE_URL}" \
             --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY_TRIMMED:-$SUPABASE_PUBLISHABLE_KEY}" \
