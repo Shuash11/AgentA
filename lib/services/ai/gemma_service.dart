@@ -348,8 +348,9 @@ class GemmaService extends ChangeNotifier {
     if (model != null) {
       unawaited(
         model.close().catchError((Object e) {
-          if (kDebugMode)
+          if (kDebugMode) {
             debugPrint('[GemmaService] dispose release failed: $e');
+          }
         }),
       );
     }
