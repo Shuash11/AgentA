@@ -15,7 +15,10 @@
 # clearHistory-stays-per-send + role-marked priming-chunk protocol, the
 # 5000-char staged budget, the corrected '[System: …]' prefix mechanics
 # and the send-path-INTERNALS supersession (plans/cycle-45; the
-# turn_protocol + header records below). Authoritative
+# turn_protocol + header records below); the v1.5.0 amendment (cycle-46)
+# records the SELECTION SUPERSESSION — this asset EXITS selection for
+# MiniCPM5-2B (the additive §9 selection_exit_record; plans/cycle-46; the
+# exit + header records below). Authoritative
 # file — code, comments and delegation prompts are
 # never the contract. No second copy exists anywhere. A reader implements
 # P2b from this file (as amended) plus offline-model-e2b.yaml (v1.3.0) alone,
@@ -38,8 +41,35 @@
 # no-op-preserving per the E2B contract §1 token_threading.
 
 contract: offline-model-qwen15b
-version: 1.4.0
+version: 1.5.0
 status: active
+# v1.5.0 (2026-11-02, cycle-46 P1 supersession amendment, contractor):
+# ADDITIVE ONLY — new §9 selection_exit_record: this asset EXITS MODEL
+# SELECTION ENTIRELY (cycle-46 — the owner's directive, VERBATIM: "stop
+# the adviser planning will use this instead" + "go" — plans/
+# cycle-46-minicpm5-llama.md §1, BINDING, no alternatives, no
+# re-litigation): the offline model becomes MiniCPM5-2B Q4_K_M GGUF
+# (1,561,318,368 B ≈ 1.56 GB, sha256 ec2d5801…, gated: false, arch
+# 'llama', ModelType.llama + ModelFileType.gguf, on the llama.cpp engine
+# via flutter_edge_ai_llama 0.0.5) — the successor contract: contracts/
+# offline-model-minicpm5.yaml v1.0.0. THE AMENDMENT RECORDS: the
+# selection exit; the ASSET STAYS AT SOURCE (P4's Shard B re-verifies
+# the OLD .task URL live for the LADDER record — plans/cycle-46 §6-P4);
+# the MIGRATION cross-reference (the C44 v5 reconciliation §4b
+# generalizes BY CONSTRUCTION — the .task and any E2B straggler become
+# foreign once the spec table points at the GGUF; the four compositions
+# re-verified at P2; a model_asset_v6 marker ONLY on a proven gap); and
+# the LADDER cross-reference (this spec is the successor contract's §1
+# fallback_ladder rung (b): the one-line spec revert if the llama path
+# fails on the owner's device — plans/cycle-46 §5.1). VERSION LABEL: the
+# plan §6-P1 line names "amendment v1.1.0" — impossible against this
+# file's on-disk lineage (v1.4.0 at recording; v1.1.0 is the cycle-42
+# collapse-selection amendment already recorded below); recorded as
+# v1.5.0, the next minor step, mirroring the e2b-exit precedent shape
+# (the E2B exit was recorded as ITS next minor, v1.3.0) — flagged to the
+# Adviser for confirmation in the P1 report. No §1-§8 field, string,
+# figure, or anchor changes; §3 gains ONE pointer field; v1.4.0
+# consumers read this file unchanged.
 # v1.4.0 (2026-11-02, cycle-45 turn-protocol amendment, contractor): the
 # Adviser's S1-S5 ruling (plans/cycle-45-offline-history-turn-structure.md,
 # the ruling section — BINDING, issued 2026-11-02 post-Phase-0) records
@@ -245,6 +275,7 @@ status: active
 # §6  ux_copy — the strings P2 implements verbatim (plan §4.5)
 # §7  error_surface — reused classes, no new branches, the per-class override caveat
 # §8  acceptance_criteria — P1's own gate (a-d) + the P2 invariants this contract pins
+# §9  selection_exit_record — cycle-46 P1: the asset EXITS selection (MiniCPM5-2B supersedes); asset-stays-at-source, migration + ladder cross-references (ADDITIVE, v1.5.0)
 
 # ---------------------------------------------------------------------------
 # 1. Asset identity (verified live: HF API GET /api/models/…?blobs=true,
@@ -761,6 +792,14 @@ selection_table:
     re-verifies it unchanged even though unselected (plan §5-P3 Shard B).
     Future opt-in under the plugin's one-active-model constraint is the
     cycle-38 F8 lineage (plan §2 F8) — backlog, future cycle.
+  superseded_by_pointer: >-
+    NEW at v1.5.0 (cycle-46 P1 — ADDITIVE): THIS ASSET EXITS SELECTION —
+    the exit record is §9 selection_exit_record (below); the successor
+    selection contract is contracts/offline-model-minicpm5.yaml v1.0.0
+    (its §3 eligibility_table owns selection from the moment the spec
+    table points at the GGUF). THIS §3 table is SUPERSEDED on the GGUF
+    path — kept in place as the shipped v1.9.0–v1.9.3 record; a ladder
+    revert re-establishes it (§9 ladder_cross_reference).
   consumers: >-
     the resolved spec feeds: both install chains (§2 install_shape), the
     identity sites (§2 identity_sites), the gate/download/card/picker
@@ -1390,3 +1429,92 @@ acceptance_criteria:
     7 files untouched in the diff. Evidence: test/cycle44_p2_load_path_test
     .dart (§4b tests); the load-path greps of plan §10 search the §4b
     symbols in model_download_service.dart.
+
+# ---------------------------------------------------------------------------
+# 9. Selection exit record (cycle-46 P1 — plans/cycle-46-minicpm5-llama.md
+#    §1/§5.1/§5.4 + §6-P1, 2026-11-02; ADDITIVE ONLY, v1.5.0 — §1-§8
+#    untouched; the e2b-exit precedent shape, E2B contract §11)
+# ---------------------------------------------------------------------------
+
+selection_exit_record:
+  ruling: >-
+    AS OF cycle-46 (2026-11-02), this asset EXITS MODEL SELECTION
+    ENTIRELY: the owner's directive (VERBATIM: "stop the adviser
+    planning will use this instead" + "go" — plans/
+    cycle-46-minicpm5-llama.md §1, BINDING, no alternatives, no
+    re-litigation) makes the offline model MiniCPM5-2B Q4_K_M GGUF
+    (1,561,318,368 B ≈ 1.56 GB, sha256 ec2d5801640099e97d8d7e8003ad4d81f336e757811f03a26173dddf386602fd,
+    gated: false, apache-2.0, arch 'llama', via ModelType.llama +
+    ModelFileType.gguf on the llama.cpp engine through
+    flutter_edge_ai_llama 0.0.5) for EVERY eligible device — the
+    successor contract: contracts/offline-model-minicpm5.yaml v1.0.0
+    (its §3 eligibility_table owns selection from the moment the spec
+    table points at the GGUF; THIS contract's §3 classes are superseded
+    there — kept in place as the v1.0.0–v1.4.0 record, not rewritten).
+    EXIT BASIS (honest record — DIFFERENT from the E2B exit's): this
+    exit is DIRECTIVE-DRIVEN — a capability step-up on a verified
+    engine path (the vendor card's table verifies the owner's four
+    figures EXACT: AIME 2025 86.5 vs the same table's Qwen3.5-2B column
+    29.6, MATH-500 94.6, LiveCodeBench v6 69.1, MMLU-Pro 70.8 — plans/
+    cycle-46 §2.6) — NOT failure-driven: the Qwen .task path remains
+    PROVEN (the shipped v1.9.3 state) and is RETAINED as the ladder's
+    revert target (ladder_cross_reference below).
+  asset_stays_at_source: >-
+    THE ASSET STAYS AT SOURCE — litert-community/Qwen2.5-1.5B-Instruct,
+    Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task, 1,598,556,720 B,
+    sha256 82968d0a6c3872cf016fdbcfc591571605f4c7fd2b0f64d2533df502cc6596b3,
+    gated: false (§1 unchanged): P4's Shard B RE-VERIFIES the OLD .task
+    URL live for the LADDER RECORD even though unselected (plans/
+    cycle-46 §6-P4 Shard B). This contract's §1–§8 figures remain the
+    record for that re-verification and for any revert.
+  migration_cross_reference: >-
+    NO new migration code ships with the swap (plans/cycle-46 §5.4):
+    the C44 v5 reconciliation (§4b, as amended) GENERALIZES BY
+    CONSTRUCTION — the moment the spec table points at the GGUF
+    filename (selectedFileNameFor derives MiniCPM5-2B-Q4_K_M.gguf from
+    the successor contract's §1 install_url), the shipped .task (THIS
+    §1 file) and any E2B straggler (gemma-4-E2B-it.litertlm) become
+    FOREIGN by v5's own trigger legs (a) foreign-file / (b)
+    foreign-active / (c) the lie — and v5's sweep uninstalls them,
+    clears a stale active identity, resets a lying DAO row, and the
+    gate honestly offers the fresh GGUF install (the C44 §5-P2 Ruling
+    2 semantics). P2 MUST verify the FOUR compositions (both-assets,
+    the user's-device shape, a healthy-GGUF device,
+    message-only-holding-any-file) BEFORE relying on it; ONLY IF A GAP
+    IS PROVEN does a model_asset_v6 marker get added, per the C44
+    marker semantics (verified-clean, never marker-first); v2/v3/v4/v5
+    stay byte-for-byte untouched otherwise. The successor contract's
+    §4 (migration_v6) is the binding record of that ruling; THIS
+    contract's §4/§4b remain the authority for the v4/v5 semantics the
+    swap reuses.
+  ladder_cross_reference: >-
+    THIS SPEC IS THE SUCCESSOR CONTRACT'S FALLBACK-LADDER RUNG (b)
+    (plans/cycle-46 §5.1 ruling 1): the one-line spec revert to the
+    proven Qwen 2.5 1.5B .task (the shipped v1.9.3 state — the
+    machinery is untouched by a spec re-point) if the llama path fails
+    on the owner's device (the connector is maintainer-unqualified on
+    physical Android ARM64; the owner's device test at P5 is the
+    qualification). A revert release re-establishes THIS contract's
+    selection semantics as recorded (§1–§8, anchors re-verified at
+    revert time per the header policy) and its §2 turn_protocol (the
+    C45 per-send protocol is binding for the .task path it was ruled
+    for — the successor contract §2 send_path_supersession records the
+    llama-path supersession). The C42 ladder rung (c) (.task
+    DeepSeek/Qwen-0.5B) survives ONLY if MediaPipe stays registered —
+    it does (the successor contract §2 mediapipe_coexistence; plans/
+    cycle-46 §5.2).
+  identity_note: >-
+    The §2 identity_string 'qwen2.5-1.5b-it' remains THIS asset's
+    identity for the record (§1-§8 unchanged; the four-site invariant
+    stands as the v1.9.x shipped record); the app's offline-model
+    identity becomes 'minicpm5-2b-q4km' on the GGUF path (the successor
+    contract §4 identity_semantics). The identity line in the system
+    instruction carries verbatim across the swap ("If asked what model
+    you are, say you are AgentA's built-in offline assistant." — C44
+    Rider A; plans/cycle-46 §5.7).
+  consumer_invariant: >-
+    ADDITIVE — no §1-§8 field, string, figure, or anchor changes; §3
+    gains ONE pointer field (superseded_by_pointer); v1.4.0 consumers
+    read this file unchanged (the v1.3.0 discipline carries; plans/
+    cycle-46 §6-P1: "the e2b-exit precedent shape"). No consumer break
+    beyond the ruled semantics.

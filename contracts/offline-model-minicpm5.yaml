@@ -1,0 +1,1124 @@
+# Offline-model contract — MiniCPM5-2B Q4_K_M GGUF via the llama.cpp engine (cycle-46 P1)
+#
+# Single source of truth for the app's OFFLINE MODEL (cycle-46): v1.0.0
+# records the owner's directive pick in full — the asset identity, the
+# engine cascade, the eligibility table, the migration ruling, the RAM
+# budget, the thinking contract + loop guard + UI contract, the copy
+# table, the error surface and the acceptance criteria — SUPERSEDING the
+# Qwen 2.5 1.5B .task selection (the supersession record: contracts/
+# offline-model-qwen15b.yaml, amended v1.5.0 §9 selection_exit_record).
+# Authoritative file — code, comments and delegation prompts are never
+# the contract. No second copy exists anywhere.
+#
+# Recorded 2026-11-02 (cycle-46 P1, contractor) from plans/
+# cycle-46-minicpm5-llama.md. The owner's directive is BINDING (plan §1,
+# verbatim: "stop the adviser planning will use this instead" + "go" —
+# no alternatives, no re-litigation) and every external figure below is
+# the plan's VERIFIED ground truth (plan §1/§2, all fetched 2026-11-02:
+# the HF API for openbmb/MiniCPM5-2B-GGUF?blobs=true, the vendor card
+# huggingface.co/openbmb/MiniCPM5-2B, fluttergemma.dev /docs/models +
+# /docs/thinking-mode + /docs/llama, pub.dev package APIs for
+# flutter_edge_ai_llama + flutter_edge_ai + flutter_edge_ai_mediapipe).
+# Internal figures cite the plan's §2.7 first-hand tree reads (2026-11-02)
+# and the sibling contracts' verified records. A reader implements P2
+# from THIS file plus the plan (§6-P2 scope, §7 the step-0 smoke + the
+# acceptance criteria) and, for the CARRIED machinery's recorded
+# semantics (the C44 v5 reconciliation, the C43 override, the C42
+# identity discipline), the amended contracts/offline-model-qwen15b.yaml
+# — without touching the web (every figure names its source; the live
+# re-verification points are the P2 step-0 smoke, P4 Shard B and the
+# plan §8 reviewer searches). No secret material: token VALUES never
+# appear here; only config KEY names (GEMMA_MODEL_URL / HF_TOKEN as
+# dart-define keys via AppConfig). The MiniCPM5 GGUF asset needs NO HF
+# token (§1 hf_token_required).
+#
+# ANCHOR POLICY: this is a docs-only recording (P1) — this cycle touches
+# no code at recording time. Tree anchors cited below are the plan
+# §2.7 first-hand reads (2026-11-02, pre-cascade) or the sibling
+# contracts' reads (dated in place); P2 re-verifies every anchor it
+# implements against the post-cascade tree (the cycle-38 anchor-drift
+# precedent, qwen15b contract header policy).
+
+contract: offline-model-minicpm5
+version: 1.1.0
+status: active
+# v1.1.0 (2026-11-02, cycle-46 scope-exit amendment, contractor): the
+# owner WITHDREW the thinking ask (VERBATIM: "change of plans can we not
+# add thinking mode on the offline" — plans/cycle-46-minicpm5-llama.md
+# §1/§6.2, BINDING). §6 thinking_contract, §7 thinking_loop_guard, §8
+# thinking_ui_contract are SUPERSEDED-NEVER-SHIPPED — kept in place as
+# the record of the ruled-but-dropped contract, never deleted, never
+# rewritten. WHAT SURVIVES (binding): explicit enableThinking: false on
+# EVERY chat creation — never omitted, never defaulted (the §2/§6
+# template off-switch analysis: an unset kwarg lets the model decide);
+# any stray thinking content (ThinkingResponse tokens or think-span
+# text) is DROPPED at the service seam — never rendered, never persisted
+# to the transcript DB, never re-sent in history; maxOutputTokens 2048
+# unchanged. The P2 step-0 smoke evidence (branch (a), native
+# ThinkingResponse) is RETAINED as engine-loads-and-answers proof; its
+# branch decision is moot. AMENDED IN PLACE: §10 error_surface's S7 row
+# (the two surviving invariants — the original five-leg S7 is
+# superseded, kept as the §7 record); §11 acceptance (the P2 thinking
+# invariants re-keyed to the explicit-false + stray-drop form; the P3 UI
+# criteria RETIRED — marked superseded, kept as the record). SWEPT:
+# §9 ux_copy carries ZERO thinking-specific strings (the sweep record is
+# §9 thinking_strings_sweep — the thinking copy strings of record live
+# in §8 binding_strings/honest_cost_copy, superseded at §8's head
+# banner); §6/§7/§8 bodies untouched. NO §1–§5 asset/engine/eligibility/
+# migration/RAM changes of any kind. FLAG DISCIPLINE (the qwen15b v1.5.0
+# precedent): nothing found on disk contradicts this dispatch — the one
+# nuance is the §9 sweep result above (vacuously clean: the thinking
+# strings live in §8, already superseded wholesale). Consumer note for
+# the record: zero consumer break — no implemented code consumed §6/§7/
+# §8 (subtasks H/J never started; J is dead with the feature).
+# Confidence: high; flip criterion: an owner re-statement of the
+# thinking ask reopens §5.6 as written.
+
+# §1  asset_identity — MiniCPM5-2B-Q4_K_M.gguf, verified provenance (plan §2.1/§5.1 verbatim)
+# §2  engine_contract — the llama.cpp cascade: connector 0.0.5, core ^2.5.0→2.5.5, mediapipe ^1.2.5 retained, litertlm removed; ModelType.llama + ModelFileType.gguf; the GGUF-supplies-its-own-template rule; install/load/chat shapes; S2 verify items
+# §3  eligibility_table — the C42 machinery, one key changed: ABI re-enters (plan §5.3)
+# §4  migration_v6 — NO new marker ruled; the C44 v5 reconciliation generalizes to the GGUF spec; v6 ONLY on a proven gap (plan §5.4)
+# §5  ram_budget — the honest unverified-estimate peak + the carried floor/override governance (plan §2.5)
+# §6  thinking_contract — explicit enableThinking on EVERY chat creation; the #1 branch ruling, decided by the P2 step-0 smoke (plan §2.4/§5.6) [SUPERSEDED-NEVER-SHIPPED at v1.1.0 — §6.2]
+# §7  thinking_loop_guard — the four legs + the vendor's min_p=0.0 sampler anchor (plan §2.4/§5.6; S7) [SUPERSEDED-NEVER-SHIPPED at v1.1.0 — §6.2]
+# §8  thinking_ui_contract — P3's toggle + presentation states, identical on either branch (plan §5.6) [SUPERSEDED-NEVER-SHIPPED at v1.1.0 — §6.2]
+# §9  ux_copy — the strings P2/P3 implement (plan §5.7)
+# §10 error_surface — reused classes, the expectedSize install-failure point, the S1–S8 stops
+# §11 acceptance_criteria — P1's own gate (a–d) + the pinned P2/P3 invariants (plan §7/§8)
+
+# ---------------------------------------------------------------------------
+# 1. Asset identity (verified live: HF API GET /api/models/…?blobs=true,
+#    fetched 2026-11-02 — plan §2.1 verbatim; candidate ruling plan §5.1)
+# ---------------------------------------------------------------------------
+
+asset_identity:
+  repo: openbmb/MiniCPM5-2B-GGUF                                        # the OFFICIAL OpenBMB GGUF repo (plan §1/§2.1)
+  repo_context: >-
+    catalog context only, not consumed (plan §1/§2.1): the GGUF repo shows
+    320,315 downloads, gated: false, apache-2.0, lastModified 2026-09-12,
+    repo sha 2079a22f3beaa4e306449978533478fe0522f4b3; the source model
+    card repo openbmb/MiniCPM5-2B EXISTS — 1,083,600 downloads,
+    apache-2.0, created 2026-09-06, tagged on-device/edge-ai/long-context/
+    tool-calling. Community GGUFs also exist (peculiar-ragdoll/Sharp,
+    turintech/Artemis, axteam) — NOT selected (unofficial provenance; the
+    official repo is the asset of record).
+  file: MiniCPM5-2B-Q4_K_M.gguf                                         # plan §2.1/§5.1 — the owner's named pick
+  install_url: >-
+    https://huggingface.co/openbmb/MiniCPM5-2B-GGUF/resolve/main/MiniCPM5-2B-Q4_K_M.gguf
+  size_bytes: 1561318368                                                # ≈1.56 GB decimal — the owner's "~1.56 GB" verifies EXACT (plan §2.1)
+  sha256: ec2d5801640099e97d8d7e8003ad4d81f336e757811f03a26173dddf386602fd   # plan §2.1 (HF API LFS oid); re-verified after download at the P2 step-0 smoke (plan §7)
+  expected_size: 1561318368                                             # passed as expectedSize: on the install (§2 install_shape; core 2.5.5's documented size-integrity check, plan §2.3/§5.5)
+  gated: false                                                          # no license gate — plan §2.1
+  license: apache-2.0                                                   # plan §2.1 (both the GGUF repo and the model card repo)
+  last_modified: "2026-09-12"                                           # plan §2.1 (HF API)
+  hf_token_required: false                                              # plan §5.1 — ungated; no token surface this cycle (plan §8: no security phase)
+  token_threading: >-
+    The install chains KEEP passing token: AppConfig.hfToken.trim()
+    exactly as the qwen15b contract §1 token_threading records: passing a
+    token to an ungated repo is a no-op, and it keeps GEMMA_MODEL_URL
+    overrides functional against gated assets (e.g. ladder rungs). No new
+    secret surface (plan §8: the GGUF is ungated — no HF token).
+  gguf_metadata: >-
+    Embedded GGUF metadata (plan §2.1): architecture 'llama',
+    context_length 131,072, total params 2,516,756,480. The vendor
+    card agrees (plan §2.2, verbatim): "MiniCPM5-2B uses the standard
+    LlamaForCausalLM architecture, so mainstream inference engines can
+    load it directly: no custom kernels, no model-code fork." —
+    2,516,756,480 params (non-embedding 1,981,982,720), 42 layers, GQA
+    16 Q / 2 KV heads, context 131,072. This is a strictly LOWER engine
+    risk than the superseded Qwen3.5 pick (a hybrid DeltaNet arch): the
+    GGUF rides llama.cpp's stock 'llama' arch. A llama.cpp deployment
+    cookbook exists in the vendor's GitHub (plan §2.2).
+  embedded_template: >-
+    THE GGUF EMBEDS THE FULL CHAT TEMPLATE (plan §2.1) — Qwen-Hermes-style
+    <|im_start|>/<|im_end|> framing WITH a thinking branch; the template
+    exposes the enable_thinking kwarg (§6 thinking_contract). The vendor's
+    own llama.cpp run line uses --jinja — i.e., the embedded template is
+    the contract (vendor card, plan §2.1). Per the plugin docs, '.gguf'
+    is "Type 1: SDK-managed templates" — "the GGUF supplies its own chat
+    template" — so PROMPTING IS DRIVEN BY THE EMBEDDED TEMPLATE, not by
+    the ModelType's turn markers (plan §2.3; §2 template_note).
+  quants_note: >-
+    The repo carries EXACTLY three quants (plan §2.1): F16 (5.04 GB),
+    Q4_K_M (1.56 GB — THE INSTALL FILE), Q8_0 (2.68 GB). There is NO
+    smaller Q4 variant — Q4_K_M is the smallest runnable choice; no
+    lighter rung exists for the 3.64 GB RAM device (plan §3 F11 — the
+    ladder in §1 fallback_ladder records this honestly).
+  quantization_honesty: >-
+    Q4_K_M trades a little per-bit accuracy vs the shipped q8 .task
+    (plan §3 F12): the owner named this quant explicitly — accepted and
+    recorded; the owner's device test (P5) is the arbiter.
+  benchmarks_context: >-
+    VENDOR-REPORTED, the owner's figures verified EXACT against the
+    vendor card's table (plan §2.6): AIME 2025 86.5 (the same table's
+    Qwen3.5-2B column: 29.6 — the owner's comparison figure exact),
+    MATH-500 94.6, LiveCodeBench v6 69.1, MMLU-Pro 70.8; the card claims
+    "2B-class open-source SOTA" (average 53.9) within its own comparison
+    set. These are the developers' own reported scores — the card's
+    footnote (verbatim): "Scores marked † come from the official
+    Artificial Analysis release; all others are reproduced internally."
+    Device-level quality is proven by the owner's device test (P5), not
+    by the table (plan §2.6/§5.10). Catalog context only, not consumed.
+  multilingual_honesty: >-
+    HONEST-BILINGUAL, not 201-language class (plan §2.6/§5.10): the HF
+    tags and card declare en + zh (the MiniCPM line is bilingual-first).
+    The superseded Qwen3.5 pick claimed 201 languages. The owner's "good
+    multilingual" priority is served on en/zh strength; the record states
+    this plainly — the directive stands, this is the verified profile.
+  deep_thinker_note: >-
+    The model is a deep-thinker by training (card, plan §2.6: "400B
+    tokens of deep-thinking SFT"; RL teachers + On-Policy Distillation) —
+    which is exactly why §6's explicit-enableThinking ruling and §7's
+    loop guard exist. Standing honesty: 2B models still hallucinate; the
+    thinking mode raises the hit-rate on hard questions, it does not
+    make the model reliable (plan §2.6).
+  not_for_this_path: >-
+    (plan §5.1) The repo's F16 (5.04 GB) and Q8_0 (2.68 GB) quants —
+    recorded rungs only (§1 fallback_ladder); the community GGUF repos
+    (peculiar-ragdoll/Sharp, turintech/Artemis, axteam — unofficial
+    provenance); and the litert-community/MiniCPM5-2B LiteRT version —
+    the card lists it, but that ENGINE is PROVEN-BROKEN on the owner's
+    device (cycle-40/44); the record notes its existence, the directive
+    picked the GGUF.
+  fallback_ladder: >-
+    STOP-rule ladder ONLY — no rung is installed by this contract;
+    invoked per plan §9 S6 only if the primary is rejected in practice
+    (a materially higher MEASURED RAM figure, a load failure or an
+    OOM-kill at the smoke or device gates): (a) the SAME repo's Q8_0
+    (2.68 GB — quality-upgrade rung; realistic on desktop, likely too
+    heavy on the 3.64 GB device); (b) the one-line spec revert to the
+    proven Qwen 2.5 1.5B .task (the shipped v1.9.3 state — the machinery
+    is untouched by a spec re-point) if the llama path fails on the
+    owner's device — the Qwen spec of record: contracts/
+    offline-model-qwen15b.yaml (§9 selection_exit_record as amended);
+    (c) the C42 ladder (.task DeepSeek/Qwen-0.5B) survives only if
+    MediaPipe stays registered (it does — §2 mediapipe_coexistence).
+    NO LIGHTER RUNG EXISTS (plan §3 F11).
+  env_override: >-
+    GEMMA_MODEL_URL (dart-define → AppConfig.gemmaModelUrl) carries with
+    the EXISTING machinery (plan §5.5: "the existing download machinery"):
+    the override substitutes the URL and derives its OWN filename via
+    selectedFileNameFor (the plugin's derivation — the qwen15b contract
+    §4b filename_derivation), so the override stays legal under §4
+    no_stranded_downloads and the §10 override discipline. A cross-format
+    override that swaps the file class still fails at engine claim —
+    recorded, accepted (the qwen15b contract §7 override_caveat_amended
+    discipline carries).
+
+# ---------------------------------------------------------------------------
+# 2. Engine contract (plan §5.2 the cascade ruling + §2.3 the verified
+#    engine facts + §5.5 the load/shape ruling; all external figures
+#    fetched 2026-11-02 — plan §2 search-or-skip record)
+# ---------------------------------------------------------------------------
+
+engine_contract:
+  engine: >-
+    the llama.cpp engine via the flutter_edge_ai_llama connector — the
+    DOCUMENTED path to the owner's named asset (plan §5.2: ModelFileType
+    .gguf selects flutter_edge_ai_llama; the owner's Q4_K_M is a GGUF
+    quant name — the directive itself names the format).
+  engine_registration: >-
+    SWAPPED at P2 (plan §5.2): in lib/main.dart, LiteRtLmEngine OUT, the
+    llama engine IN, MediaPipeEngine STAYS. The current registration
+    carries BOTH MediaPipeEngine() and LiteRtLmEngine() at main.dart:182
+    (verified 2026-11-01 by the qwen15b contract v1.3.0 read; re-verify
+    the anchor at P2 per the header anchor policy). Post-swap P2 gate:
+    'git grep litertlm' in lib/ returns ZERO hits (plan §7 criterion 1).
+  cascade: >-
+    THE FULL CASCADE (plan §5.2, binding — the bump decision chain is
+    exactly this; no quiet substitutions, S1): flutter_edge_ai ^1.11.4 →
+    ^2.5.5 (the latest, published 2026-11-01; the core line went 1.11.4
+    Oct 3 → 2.0.0 Oct 5 → … → 2.5.5 Nov 1 — plan §2.3); ADD
+    flutter_edge_ai_llama ^0.0.5 (pins llamadart ">=0.15.1 <0.15.2"); ADD
+    the app-pubspec build hook (build_hook below); BUMP
+    flutter_edge_ai_mediapipe 1.0.8 → ^1.2.5 (RETAINED); REMOVE
+    flutter_edge_ai_litertlm 1.8.6. No other dependency enters (S3).
+  connector: >-
+    flutter_edge_ai_llama ^0.0.5 — latest, published 2026-11-01 (plan
+    §2.3): requires flutter_edge_ai ^2.5.0 (→ resolves 2.5.5), pins
+    llamadart ">=0.15.1 <0.15.2", SDK >=3.12.0 (the app's SDK constraint
+    is ^3.12.0, pubspec.yaml:7 — plan §2.3/§2.7 ✓), Flutter >=3.44.0.
+    Its description also ships native EmbeddingGemma 2 embeddings — NOT
+    used this cycle (S3: no additional dependency).
+  core_cascade_target: >-
+    flutter_edge_ai ^2.5.5 (published 2026-11-01 — the cascade target,
+    plan §2.3/§5.2). The connector requires core ^2.5.0 → pub get
+    resolves 2.5.5. P2 gate: 'flutter pub get' resolves EXACTLY
+    flutter_edge_ai 2.5.5 (or the S2-verified latest 2.5.x),
+    flutter_edge_ai_llama 0.0.5 (llamadart 0.15.1),
+    flutter_edge_ai_mediapipe 1.2.x, and NO flutter_edge_ai_litertlm
+    anywhere in pubspec.yaml/pubspec.lock (plan §7 criterion 1; S1 STOP
+    on any other resolution).
+  mediapipe_coexistence: >-
+    flutter_edge_ai_mediapipe 1.0.8 → ^1.2.5, RETAINED (plan §2.3/§5.2;
+    F8): 1.2.5 depends on core ^2.3.0 — the core bump to 2.5.5 FORCES
+    the mediapipe plugin bump but does NOT force dropping MediaPipe.
+    Retention keeps the old-asset uninstall machinery and the .task
+    ladder honest — the cheapest no-stranded-downloads path (plan §3
+    F8); ladder rung (c) depends on it (§1 fallback_ladder).
+    MediaPipeEngine STAYS registered (plan §5.2).
+  litertlm_removal: >-
+    flutter_edge_ai_litertlm 1.8.6 (the app's EXACT pin today,
+    pubspec.yaml:24 — plan §2.7) is REMOVED (plan §5.2; F3): no
+    .litertlm model remains selectable, and the connector docs MANDATE
+    its omission ("omit flutter_edge_ai_litertlm … Core itself bundles
+    no inference runtime" — plan §2.3). LiteRtLmEngine leaves the
+    main.dart registration (§2 engine_registration); keeping it would
+    force another litertlm bump for zero users and dead APK weight.
+  build_hook: >-
+    the app pubspec GAINS (plan §2.3/§5.2):
+    hooks:
+      user_defines:
+        llamadart:
+          llamadart_native_runtimes: [llama_cpp]
+    P2 gate: the hooks: block present in the app pubspec (plan §7
+    criterion 1).
+  model_type: ModelType.llama           # plan §2.3/§5.1/§5.2
+  file_type: ModelFileType.gguf         # plan §2.3/§5.1/§5.2 — selects the ENGINE; never inferred from a filename (the qwen15b contract §2 file_type discipline carries)
+  model_type_rationale: >-
+    The ModelType table has NO MiniCPM type (fluttergemma.dev /docs/
+    models, plan §2.3: gemma4, gemmaIt, deepSeek, qwen, qwen3, qwen35,
+    phi, llama, hammer, functionGemma, general). ModelType.llama is
+    documented ("Llama 3.2 Instruct — its sampling defaults"). Since
+    .gguf is "Type 1: SDK-managed templates" — "the GGUF supplies its
+    own chat template" — prompting is driven by the EMBEDDED template,
+    not the ModelType's turn markers; ModelType.llama is the correct,
+    documented install type for this file (plan §2.3).
+  template_note: >-
+    THE GGUF-SUPPLIES-ITS-OWN-TEMPLATE RULE (plan §2.1/§2.3): the
+    embedded template is the prompting contract (the vendor's --jinja
+    run line, §1 embedded_template); the ModelType's turn-marker and
+    sampling-default baggage does not drive prompting on this path.
+    The one ModelType-adjacent fact that still matters: ModelType.llama
+    is documented with "its sampling defaults" (plan §2.3) — whether
+    those defaults interact with the §7 sampler prescription is part of
+    the S2 (e) pinned-source read.
+  install_shape: >-
+    (plan §2.3/§5.5) Via the EXISTING spec-driven download machinery —
+    progress/watchdog/60-min ceiling, ample for 1.56 GB:
+    installModel(modelType: ModelType.llama, fileType: ModelFileType
+    .gguf).fromNetwork(<§1 install_url>, expectedSize: 1561318368)
+    .install()
+    The expectedSize integrity check on non-catalog network installs is
+    documented for core 2.5.5 (fluttergemma.dev /docs/models, plan
+    §2.3) — a corrupted/truncated download DIES AT INSTALL, never at
+    load (plan §5.5; §10 expectedsize_integrity). Token/foreground/
+    progress/cancel wiring unchanged (§1 token_threading).
+  load_shape: >-
+    (plan §5.5) FlutterEdgeAi.getActiveModel(maxTokens: 2048, …);
+    backend CPU on Android. THE RECORDED SEMANTIC CHANGE: on the llama
+    path maxTokens is the WHOLE CONVERSATION BUDGET (prompt + history +
+    response), not merely the window; 2048 is kept to bound the RAM
+    estimate (§5; F7) and the context-trimming machinery takes over
+    what the old manual history truncation did. The 131,072-token
+    context is an opportunity this cycle does NOT take (plan §3 F7 — a
+    future cycle may raise it with device evidence).
+  chat_surface: >-
+    (plan §5.5) The CONNECTOR'S DOCUMENTED API — openChat
+    (maxOutputTokens: …) / addQuery(Message.text(...)) /
+    generateChatResponseAsync() / session.stopGeneration() — REPLACING
+    the .task-era createChat call-shape in gemma_service.dart AS THE
+    RESOLVED CORE 2.5.5 SOURCE DICTATES (S2: if core 2.5.5's unified
+    createChat also drives the llama path with enableThinking — a shape
+    the docs' example shows, createChat(enableThinking: true,
+    maxOutputTokens: 2048, modelType: …) — the SMALLER DIFF WINS; the
+    connector example is the fallback shape).
+  send_path_supersession: >-
+    The .task-era send-path internals — the C45 per-send turn protocol
+    built for the .task raw-format boundary (the qwen15b contract §2
+    turn_protocol) — are superseded ON THE LLAMA PATH by the chat
+    surface above (plan §5.5: the call-shape is REPLACED). The
+    qwen15b contract §2 turn_protocol remains binding for the .task
+    path it was ruled for (ladder rung (b)'s asset): an S8 revert
+    release re-establishes it (a PATCH release — plan §9 S8). This
+    contract neither extends nor amends that protocol.
+  sampler: >-
+    (plan §2.4/§5.5; F6) The vendor prescribes min_p=0.0, temperature
+    1.0, top_p 0.95 for llama.cpp repetition safety (§7 — the verbatim
+    vendor rationale). Whether the pinned llamadart 0.15.1 chat
+    creation EXPOSES these params is UNVERIFIED until the P2
+    pinned-source read (F6): if exposed → the app sets them per the
+    vendor; if NOT → the guard stays §7 legs (i)–(iii) and the gap is
+    recorded honestly.
+  android_abi: >-
+    (plan §2.3/§5.2) android/app/build.gradle gains
+    ndk { abiFilters } = [arm64-v8a, x86_64] — CLEARING inherited
+    filters first (the connector's fat-APK rule; the connector README:
+    "Android apps must exclude armeabi-v7a: llama.cpp supplies
+    arm64-v8a and x86_64"). P2 gate: ndk.abiFilters set per plan §7
+    criterion 2. 32-bit devices that could run the .task LOSE offline
+    AI — ABI re-enters selection (§3; F4).
+  minsdk_floor: >-
+    (plan §2.3; F10) The connector's conservative floor is Android
+    API 28 ("The example uses API 28 as a conservative floor; older
+    Android versions remain unqualified"). The app's effective
+    build.gradle minSdk is VERIFIED at P2: if < 28 → bump to 28 + an
+    honest gate clause, never a silent load failure. P2 gate: the
+    effective minSdk is ≥ 28, the F10 verification recorded in the
+    phase report (plan §7 criterion 2).
+  qualification_status: >-
+    (plan §2.3; F5) "Physical Android ARM64 … still need qualification"
+    — the connector is maintainer-UNQUALIFIED on physical Android
+    (simulator-only CI). The OWNER'S DEVICE TEST IS THE QUALIFICATION
+    EVIDENCE (P5 — device JFOZINPBAEI7GI6D, plan §6-P5). A load/
+    generation failure there = the §1 fallback_ladder, never an
+    improvisation (S6/S8). S8: the connector's physical-Android status
+    is stated in the release notes and the picker copy stays
+    capability-honest.
+  dependency_discipline: >-
+    ONLY the ruled set enters pubspec (S3): the §2 cascade list, and
+    nothing else — any additional dependency (embedding backends,
+    including the connector's EmbeddingGemma capability, speech,
+    vision) → STOP (plan §9 S3).
+  s2_pinned_source_verify_items: >-
+    (plan §9 S2 — BINDING, before/with the app surgery) First-hand
+    reads of the RESOLVED pub-cache sources must confirm: (a)
+    ModelFileType.gguf routes to the llama engine in core 2.5.5 and
+    ModelType.llama is installable with it; (b) the chat surface
+    (openChat/addQuery/generateChatResponseAsync/stopGeneration, or
+    createChat-with-enableThinking) and its exact signatures; (c) the
+    effective enableThinking default — the app passes it EXPLICITLY on
+    every chat creation, never relying on a default (§6: an unset kwarg
+    lets the model decide); (d) the exact llamadart 0.15.1 native
+    llama.cpp pin; (e) whether sampler params (top_p/min_p) are exposed
+    at chat creation (F6). ANY divergence → STOP, report, re-rule. THE
+    STEP-0 SMOKE (plan §7) IS S2'S EMPIRICAL ARM — a smoke failure is a
+    STOP with the pre-stated re-rules (§10 stop_divergences).
+
+# ---------------------------------------------------------------------------
+# 3. Selection eligibility table (plan §5.3 — BINDING; the C42 machinery,
+#    ONE KEY CHANGED: ABI re-enters selection. Runtime self-reporting —
+#    no user input decides WHICH model; the ONE user input is the C43
+#    consent gate, unchanged)
+# ---------------------------------------------------------------------------
+
+eligibility_table:
+  shape: >-
+    ONE selection class, AUTOMATIC, runtime self-reporting — the C42
+    machinery (the DeviceCapabilities seam: SUPPORTED_ABIS + totalMem;
+    the qwen15b contract §3 shape discipline carries), with ONE KEY
+    CHANGED (plan §5.3): the eligibility verdict consults the ABI
+    AGAIN. From the moment the spec table points at the GGUF spec, it
+    is the ONLY spec any eligible device is offered.
+  keys: >-
+    TWO capability keys, joined by the ONE user-consent input:
+    (1) arm64-v8a ∈ SUPPORTED_ABIS (the ABI verdict — RE-ENTERED,
+    plan §5.3); (2) totalMem (the 4 GB floor — unchanged). The consent
+    input is the persisted C43 override ack (SharedPreferencesAsync,
+    key "offline_ram_override_ack" — the qwen15b contract §3
+    under_floor_override record; a user PREFERENCE, never auto-cleared).
+  classes:                              # the table — binding, plan §5.3
+    gguf_eligible_class: >-
+      arm64-v8a ∈ SUPPORTED_ABIS AND totalMem ≥ 4 GB → the GGUF spec
+      (THIS contract §1/§2): identity minicpm5-2b-q4km, install
+      URL/size/sha/expectedSize per §1, engine per §2. The
+      'Model size: ~1.6GB' chip is UNIVERSAL on this class (§9).
+    under_floor_override_class: >-
+      arm64-v8a AND totalMem < 4 GB → the C43 OVERRIDE PATH (plan
+      §5.3): the honest warning renders FIRST + the "Download anyway"
+      button — consent-gated, warning-first, never re-nagged, never
+      silently green (the C43 machinery carries UNCHANGED, plan §2.5;
+      the qwen15b contract §3 under_floor_override + §6
+      under_floor_first_use/under_floor_post_ack records are the
+      governing copy discipline). The RAM honesty is the §5
+      estimated-peak wording (plan §5.3): any peak figure on these
+      surfaces stays ESTIMATE language — never presented as measured
+      (S6). The owner's device (OPPO CPH2591, arm64, 3.64 GB RAM,
+      cycle-44 §5-P1) rides this path AS TODAY. After the ack the SAME
+      GGUF spec becomes eligible — below-floor + ack ⇒ eligible; the
+      override never selects a different model.
+    message_only_class: >-
+      NO arm64-v8a → message-only, NO CTA (plan §5.3): the ABI clause
+      RETURNS to the wording — llama.cpp ships arm64-v8a + x86_64 ONLY,
+      so 32-bit devices that could run the .task LOSE offline AI (F4).
+      The wording carries BOTH reasons (RAM floor / no arm64-v8a) per
+      the eligibility class (plan §5.7; §9 message_only_wording). The
+      fail-closed primitive carries: an UNREADABLE totalMem arrives as
+      'floor not cleared' → message-only (the qwen15b contract §3
+      under_floor_override unreadable_edge disposition — carried
+      unchanged, flagged not silently resolved; the owner's device
+      facts may refine it, never block — plan §9 refinement clause).
+  abi_reenters_note: >-
+    ABI RE-ENTERS SELECTION after C42-P2b removed it — a GGUF-path
+    consequence, honestly recorded (plan §3 F4). The unsupportedAbi
+    failure-class mapping STAYED in code through C42-C45 (the qwen15b
+    contract §3 unsupportedAbi_mapping_note) — it is now a SELECTION
+    input again, not only a failure-class mapping. The
+    isOfflineAiSupported() seam already provides the verdict (plan §3
+    F4).
+  one_active_model: >-
+    the plugin holds ONE active model — satisfied by construction: each
+    device resolves exactly ONE spec from this table and installs
+    exactly that model (the qwen15b contract §3 one_active_model
+    discipline carries; plan §5.3).
+  consumers: >-
+    the resolved GGUF spec feeds: both install chains (§2
+    install_shape), the identity sites (§4 identity_semantics), the
+    gate/download/card/picker states (§9), and the migration trigger
+    (§4) — from the SINGLE class. The established render sites
+    (main.dart the gate, download_prompt_screen.dart the screen,
+    chats.dart the card, model_picker_sheet.dart the picker — the
+    qwen15b contract §3 consumers record, re-verified 2026-11-01) are
+    re-verified at P2 per the header anchor policy.
+
+# ---------------------------------------------------------------------------
+# 4. Migration — the v6 question (plan §5.4 — BINDING). THE RULING IS
+#    "NO NEW MARKER": the C44 v5 reconciliation ALREADY generalizes to
+#    the GGUF spec. A model_asset_v6 marker exists ONLY on a PROVEN gap.
+# ---------------------------------------------------------------------------
+
+migration_v6:
+  ruling_no_new_marker: >-
+    (plan §5.4) NO new marker is ruled. The C44 v5 reconciliation
+    ALREADY generalizes: the moment the spec table points at the GGUF
+    filename (selectedFileNameFor derives MiniCPM5-2B-Q4_K_M.gguf from
+    §1 install_url), the shipped .task
+    (Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task) and any
+    E2B straggler (gemma-4-E2B-it.litertlm) become FOREIGN by v5's OWN
+    trigger legs — and v5's sweep uninstalls them, clears a stale
+    active identity, resets a lying DAO row, and the gate honestly
+    offers the fresh GGUF install (the C44 §5-P2 Ruling 2 semantics).
+    ZERO new migration code is expected (plan §7 criterion 5).
+  authority: >-
+    The GOVERNING SEMANTICS of v5 are recorded in contracts/
+    offline-model-qwen15b.yaml §4b (as amended) — this contract
+    REUSES them unchanged, it does not restate or amend them: the
+    three state-keyed legs, the composite probe, the verified-clean
+    marker semantics, the identity-comparison rule, the caller-guard
+    drop, the UNKNOWN doctrine.
+  state_keyed_lineage: >-
+    THE V3/V4 LESSON IS BINDING IN V5'S DESIGN and this swap relies on
+    exactly it (the qwen15b contract §4b): the trigger keys on the
+    ACTUAL STATE, never a generic has-model condition — (a) the
+    FOREIGN-FILE leg (listInstalledModels() contains ids ≠ the derived
+    selected filename; when spec == null every id is foreign); (b) the
+    FOREIGN-ACTIVE leg (hasActiveModel() AND the active spec's identity
+    ≠ the selected filename); (c) THE LIE leg (the DAO claims installed
+    AND the plugin's file probe says the selected file is NOT installed
+    AND the active identity ≠ the selected filename) — THE COMPOSITE
+    PROBE IS NORMATIVE: BOTH plugin probes must agree the selected asset
+    is gone before the DAO is touched, so a single lying probe can
+    never loop the download. The UNKNOWN doctrine carries: a pass that
+    cannot READ the state performs NO mutation and writes NO marker.
+  compositions: >-
+    (plan §5.4 — P2 MUST verify all FOUR with tests BEFORE relying on
+    the generalization; each test-proven, plan §7 criterion 5):
+    (1) BOTH-ASSETS — a device holding a legacy asset (.task or E2B
+    straggler) + the GGUF already downloaded → the foreign file
+    uninstalled, the GGUF file AND DAO row preserved, NO re-download;
+    (2) THE USER'S-DEVICE SHAPE — a foreign file active + the DAO row
+    ready + the GGUF absent → the foreign file uninstalled, the
+    identity cleared, the row reset, the gate offers the fresh GGUF
+    install; (3) A HEALTHY-GGUF DEVICE → ZERO mutations (no uninstall,
+    no reset, marker-independent); (4) MESSAGE-ONLY-HOLDING-ANY-FILE →
+    swept (every id is foreign when spec == null).
+  v6_marker_conditional: >-
+    (plan §5.4) ONLY IF A GAP IS PROVEN does a model_asset_v6 marker
+    get added, per the C44 marker semantics (written ONLY after the
+    body proves the state clean — verified-clean, never marker-first;
+    the qwen15b contract §4b marker_semantics). The P2 report states
+    WHICH gap (if any) demanded it (plan §7 criterion 5). Otherwise
+    v2/v3/v4/v5 markers and their logic stay BYTE-FOR-BYTE untouched
+    (plan §5.4).
+  identity_semantics: >-
+    The NEW spec's identity string is minicpm5-2b-q4km (plan §5.1).
+    The four-site identity invariant carries (the qwen15b contract §2
+    discipline): the spec table is the ONLY place the string is
+    written; DAO/plugin identity and the DB must not drift. The C44
+    identity-comparison rule carries (isSameModelIdentity — equal
+    strings OR the candidate being the plugin-baseName of the fileName;
+    ONE-DIRECTIONAL) with an S2 verify note: that rule was verified
+    against pinned core 1.11.4 — P2 RE-VERIFIES the plugin's naming
+    semantics for .gguf against the RESOLVED core 2.5.5 (a raw-string
+    comparison would call the app's own freshly installed model
+    "foreign" and clear a healthy identity — the rule exists to
+    prevent exactly that).
+  no_stranded_downloads: >-
+    ABSOLUTE (the qwen15b contract §4b no_stranded_downloads; plan §9
+    S5): the sweep NEVER uninstalls the derived selected filename (the
+    AppConfig.gemmaModelUrl override derives its own filename and stays
+    legal — §1 env_override); the both-assets composition preserves
+    the GGUF file + row; the reset leg never fires when the composite
+    probe disagrees.
+
+# ---------------------------------------------------------------------------
+# 5. RAM budget (plan §2.5 — the honest figures; the ≤ 6 GB binding cap
+#    carries from the E2B contract §6 through the qwen15b contract §5)
+# ---------------------------------------------------------------------------
+
+ram_budget:
+  binding_cap: >-
+    runtime RAM ≤ 6 GB (the standing user directive — the E2B contract
+    §6 binding_cap, carried through the qwen15b contract §5; the
+    governing machinery is UNCHANGED, plan §2.5). The §5 estimated peak
+    holds the cap with wide margin.
+  file_size: >-
+    1.56 GB (§1) — SMALLER than the currently-shipped 1.60 GB .task
+    (cycle-42 §1.2: 1,598,556,720 B) and far smaller than the 2.59 GB
+    E2B era (plan §2.5).
+  peak_rss_status: >-
+    UNVERIFIED-ESTIMATE (plan §2.5, marked as such — BINDING HONESTY):
+    NO vendor-measured Android figure exists for llama.cpp ×
+    MiniCPM5-2B × Android phone. The estimate: weights ≈ 1.56 GB
+    (mmap-touched) + KV: 42 layers × 2 (K+V) × 2 KV-heads × head-dim
+    ≈ 128 × f16 ≈ 42 KB/token → ~86 MB at a 2,048-token context;
+    compute/scratch buffers a few hundred MB. ESTIMATED PEAK ≈ 2.0–2.3 GB.
+  comparison: >-
+    Comparable to the VENDOR-MEASURED 2,216 MB of the current q8 1.5B
+    .task on a Samsung S25 Ultra (cycle-42 §1.2 — the only measured
+    figure in the lineage), on a slightly lighter file (plan §2.5).
+  estimate_language_rule: >-
+    (S6) The estimated-peak language is recorded as an ESTIMATE
+    EVERYWHERE it appears — NEVER presented as measured (plan §9 S6).
+    §9's S6 RAM stop fires only on a materially higher MEASURED figure
+    at the smoke or device gates (load failure, OOM-kill on the
+    owner's device), NOT on this estimate (plan §2.5/§9 S6).
+  floor_and_override: >-
+    The governing machinery is UNCHANGED (plan §2.5): the 4 GB totalMem
+    floor + the cycle-43 low-RAM override ("Download anyway" + honest
+    warning) stay (§3 under_floor_override_class); the owner's device
+    (OPPO CPH2591, arm64, 3.64 GB RAM, cycle-44 §5-P1) uses the
+    override as today. The override does NOT repeal the physics — it
+    converts the floor from a refusal into informed consent (the
+    qwen15b contract §5 selection_floor discipline carries).
+  context_bound: >-
+    maxTokens: 2048 (the WHOLE conversation budget on the llama path —
+    §2 load_shape) is kept to bound the RAM estimate (plan §2.5; F7):
+    the KV figure above is computed at a 2,048-token context. Raising
+    the context is a FUTURE cycle with device evidence (plan §3 F7).
+  backend_ruling: >-
+    CPU on Android (§2 load_shape, plan §5.5) — the estimate above is a
+    CPU-path estimate; GPU on phones is out of qualification scope
+    (the superseded plan's same-day evidence, carried by plan §2.3).
+
+# ---------------------------------------------------------------------------
+# 6. Thinking contract (plan §2.4 the verified mechanics + §5.6 the
+#    ruling — BINDING; the directive's ask 2. The #1 cycle risk lives
+#    here and is decided EMPIRICALLY by the P2 step-0 smoke, plan §7)
+# ---------------------------------------------------------------------------
+
+# >>> SUPERSEDED-NEVER-SHIPPED at v1.1.0 (2026-11-02 — cycle-46 scope-exit
+# amendment, header record above; plans/cycle-46-minicpm5-llama.md §6.2,
+# BINDING): the owner withdrew the thinking ask — THIS SECTION and §7/§8
+# are kept in place AS THE RECORD of the ruled-but-dropped contract
+# (never deleted, never rewritten). WHAT SURVIVES, BINDING: chat
+# creation passes enableThinking: false EXPLICITLY on EVERY send — never
+# omitted, never defaulted (the template off-switch analysis below is
+# the REASON; an unset kwarg lets the model decide); stray thinking
+# content (ThinkingResponse tokens or think-span text) is DROPPED at the
+# service seam — never rendered, never persisted, never re-sent (§10
+# stop_divergences S7). NO toggle exists and NO §8 UI ships (plan §7
+# criteria 6-7 as amended).
+
+thinking_contract:
+  the_switch: >-
+    THE SWITCH IS THE TEMPLATE'S enable_thinking KWARG (plan §2.4) —
+    the GGUF's embedded template (§1 embedded_template): true → the
+    generation prefill opens a bare think block (the model opens its
+    thought); false → the prefill is an EMPTY think block (thinking-off
+    is the template's STRUCTURAL OFF-SWITCH); UNDEFINED → NO prefill —
+    THE MODEL DECIDES (a deep-thinking-SFT model may think by default —
+    §1 deep_thinker_note). The vendor card's own usage passes
+    enable_thinking=True explicitly (plan §2.4).
+  the_explicit_rule: >-
+    THE APP MUST PASS enableThinking EXPLICITLY ON EVERY CHAT CREATION
+    — NEVER RELY ON A DEFAULT (plan §2.4/§5.6; S7). The persisted
+    toggle (§8, DEFAULT OFF) drives the value: OFF → enableThinking:
+    false; ON → enableThinking: true. The S2 verify item (c) records
+    the effective default in the resolved core 2.5.5 for the report,
+    but the app NEVER depends on it: an unset kwarg lets the model
+    decide (plan §2.4). Carried evidence for the rule (the superseded
+    plan's same-day fetch, cited by plan §2.4's lineage): llamadart's
+    own enableThinking default is documented TRUE on later 0.17.x —
+    UNVERIFIED at the pinned 0.15.1, which is precisely why the
+    explicit pass is structural, not advisory.
+  default_off_grounding: >-
+    The OFF default is TRIPLE-GROUNDED (plan §5.6): (1) the template's
+    structural off-switch (§2.4 — an undefined kwarg lets the model
+    decide); (2) the deep-thinking-SFT training (§2.6 — ON-by-default
+    would surprise every casual send); (3) the honest cost (thinking
+    counts toward maxOutputTokens, slows generation, drains battery).
+  the_branch_ruling: >-
+    THE CYCLE'S #1 RISK — PRE-RULED, DECIDED EMPIRICALLY BY THE P2
+    STEP-0 SMOKE (plan §2.4/§5.6/§7): core parses think tags into
+    ThinkingResponse ONLY for ModelType.deepSeek, qwen, qwen3, qwen35 —
+    "general, phi and the others have none" (fluttergemma.dev
+    /docs/thinking-mode, verbatim; ModelType.llama is one of "the
+    others"). Without a parser, "its raw thinking blocks arrive inside
+    the answer as ordinary TextResponse tokens. Strip them yourself, or
+    don't advertise a thinking UI for those models." Whether llamadart's
+    template layer surfaces ThinkingResponse on the llama engine for a
+    ModelType.llama install is UNVERIFIED — the docs do not say (plan
+    §2.4).
+  branch_a: >-
+    IF the smoke gate proves the llama path surfaces the reasoning as
+    ThinkingResponse → the service seam consumes it DIRECTLY (plan
+    §5.6).
+  branch_b: >-
+    OTHERWISE the service seam implements THE DOCS' PRESCRIBED REMEDY
+    (plan §5.6): a think-span SEGMENTER on the token stream — open-tag
+    → close-tag spans become the thinking channel; the remainder the
+    answer; an UNCLOSED span at maxOutputTokens is treated as
+    THINKING-ONLY, NEVER persisted as an answer — a bounded,
+    fully-testable transform CONFINED to gemma_service.dart.
+  branch_decision_gate: >-
+    (plan §7 — BINDING, BEFORE ANY APP SURGERY) The step-0 smoke runs
+    the connector's example app (packages/flutter_edge_ai_llama/example,
+    Windows desktop runner) with the ACTUAL asset — fetch
+    MiniCPM5-2B-Q4_K_M.gguf, verify the §1 sha256 after download,
+    install per the connector example's flow (ModelType.llama +
+    ModelFileType.gguf) — then THREE probes: (1) a plain question with
+    enableThinking: false → expect a coherent answer, NO thinking
+    content; (2) a hard question with enableThinking: true → RECORD
+    WHAT ARRIVES: ThinkingResponse tokens (branch a) or raw think-tag
+    text inside TextResponse (branch b) or NEITHER (a defect); (3) a
+    probe with enableThinking UNSET → records the unpinned default
+    behavior (evidence for the explicit-kwarg ruling). PASS = load +
+    probes 1–2 behave per THIS contract on SOME branch. FAIL = STOP
+    (S2) — report verbatim; the pre-stated re-rules are in §10
+    stop_divergences. The smoke evidence (three probes + the recorded
+    branch) attaches to the P2 phase report (plan §7 criterion 8).
+  ui_identical_either_way: >-
+    The UI contract (§8) is IDENTICAL EITHER WAY (plan §2.4/§5.6) —
+    the branch changes the service seam's INPUT shape, never the
+    presentation states.
+  persistence_discipline: >-
+    STRUCTURALLY ENFORCED (plan §5.6): thinking text is NEVER written
+    to the chat transcript DB and NEVER re-sent in history — the send
+    paths assemble history from STORED MESSAGES ONLY, so storing only
+    the final answer satisfies it BY CONSTRUCTION; visible thinking
+    lives in widget state for the session. Test-proven: the transcript
+    DB receives ONLY the final answer (plan §7 criterion 6; §8 AC4 at
+    the UI layer).
+  output_budget_note: >-
+    Thinking counts toward maxOutputTokens (2048 — §2 load_shape): a
+    thinking ON send can run to the output cap on a hard question —
+    the stop affordance is the user's escape hatch (plan §5.6/§5.10).
+    The OFF state produces answers identical in shape to today's chat
+    — NO thinking content surfaced (plan §7 criterion 6).
+
+# ---------------------------------------------------------------------------
+# 7. Thinking loop guard (plan §2.4 + §5.6 leg 4 + F6 — the vendor-
+#    prescribed llama.cpp anchor; S7 is the phase-fail gate)
+# ---------------------------------------------------------------------------
+
+# >>> SUPERSEDED-NEVER-SHIPPED at v1.1.0 (2026-11-02 — cycle-46 scope-exit
+# amendment; plans/cycle-46-minicpm5-llama.md §6.2, BINDING): the
+# four-leg loop guard and the s7_gate below are RETIRED WITH THE
+# WITHDRAWN FEATURE — kept in place AS THE RECORD, never deleted, never
+# rewritten. STILL TRUE as GENERAL chat requirements (plan §9 S7 as
+# amended — NOT S7 legs): maxOutputTokens 2048 caps every send (§2
+# load_shape), stopGeneration() is wired to the stop affordance AND the
+# watchdog (§10 watchdog_extension), streaming keeps the UI alive. The
+# binding S7 is now the TWO invariants recorded at §10 stop_divergences
+# S7.
+
+thinking_loop_guard:
+  four_legs: >-
+    (plan §5.6) The loop guard has FOUR legs: (i) maxOutputTokens caps
+    every send at 2048 (thinking counts toward it); (ii) streaming
+    keeps the UI alive so a stuck thought is VISIBLE, not silent WAIT;
+    (iii) stopGeneration() is wired to the stop affordance AND the
+    app's stall watchdog (the watchdog extends to generation via
+    stopGeneration() on timeout — plan §5.5); (iv) the vendor's sampler
+    guidance WHERE THE API ALLOWS (the vendor_anchor below).
+  vendor_anchor: >-
+    THE VENDOR-PRESCRIBED ANCHOR (llama.cpp-specific — vendor card,
+    plan §2.4, VERBATIM): "In llama.cpp, the default min_p=0.05 can
+    lead to repetitive output: it filters out tokens whose probability
+    is below 5% of the highest-probability token, potentially
+    discarding the exact tokens needed to break out of a repetition
+    loop. To prevent this, we set min_p=0.0." Recommended sampling
+    (plan §2.4): temperature: 1.0, top_p: 0.95, min_p: 0.0.
+  conditional_application: >-
+    (F6 — plan §2.4/§3) CONDITIONAL on the pinned-source read (S2
+    verify item (e)): IF the pinned llamadart 0.15.1 EXPOSES sampler
+    params at chat creation, the app sets them per the vendor anchor;
+    IF NOT, the guard stays legs (i)–(iii) and the gap is recorded
+    honestly (plan §2.4). Leg (iv) is never silently dropped — either
+    applied per the vendor or the gap recorded in the P2 report.
+  thinking_token_budget_unavailable: >-
+    The thinking budget (thinkingTokenBudget) is LITERTLM-ONLY —
+    UNAVAILABLE on the llama engine (the superseded plan's same-day
+    evidence, carried by plan §2.4). The llama path's guard is the
+    four legs above; no budget parameter is assumed to exist.
+  modeltype_defaults_note: >-
+    ModelType.llama is documented with "its sampling defaults" (plan
+    §2.3): whether those defaults interact with the vendor's
+    prescription (or override it where the app does not set params) is
+    part of the S2 (e) pinned-source read — recorded at P2, never
+    assumed.
+  s7_gate: >-
+    (plan §9 S7 — BINDING) Thinking defaults OFF in code AND copy;
+    enableThinking passed EXPLICITLY on every chat creation;
+    maxOutputTokens caps every send; stopGeneration() reachable from
+    the UI AND the watchdog; thinking text never persisted (§6). ANY
+    PHASE SHIPPING THINKING WITHOUT ALL FIVE = PHASE FAIL.
+
+# ---------------------------------------------------------------------------
+# 8. Thinking UI contract (plan §5.6 "Presentation (P3's contract)" +
+#    §6-P3 + §8 P3 acceptance criteria — the states ARE the design
+#    contract, folded into P3 per the owner's compact directive)
+# ---------------------------------------------------------------------------
+
+# >>> SUPERSEDED-NEVER-SHIPPED at v1.1.0 (2026-11-02 — cycle-46 scope-exit
+# amendment; plans/cycle-46-minicpm5-llama.md §6.2, BINDING): P3 is
+# DROPPED outright — NO toggle, NO 'Thinking mode' / 'Thinking…' /
+# 'Thought for Ns' string, NO preference key ships anywhere (plan §7
+# criterion 7 as amended: grep-proven ZERO such strings in lib/). THIS
+# SECTION is kept in place AS THE RECORD of the unshipped UI contract
+# (never deleted, never rewritten); its p3_acceptance is retired at §11
+# p3_ui_gates.
+
+thinking_ui_contract:
+  toggle: >-
+    A "Thinking mode" toggle on the offline model row in the MODEL
+    PICKER SHEET (model_picker_sheet.dart — the established per-model
+    affordance surface), persisted via SharedPreferences through the
+    spec/DAO layer, DEFAULT OFF (plan §5.6). The persisted value
+    reaches chat creation as an EXPLICIT enableThinking argument
+    through the P2 service seam (the seam test — never a defaulted
+    call; plan §7 criterion 7). P3 NEVER touches lib/services/ai/*
+    (the service seam lands in P2 — plan §5.9).
+  binding_strings:                      # the strings the plan rules verbatim — consumed VERBATIM, no re-wording
+    toggle_label: 'Thinking mode'       # plan §5.6: 'a "Thinking mode" toggle'
+    streaming_section: 'Thinking…'      # plan §5.6: 'a collapsible, visually-distinct "Thinking…" section'
+    done_summary: 'Thought for Ns'      # plan §5.6: 'collapsing to a one-line "Thought for Ns" summary' (Ns = the measured seconds)
+  honest_cost_copy: >-
+    BINDING REQUIREMENT (plan §5.6/§5.10 — the OFF default's third
+    grounding): the toggle's copy states the cost honestly — thinking
+    counts toward the output cap, slows generation, drains battery,
+    and ON can run to the output cap on a hard question (the stop
+    affordance is the escape hatch). The PLAN GROUNDS the content
+    points but does not fix a verbatim sentence for it: P3 words the
+    line from THESE points and the §9 copy discipline (capability-
+    honest, zero engine wording) — flagged here as the one string this
+    contract specifies as a requirement, not verbatim text.
+  presentation_states:                 # identical on EITHER smoke-decided branch (§6) — plan §5.6/§2.4
+    on_streaming: >-
+      thinking ON + a streaming response: the collapsible, visually-
+      distinct 'Thinking…' section renders ABOVE the answer bubble
+      while streaming (LIVE).
+    on_done: >-
+      thinking ON + generation complete: the section collapses to the
+      one-line 'Thought for Ns' summary.
+    off: >-
+      thinking OFF: the UI is BYTE-EQUIVALENT to today's chat (plan
+      §5.6; widget-test + the P4 sweep, plan §8 criterion 3).
+  tokens: dark/light per the existing chat design (plan §6-P3).
+  persistence_at_ui_layer: >-
+    No thinking text reaches the transcript DB or the history assembly
+    (test-proven — the §6 persistence_discipline at the UI layer; plan
+    §8 criterion 4). Visible thinking lives in widget state for the
+    session only (plan §5.6).
+  p3_acceptance: >-
+    (plan §8 — P3's own gate, each independently checkable) (1) the
+    picker sheet's offline row shows the 'Thinking mode' toggle,
+    default OFF, with the honest copy (widget-test-proven); (2)
+    toggling persists across app restarts (test-proven); (3) with
+    thinking ON a streaming response renders the collapsible thinking
+    section per the §8 presentation_states on the smoke-gate-decided
+    branch, with OFF byte-equivalent to today's chat (widget-test +
+    the P4 sweep); (4) no thinking text reaches the transcript DB or
+    the history assembly (test-proven).
+
+# ---------------------------------------------------------------------------
+# 9. UX copy table (plan §5.7 — BINDING; the qwen15b contract §6
+#    discipline carries: ruled strings consumed VERBATIM, no re-wording;
+#    the chip and description are SPEC-DRIVEN — they render from the
+#    spec table)
+# ---------------------------------------------------------------------------
+
+ux_copy:
+  gate_size_chip: 'Model size: ~1.6GB'  # plan §5.7 verbatim — the GGUF spec's sizeChip (spec-driven: renders from the spec table; the qwen15b contract §6 gate_size_chip anchor note records the render site — re-verify at P2 per the header anchor policy)
+  picker_tile_description: >-
+    The MiniCPM5-2B HONEST COPY with the '~1.6GB download' figure, at
+    the C44 Rider B site (lib/services/ai/ai_model.dart:62 as of the
+    qwen15b v1.3.0 read, 2026-11-01 — re-verify at P2): plan §5.7 rules
+    the site and the figure ("the MiniCPM5-2B honest copy ('~1.6GB
+    download')"). RIDER DISCIPLINE (plan §5.7): ai_model.dart is a
+    RIDER FILE AGAIN — cycle-39's ratified hunks + the C44 hunks ride;
+    stage the file WHOLE or not at all (the C44 §9 S2 discipline); the
+    P2 gate: ai_model.dart carries ONLY the rider copy change (the
+    ~1.6 GB wording) on top of its ratified hunks (plan §7 criterion
+    10).
+  message_only_wording: >-
+    Carries BOTH reasons (RAM floor / no arm64-v8a) PER THE ELIGIBILITY
+    CLASS (plan §5.7) — the ABI clause RETURNS to the wording (the
+    C42-P2b removal is superseded on this path; F4): a no-arm64 device
+    sees the ABI+RAM-honest wording with NO download CTA (plan §7
+    criterion 4). The plan rules the REQUIREMENT (both reasons, per
+    class), not a fixed sentence — the existing
+    DeviceCapabilities.incompatibleDeviceMessage is the wording site
+    (the qwen15b contract §3 message_only_class record; the RAM-only
+    generalized wording it holds is superseded on this path); P2 words
+    it from the requirement and the §9 copy discipline.
+  under_floor_override_copy: >-
+    The C43 override machinery + copy discipline carry UNCHANGED (plan
+    §2.5/§5.3): warning-first, consent-gated, never re-nagged, never
+    silently green (the qwen15b contract §6 under_floor_first_use /
+    under_floor_post_ack records are the governing strings). The
+    '~1.6 GB' figure is the P2 gate's expectation on the override
+    surfaces (plan §7 criterion 4: "the C43 override wording with the
+    ~1.6 GB figure"); any peak figure on these surfaces stays ESTIMATE
+    language (S6 — §5 estimate_language_rule).
+  data_caution: >-
+    UNCHANGED — 'Large download — Wi-Fi recommended. You can keep
+    using your phone while it downloads.' (the E2B contract §5 line,
+    carried verbatim through the qwen15b contract §6; plan §5.7).
+  identity_line: >-
+    STAYS VERBATIM (C44 Rider A, plan §5.7): "If asked what model you
+    are, say you are AgentA's built-in offline assistant." The
+    spec-driven systemInstruction carries (the qwen15b contract §2
+    system_prompt discipline): the instruction lives on the ONE spec
+    in the spec table — the NEW GGUF spec carries the SAME identity
+    line; exactly ONE copy exists in lib/.
+  engine_wording_discipline: >-
+    ZERO user-visible 'minicpm', 'llama' or 'litertlm' engine wording
+    (plan §5.7 — the C44 §10 grep discipline carries).
+  out_of_scope: >-
+    Every other string on these surfaces is unchanged (the qwen15b
+    contract §6 out_of_scope discipline; plan §5.7).
+  thinking_strings_sweep: >-
+    ADDED at v1.1.0 (2026-11-02 — cycle-46 scope-exit amendment, plan
+    §6.2): §9 was SWEPT for thinking-specific strings per the dispatch —
+    RESULT: ZERO found (superseded-not-deleted applies vacuously; every
+    §9 string above is thinking-free and stands UNCHANGED). The thinking
+    copy strings of record ('Thinking mode' / 'Thinking…' / 'Thought for
+    Ns' + the honest-cost copy) live in §8 binding_strings /
+    honest_cost_copy and are SUPERSEDED-NEVER-SHIPPED at §8's head
+    banner — they never ship in lib/ (plan §7 criterion 7 as amended).
+
+# ---------------------------------------------------------------------------
+# 10. Error surface (the qwen15b contract §7 discipline carried —
+#     REUSED classes, no new branches; the plan §9 STOP rules are the
+#     binding divergence gates)
+# ---------------------------------------------------------------------------
+
+error_surface:
+  download_errors: UNCHANGED            # the sealed DownloadException mapping (the E2B contract §7 friendly_mapping, carried through the qwen15b contract §7) is REUSED verbatim — no variant added or reworded
+  download_errors_note: >-
+    The 401/403 copy stays cycle-36's verbatim (the E2B contract §7
+    friendly_mapping); this asset is UNGATED (§1) so the class should
+    not fire, but the mapping is untouched (plan §8 — no token surface,
+    no security phase).
+  expectedsize_integrity: >-
+    A corrupted/truncated download FAILS AT INSTALL via the
+    expectedSize check (§1 expected_size / §2 install_shape — core
+    2.5.5's documented size-integrity check on non-catalog network
+    installs): it DIES AT INSTALL, NEVER AT LOAD (plan §5.5), and it
+    surfaces through the EXISTING download-failure classes — NO new
+    branch.
+  failure_classes: >-
+    The cycle-40 failure classes are REUSED unchanged (the qwen15b
+    contract §7 discipline): the unsupportedAbi marker/class now ALSO
+    keys the §3 message-only class (ABI re-enters — the mapping
+    machinery stayed in code and becomes a selection input again,
+    §3 abi_reenters_note); the incompatible-message mapping keys the
+    §9 message_only_wording (both reasons).
+  engine_claim_failures: >-
+    A llama engine-claim failure — the resolved core 2.5.5 + connector
+    cannot claim ModelType.llama + ModelFileType.gguf — is a STOP S2,
+    NO speculative patches (the qwen15b contract §7 engine_claim
+    discipline; plan §9 S2). The step-0 smoke (§6
+    branch_decision_gate) runs BEFORE ANY APP SURGERY and is S2's
+    empirical arm.
+  watchdog_extension: >-
+    The app's stall watchdog EXTENDS TO GENERATION via
+    session.stopGeneration() on timeout (plan §5.5) — §7 leg (iii).
+  token_posture: >-
+    No new secret surface — the HF-token threading is untouched (§1
+    token_threading); this asset needs NO HF token. Only config KEY
+    names appear anywhere (GEMMA_MODEL_URL / HF_TOKEN via AppConfig) —
+    never values.
+  stop_divergences: >-
+    THE PLAN FILE IS AUTHORITATIVE for the STOP rules (the qwen15b
+    contract §7 others_note pattern — plans/cycle-46-minicpm5-llama.md
+    §9); summarized with their triggers:
+    S1 (pins/cascade, P2): pub get resolving anything OTHER than the
+    §2 cascade set — a core version materially above 2.5.x, a llama
+    connector ≠ 0.0.x-compatible, a forced mediapipe jump beyond 1.2.x,
+    ANY reappearance of litertlm → STOP for Adviser re-ruling (no
+    quiet substitutions).
+    S2 (pinned-source + smoke, P2): the §2 s2_pinned_source_verify_items
+    (a)–(e) diverging from the resolved sources, OR the step-0
+    smoke failing (§6 branch_decision_gate) → STOP, report verbatim;
+    pre-stated re-rules: (i) if the 0.15.1 pin cannot load the file,
+    check for a connector release pinning a newer llamadart and
+    re-rule on the version bump; (ii) if no connector release helps,
+    ladder rung (b) stands and the cycle stops honestly with the
+    research recorded (plan §7).
+    S3 (no new packages): only the §2 cascade set enters pubspec; any
+    additional dependency → STOP.
+    S4 (asset drift, P4): the GGUF's live state at gate time (bytes,
+    sha256, gated) diverging from §1 → STOP, re-check the catalog,
+    re-rule (the C38/C42 pattern).
+    S5 (migration safety, P2): any stranded download, any uninstall
+    loop, any uninstall of the SELECTED asset, or any v5-semantics
+    break in the §4 compositions → phase FAIL; fix before review (the
+    no-stranded-downloads rule is absolute).
+    S6 (RAM honesty + the device gate): any surface offering the GGUF
+    on an ineligible device (no arm64-v8a, or < 4 GB without the
+    override) → phase FAIL; the estimated-peak language (§5) is an
+    ESTIMATE everywhere it appears — never presented as measured; a
+    materially higher MEASURED figure at the smoke or device gate →
+    STOP → the §1 fallback_ladder, never an infinite fix loop.
+    S7 (the thinking discipline, AS AMENDED at v1.1.0 — §6.2; the
+    original row "S7 (thinking-loop guard): §7 s7_gate — any phase
+    shipping thinking without all five = phase FAIL" is
+    SUPERSEDED-NEVER-SHIPPED, kept as the §7 record): thinking does NOT
+    ship this cycle — the TWO surviving invariants: (1) enableThinking:
+    false passed EXPLICITLY on EVERY chat creation (never omitted,
+    never defaulted); (2) any stray thinking content (ThinkingResponse
+    tokens or think-span text) is DROPPED at the service seam — never
+    rendered, never persisted to the transcript DB, never re-sent in
+    history; no thinking UI surface exists (no toggle, no labels, no
+    preference key). Any phase surfacing, persisting, or UI-ing
+    thinking content = phase FAIL. (The general chat requirements —
+    maxOutputTokens 2048, stopGeneration(), streaming, the watchdog —
+    are NOT S7 legs; they stand under §2 load_shape / §10
+    watchdog_extension.)
+    S8 (the unqualified-path honesty): the connector's
+    physical-Android status is stated in the release notes and the
+    picker copy stays capability-honest; the owner's device test (P5)
+    is the qualification; a device failure → ladder rung (b): a
+    one-line spec re-point to the .task, a PATCH release, the research
+    recorded — never an infinite fix loop, never silent.
+    REFINEMENT CLAUSE (non-blocking): the owner's device facts may
+    refine the RAM floor or the minSdk finding — they never block the
+    work (plan §9).
+
+# ---------------------------------------------------------------------------
+# 11. Acceptance criteria (P1's own gate a–d + the P2/P3 invariants this
+#     contract pins — plan §7 criteria 1-10 and §8, condensed with
+#     cross-refs; each independently checkable)
+# ---------------------------------------------------------------------------
+
+acceptance_criteria:
+  a_figures_exact: >-
+    Every figure/URL/hash in this file matches plans/
+    cycle-46-minicpm5-llama.md §1/§2 exactly — each carries its source
+    citation (plan §2.1 asset + §2.2 arch + §2.3 engine + §2.4 thinking
+    + §2.5 RAM + §2.6 capability; all plan figures verified 2026-11-02
+    — plan §2 search-or-skip record).
+  b_no_secrets: >-
+    No secret material — no token values anywhere in this file; only
+    config KEY names appear (GEMMA_MODEL_URL / HF_TOKEN as dart-define
+    keys via AppConfig), which are not secrets (§1 token_threading;
+    §10 token_posture).
+  c_p2_standalone: >-
+    A reader can build P2 from THIS file plus the plan (§6-P2 scope,
+    §7 the step-0 smoke + the ten acceptance criteria) and, for the
+    carried machinery's recorded semantics, the amended qwen15b
+    contract (v1.5.0: §2 install/identity sites, §3 the C43 override,
+    §4b the v5 reconciliation) — WITHOUT touching the web (criterion
+    a's citations name their sources; the live re-verification points
+    are the P2 step-0 smoke, P4 Shard B and the plan §8 reviewer
+    searches).
+  d_qwen_amendment_no_break: >-
+    The Qwen amendment (v1.5.0, §9 selection_exit_record) records the
+    supersession pointer + the ladder cross-reference with NO consumer
+    break — additive only; v1.4.0 consumers read that file unchanged
+    (plan §6-P1; the E2B-exit precedent shape).
+  p2_smoke_evidence: >-
+    The step-0 desktop smoke (plan §7, §6 branch_decision_gate) runs
+    BEFORE any app surgery; its three probes + the recorded branch
+    attach to the P2 phase report; a smoke failure is a STOP S2 with
+    the pre-stated re-rules (§10 stop_divergences S2). [v1.1.0 — §6.2:
+    STATUS 2026-11-02 — the smoke PASSED, branch (a), native
+    ThinkingResponse; per the scope exit the branch decision is MOOT
+    (thinking does not ship) and the PASS is RETAINED as the
+    engine-loads-and-answers proof; probe 3's unset-default record
+    stands as added evidence for the explicit-false ruling.]
+  p2_resolution_set: >-
+    (plan §7 criterion 1) pub get resolves EXACTLY flutter_edge_ai
+    2.5.5 (or the S2-verified latest 2.5.x), flutter_edge_ai_llama
+    0.0.5 (llamadart 0.15.1), flutter_edge_ai_mediapipe 1.2.x — NO
+    flutter_edge_ai_litertlm anywhere in pubspec.yaml/pubspec.lock;
+    the hooks: block present in the app pubspec; 'git grep litertlm'
+    in lib/ returns zero hits after the registration swap.
+  p2_android_build: >-
+    (plan §7 criterion 2) android/app/build.gradle sets ndk.abiFilters
+    to arm64-v8a, x86_64 and the effective minSdk is ≥ 28 (the F10
+    verification recorded in the phase report).
+  p2_spec_resolution: >-
+    (plan §7 criterion 3) A test-simulated arm64-v8a, ≥ 4 GB device
+    resolves the GGUF spec — exact URL, ModelType.llama,
+    ModelFileType.gguf, identity minicpm5-2b-q4km, expectedSize:
+    1561318368 — and the install chain uses them (test-proven).
+  p2_ineligible_states: >-
+    (plan §7 criterion 4) A test-simulated no-arm64-v8a device sees
+    the message-only state with the ABI+RAM-honest wording (§9
+    message_only_wording) and NO download CTA; a < 4 GB arm64 device
+    sees the C43 override wording with the ~1.6 GB figure
+    (test-proven).
+  p2_migration_compositions: >-
+    (plan §7 criterion 5) The four §4 compositions all behave per the
+    C44 v5 semantics with ZERO new migration code (test-proven): the
+    shipped .task and any E2B straggler are swept as foreign once the
+    spec points at the GGUF; a healthy GGUF device mutates nothing; a
+    v6 marker exists ONLY if a proven gap demanded it (the report
+    states which).
+  p2_chat_send_path: >-
+    (plan §7 criterion 6, AS AMENDED at v1.1.0 — §6.2; the v1.0.0
+    wording — "Thinking OFF (default)… thinking ON delivers the
+    reasoning into the service seam per the smoke-gate-decided branch"
+    — is SUPERSEDED, kept as the header/§6 record) every chat creation
+    passes enableThinking: false EXPLICITLY (test-proven — the seam
+    asserts the argument is present and false; never omitted, never
+    defaulted — §2.4, §6.2); answers are plain text, identical in shape
+    to today's chat (regression test: no think markers or
+    ThinkingResponse content in the surfaced answer across the probe
+    set); any stray thinking content (a ThinkingResponse token or
+    think-span text) is DROPPED — never rendered, never written to the
+    transcript DB (test-proven); stopGeneration() is wired to the stop
+    affordance and the watchdog.
+  p2_toggle_seam: >-
+    (plan §7 criterion 7, AS AMENDED at v1.1.0 — §6.2; the persisted
+    toggle this criterion originally tested is WITHDRAWN — never
+    shipped) NO thinking UI ships: no toggle exists in
+    model_picker_sheet.dart or anywhere (grep-proven — zero 'Thinking
+    mode'/'Thought for' strings in lib/), no thinking preference key
+    ships, and NO chat-creation call site omits the enableThinking
+    argument (the seam test covers every creation site — the
+    explicit-false invariant, §10 stop_divergences S7).
+  p2_registration_and_smoke: >-
+    (plan §7 criterion 8) The engine registration is the llama engine
+    + MediaPipeEngine (no LiteRT-LM); the smoke-gate evidence (three
+    probes + the recorded branch) is attached to the phase report.
+  p2_local_gates: >-
+    (plan §7 criterion 9) flutter analyze exit 0; dart format
+    --set-exit-if-changed 0 changed; full flutter test green with
+    counts vs the re-baselined working-tree count + every new test
+    enumerated.
+  p2_coexistence: >-
+    (plan §7 criterion 10) Cycle-39's 7 files + .env untouched in the
+    diff (grep/diff-proven); ai_model.dart carries ONLY the rider copy
+    change (the ~1.6 GB wording) on top of its ratified hunks (§9
+    picker_tile_description).
+  p3_ui_gates: >-
+    RETIRED at v1.1.0 — SUPERSEDED-NEVER-SHIPPED (2026-11-02, §6.2: P3
+    is DROPPED outright — the criteria below remain as the record of
+    the unshipped UI contract, kept not deleted, mirroring plan §8's
+    retirement): the §8 p3_acceptance record (plan §8) was P3's binding
+    gate: the toggle default OFF widget-test-proven; persistence across
+    restarts; the presentation_states on the smoke-decided branch with
+    OFF byte-equivalent to today's chat; no thinking text reaching the
+    transcript DB or the history assembly.
+  p4_live_asset_gate: >-
+    (plan §6-P4 — binding) Shard B re-verifies the GGUF live: the URL
+    final-hop 200 + Content-Length: 1561318368 (or a 1-byte ranged
+    GET) + gated: false; the sha256 recorded; the OLD .task URL
+    re-verified live for the LADDER RECORD (the qwen15b asset stays at
+    source even though unselected). Drift = STOP (S4).
+
+
+
+
+
+
+
+
+
+
+
