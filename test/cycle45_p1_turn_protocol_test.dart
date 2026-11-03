@@ -146,95 +146,100 @@ void main() {
     service.chatOverrideForTest = null;
   });
 
-  group('the per-send turn protocol — stateless (cycle-46, owner directive)', () {
-    test('a send wipes once and stages exactly ONE chunk: the new message',
+  group(
+    'the per-send turn protocol — stateless (cycle-46, owner directive)',
+    () {
+      test(
+        'a send wipes once and stages exactly ONE chunk: the new message',
         () async {
-      await service.sendMessage(
-        history: const [],
-        newMessage: 'convert this binary 101 into decimal',
+          await service.sendMessage(
+            history: const [],
+            newMessage: 'convert this binary 101 into decimal',
+          );
+
+          // One session per wipe: the initial one plus the one `clearHistory()`
+          // creates. The wipe happened BEFORE anything was staged, so the first
+          // session holds no chunks at all.
+          expect(engine.sessionCreations, 2);
+          expect(engine.sessions, hasLength(2));
+          expect(engine.sessions.first.queries, isEmpty);
+
+          // Exactly ONE chunk — the new message. No history, no priming.
+          final staged = engine.sessions.last.queries;
+          expect(staged, hasLength(1));
+          expect(staged.single.isUser, isTrue);
+          expect(staged.single.text, 'convert this binary 101 into decimal');
+        },
       );
 
-      // One session per wipe: the initial one plus the one `clearHistory()`
-      // creates. The wipe happened BEFORE anything was staged, so the first
-      // session holds no chunks at all.
-      expect(engine.sessionCreations, 2);
-      expect(engine.sessions, hasLength(2));
-      expect(engine.sessions.first.queries, isEmpty);
+      test('two consecutive sends stay STATELESS — the model never sees the '
+          'prior turns', () async {
+        await service.sendMessage(
+          history: const [],
+          newMessage: 'my name is tester',
+        );
 
-      // Exactly ONE chunk — the new message. No history, no priming.
-      final staged = engine.sessions.last.queries;
-      expect(staged, hasLength(1));
-      expect(staged.single.isUser, isTrue);
-      expect(staged.single.text, 'convert this binary 101 into decimal');
-    });
+        // The second send's history holds the finished first turn plus the new
+        // question — the shape the chat screen hands to the service. The model
+        // must NEVER see it: every send is self-contained.
+        final history = [
+          _msg('my name is tester', id: 'u1'),
+          _msg('Nice to meet you, tester!', isUser: false, id: 'a1'),
+          _msg('what is my name', id: 'u2'),
+        ];
+        await service.sendMessage(
+          history: history,
+          newMessage: 'what is my name',
+        );
 
-    test('two consecutive sends stay STATELESS — the model never sees the '
-        'prior turns', () async {
-      await service.sendMessage(
-        history: const [],
-        newMessage: 'my name is tester',
-      );
+        // No EXTRA session recreation across the two sends: the initial session
+        // plus exactly one wipe per send.
+        expect(engine.sessionCreations, 3);
+        expect(engine.sessions, hasLength(3));
 
-      // The second send's history holds the finished first turn plus the new
-      // question — the shape the chat screen hands to the service. The model
-      // must NEVER see it: every send is self-contained.
-      final history = [
-        _msg('my name is tester', id: 'u1'),
-        _msg('Nice to meet you, tester!', isUser: false, id: 'a1'),
-        _msg('what is my name', id: 'u2'),
-      ];
-      await service.sendMessage(
-        history: history,
-        newMessage: 'what is my name',
-      );
+        final staged = engine.sessions.last.queries;
+        expect(staged, hasLength(1));
+        expect(staged.single.text, 'what is my name');
+        // The prior turns are ABANDONED — not even the user's own name is
+        // replayed into the prompt.
+        expect(staged.single.text, isNot(contains('my name is tester')));
+        expect(staged.single.text, isNot(contains('Nice to meet you')));
+      });
 
-      // No EXTRA session recreation across the two sends: the initial session
-      // plus exactly one wipe per send.
-      expect(engine.sessionCreations, 3);
-      expect(engine.sessions, hasLength(3));
+      test('a long message goes out intact as the single chunk', () async {
+        // A message far larger than any historical staged budget: it still
+        // goes out whole — there is no priming to crowd it out.
+        final longMessage = 'q' * 6000;
+        await service.sendMessage(history: const [], newMessage: longMessage);
 
-      final staged = engine.sessions.last.queries;
-      expect(staged, hasLength(1));
-      expect(staged.single.text, 'what is my name');
-      // The prior turns are ABANDONED — not even the user's own name is
-      // replayed into the prompt.
-      expect(staged.single.text, isNot(contains('my name is tester')));
-      expect(staged.single.text, isNot(contains('Nice to meet you')));
-    });
+        final staged = engine.sessions.last.queries;
+        expect(staged, hasLength(1));
+        expect(staged.single.text, longMessage);
+      });
 
-    test('a long message goes out intact as the single chunk', () async {
-      // A message far larger than any historical staged budget: it still
-      // goes out whole — there is no priming to crowd it out.
-      final longMessage = 'q' * 6000;
-      await service.sendMessage(history: const [], newMessage: longMessage);
+      test('the stream path runs the same per-send protocol', () async {
+        final history = [
+          _msg('my name is tester', id: 'u1'),
+          _msg('what is my name', id: 'u2'),
+        ];
+        final chunks = <String>[];
+        await for (final chunk in service.sendMessageStream(
+          history: history,
+          newMessage: 'what is my name',
+        )) {
+          chunks.add(chunk);
+        }
+        expect(chunks.join(), 'pong');
 
-      final staged = engine.sessions.last.queries;
-      expect(staged, hasLength(1));
-      expect(staged.single.text, longMessage);
-    });
-
-    test('the stream path runs the same per-send protocol', () async {
-      final history = [
-        _msg('my name is tester', id: 'u1'),
-        _msg('what is my name', id: 'u2'),
-      ];
-      final chunks = <String>[];
-      await for (final chunk in service.sendMessageStream(
-        history: history,
-        newMessage: 'what is my name',
-      )) {
-        chunks.add(chunk);
-      }
-      expect(chunks.join(), 'pong');
-
-      // The same single chunk, after the same single wipe.
-      expect(engine.sessionCreations, 2);
-      final staged = engine.sessions.last.queries;
-      expect(staged, hasLength(1));
-      expect(staged.single.isUser, isTrue);
-      expect(staged.single.text, 'what is my name');
-    });
-  });
+        // The same single chunk, after the same single wipe.
+        expect(engine.sessionCreations, 2);
+        final staged = engine.sessions.last.queries;
+        expect(staged, hasLength(1));
+        expect(staged.single.isUser, isTrue);
+        expect(staged.single.text, 'what is my name');
+      });
+    },
+  );
 
   group('the [System: …] prefix rides the first (only) chunk', () {
     test('the protocol order is wipe → new message (source-level)', () {
@@ -304,20 +309,17 @@ void main() {
   });
 
   group('the reset seam, failure paths and public surface', () {
-    test(
-      'resetSession stays a bare wipe — no staged chunks',
-      () async {
-        await service.sendMessage(history: const [], newMessage: 'hello');
-        final creationsBefore = engine.sessionCreations;
+    test('resetSession stays a bare wipe — no staged chunks', () async {
+      await service.sendMessage(history: const [], newMessage: 'hello');
+      final creationsBefore = engine.sessionCreations;
 
-        await service.resetSession();
+      await service.resetSession();
 
-        // The wipe recreates the session and stages NOTHING: staging is
-        // per-SEND, and a send stages exactly its own message.
-        expect(engine.sessionCreations, creationsBefore + 1);
-        expect(engine.sessions.last.queries, isEmpty);
-      },
-    );
+      // The wipe recreates the session and stages NOTHING: staging is
+      // per-SEND, and a send stages exactly its own message.
+      expect(engine.sessionCreations, creationsBefore + 1);
+      expect(engine.sessions.last.queries, isEmpty);
+    });
 
     test('a reset leaves no cross-chat leak', () async {
       await service.sendMessage(

@@ -18,7 +18,6 @@ void main() {
     service = GemmaService();
   });
 
-
   group('GemmaService.classifyLoadError', () {
     test('maps missing-model signals to not-installed', () {
       expect(
@@ -107,7 +106,6 @@ void main() {
       expect(service.endsAtNaturalBreakForTest('\n'), isFalse);
     });
   });
-
 
   group('GemmaService.load shape (cycle-38 P2)', () {
     test('load shape and identity match the offline-model contract', () {
