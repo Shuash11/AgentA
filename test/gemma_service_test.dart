@@ -11,16 +11,6 @@ import 'package:aiproject/presentation/chats/chats.dart';
 import 'package:aiproject/services/ai/gemma_service.dart';
 import 'package:aiproject/services/ai/offline_model_spec.dart';
 
-ChatMessageModel _msg(String text, {bool isUser = true, String id = 'm'}) {
-  return ChatMessageModel(
-    id: id,
-    chatId: 'c',
-    text: text,
-    isUser: isUser,
-    timestamp: DateTime(2026, 1, 1),
-  );
-}
-
 void main() {
   late GemmaService service;
 
@@ -28,49 +18,6 @@ void main() {
     service = GemmaService();
   });
 
-  group('GemmaService.truncateAtSentence', () {
-    test('cuts at the last period boundary before the limit', () {
-      const text = 'First sentence. Second sentence here and more';
-      expect(service.truncateAtSentenceForTest(text, 30), 'First sentence.…');
-    });
-
-    test('prefers the latest boundary, not the first', () {
-      const text = 'One. Two. Three and more words here';
-      expect(service.truncateAtSentenceForTest(text, 22), 'One. Two.…');
-    });
-
-    test('cuts at question and exclamation boundaries', () {
-      expect(
-        service.truncateAtSentenceForTest('Really? Yes indeed and more', 20),
-        'Really?…',
-      );
-      expect(
-        service.truncateAtSentenceForTest('Wow! Amazing stuff here now', 12),
-        'Wow!…',
-      );
-    });
-
-    test('cuts at newline boundaries', () {
-      expect(
-        service.truncateAtSentenceForTest('Line one\nLine two continues', 15),
-        'Line one…',
-      );
-    });
-
-    test('falls back to a word boundary without sentence markers', () {
-      expect(
-        service.truncateAtSentenceForTest('aaa bbb ccc ddd eee fff', 10),
-        'aaa bbb…',
-      );
-    });
-
-    test('hard-cuts text with no spaces at all', () {
-      expect(
-        service.truncateAtSentenceForTest('abcdefghijklmnop', 6),
-        'abcdef…',
-      );
-    });
-  });
 
   group('GemmaService.classifyLoadError', () {
     test('maps missing-model signals to not-installed', () {
@@ -161,71 +108,6 @@ void main() {
     });
   });
 
-  group('GemmaService.recentHistory', () {
-    test('empty history stays empty', () {
-      expect(service.recentHistoryForTest([], currentMessage: 'hi'), isEmpty);
-    });
-
-    test('filters the greeting and blank messages', () {
-      final history = [
-        _msg(GemmaService.greetingText, id: 'g'),
-        _msg('   ', id: 'b'),
-        _msg('real question', id: 'r'),
-      ];
-      final recent = service.recentHistoryForTest(
-        history,
-        currentMessage: 'next',
-      );
-      expect(recent.map((m) => m.id), ['r']);
-    });
-
-    test('removes a trailing duplicate of the new user message', () {
-      final history = [_msg('hi', id: 'a'), _msg('current', id: 'dup')];
-      final recent = service.recentHistoryForTest(
-        history,
-        currentMessage: 'current',
-      );
-      expect(recent.map((m) => m.id), ['a']);
-    });
-
-    test('keeps a same-text trailing assistant message', () {
-      final history = [_msg('current', isUser: false, id: 'asst')];
-      final recent = service.recentHistoryForTest(
-        history,
-        currentMessage: 'current',
-      );
-      expect(recent.map((m) => m.id), ['asst']);
-    });
-
-    test('caps history at the most recent messages', () {
-      final history = [for (var i = 0; i < 10; i++) _msg('msg $i', id: 'm$i')];
-      final recent = service.recentHistoryForTest(
-        history,
-        currentMessage: 'new',
-      );
-      expect(recent, hasLength(8));
-      expect(recent.first.id, 'm2');
-      expect(recent.last.id, 'm9');
-    });
-
-    test('truncates over-cap messages at a sentence boundary', () {
-      final longText = '${'Sentence one. ' * 100}tail without end';
-      final history = [_msg(longText, id: 'long', isUser: false)];
-      final recent = service.recentHistoryForTest(
-        history,
-        currentMessage: 'new',
-      );
-      expect(recent, hasLength(1));
-      final truncated = recent.first;
-      expect(truncated.text.endsWith('…'), isTrue);
-      expect(truncated.text.length, lessThan(longText.length));
-      expect(truncated.text, startsWith('Sentence one.'));
-      // Identity fields survive truncation.
-      expect(truncated.id, 'long');
-      expect(truncated.chatId, 'c');
-      expect(truncated.isUser, isFalse);
-    });
-  });
 
   group('GemmaService.load shape (cycle-38 P2)', () {
     test('load shape and identity match the offline-model contract', () {

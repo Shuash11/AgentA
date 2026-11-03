@@ -737,29 +737,26 @@ void main() {
 
   group('cycle-44 P2 — the riders', () {
     test(
-      'the system instruction is short, spec-driven and carries the identity line',
+      'the system instruction is minimal, spec-driven and names no identity',
       () {
         final instruction = OfflineModelSpecTable.systemInstruction;
 
-        // The opener stays — the §10 grep anchor.
-        expect(instruction, startsWith('You are AgentA'));
+        // The MINIMAL instruction (cycle-46, owner directive): no identity
+        // line, no step-by-step directive — the model reads the user's
+        // message and answers it directly.
         // The English rule stays.
         expect(instruction, contains(AppConfig.aiEnglishRule));
-        // ONE direct-answer directive (Bug A).
+        // ONE direct-answer directive.
         expect(
           instruction,
-          contains("Answer the user's latest message directly and correctly."),
+          contains('Answer the user message directly and correctly.'),
         );
-        expect(instruction, contains('Show the working for math.'));
-        // The identity line, VERBATIM.
-        expect(
-          instruction,
-          contains(
-            "If asked what model you are, say you are AgentA's built-in "
-            'offline assistant.',
-          ),
-        );
-        // The ~700-char rule-list is retired.
+        // The AgentA identity is GONE — the model never announces a persona.
+        expect(instruction, isNot(contains('You are AgentA')));
+        expect(instruction, isNot(contains("AgentA's built-in")));
+        // No step-by-step directive — direct answers only.
+        expect(instruction, isNot(contains('Show the working')));
+        // The ~700-char rule-list stays retired.
         expect(instruction, isNot(contains('Rules:')));
         expect(instruction, isNot(contains('Formatting rules:')));
         expect(instruction.length, lessThan(400));

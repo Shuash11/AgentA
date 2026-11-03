@@ -107,9 +107,9 @@ class OfflineModelSpec {
   ///
   /// SHORT by design: a 1.5B local model drowns in a long rule-list — the
   /// retired list's length is itself a cause of the instruction-continuation
-  /// deflection the device scout recorded. The instruction keeps the
-  /// "You are AgentA" opener (the §10 grep anchor), the English rule, ONE
-  /// direct-answer directive, and the identity line.
+  /// deflection the device scout recorded. The instruction keeps the English
+  /// rule and ONE direct-answer directive; the AgentA identity line and the
+  /// step-by-step directive are retired (cycle-46, owner directive).
   final String systemInstruction;
 
   const OfflineModelSpec({
@@ -192,19 +192,13 @@ class OfflineModelSpecTable {
     fileType: ModelFileType.task,
     expectedSize: 1598556720,
     sizeChip: 'Model size: ~1.6GB',
-    // The SHORT system instruction (cycle-44 P2, branch A — the rider):
-    // the ~700-char rule-list is retired (a small local model drowns in
-    // it), the "You are AgentA" opener stays (the §10 grep anchor), the
-    // English rule stays, ONE direct-answer directive replaces the rule
-    // list, and the identity line answers the "what model are you?"
-    // question the device scout recorded VERBATIM.
+    // The MINIMAL system instruction (cycle-46, owner directive): no
+    // identity line, no step-by-step directive - the model reads the user's
+    // message and answers it directly. The English rule stays: it anchors
+    // the bilingual model away from drifting to zh.
     systemInstruction:
-        'You are AgentA, a helpful AI assistant inside this app.\n'
         '${AppConfig.aiEnglishRule}\n'
-        "Answer the user's latest message directly and correctly. "
-        'Show the working for math.\n'
-        "If asked what model you are, say you are AgentA's built-in "
-        'offline assistant.',
+        'Answer the user message directly and correctly.',
   );
 
   //

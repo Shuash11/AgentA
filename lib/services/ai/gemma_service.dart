@@ -6,7 +6,6 @@ import '../../data/models/chat_message_model.dart';
 import 'device_capabilities.dart';
 import 'model_download_service.dart';
 import 'offline_model_spec.dart';
-import 'turn_priming.dart';
 
 /// The outcome of classifying a failed model load: a stable failure CLASS
 /// plus the friendly, brand-free copy the UI shows.
@@ -216,9 +215,7 @@ class GemmaService extends ChangeNotifier {
 
   static const Duration _streamFlushInterval = Duration(milliseconds: 45);
   static const int _streamFlushChars = 8;
-  static const int _maxHistoryMessages = 8;
   static const int _maxTokens = 2048;
-  static const int _maxHistoryChars = 1000;
 
   /// The output cap of EVERY send (cycle-46 P2 — plan §5.5, contract §2
   /// `load_shape`): at most 2048 GENERATED tokens per turn. On the llama
@@ -237,10 +234,8 @@ class GemmaService extends ChangeNotifier {
   /// emits tokens — which reset the timer.
   static const Duration _generationStallTimeout = Duration(minutes: 3);
 
-  /// The role-marked priming builder (cycle-45 Phase 1, the S3 ruling).
-  /// The TOTAL staged budget (priming + new message) lives on the builder.
-  static const TurnPrimingBuilder _primingBuilder = TurnPrimingBuilder();
-
+  /// The chat screen's opening greeting (display only - it never enters a
+  /// staged turn: every send stages exactly the new message).
   static const String greetingText =
       "Hello! I'm AgentA, What would you like to work on today?";
 
@@ -772,33 +767,7 @@ class GemmaService extends ChangeNotifier {
   Future<InferenceChat> Function()? chatOverrideForTest;
 
   @visibleForTesting
-  String truncateAtSentenceForTest(String text, int limit) =>
-      _truncateAtSentence(text, limit);
-
-  @visibleForTesting
   bool endsAtNaturalBreakForTest(String token) => _endsAtNaturalBreak(token);
-
-  @visibleForTesting
-  List<ChatMessageModel> recentHistoryForTest(
-    List<ChatMessageModel> history, {
-    required String currentMessage,
-  }) => _getRecentHistory(history, currentMessage: currentMessage);
-
-  /// The role-marked priming text of one send — the EXACT chunk text the
-  /// send paths stage (cycle-45 Phase 1, the S3 ruling).
-  ///
-  /// Mirrors [recentHistoryForTest]: the raw history goes in and the current
-  /// message names the turn being sent. Both de-dup rules run upstream (in
-  /// `_getRecentHistory`), then the builder role-marks the window and fits it
-  /// to the TOTAL staged budget (priming + new message ≤ 5000 chars).
-  @visibleForTesting
-  String primingTextForTest(
-    List<ChatMessageModel> history, {
-    required String currentMessage,
-  }) => _primingBuilder.build(
-    _getRecentHistory(history, currentMessage: currentMessage),
-    stagedNewMessageLength: currentMessage.trim().length,
-  );
 
   Future<bool> ensureReady() async {
     if (isReady) {
@@ -815,123 +784,44 @@ class GemmaService extends ChangeNotifier {
     }
   }
 
-  List<ChatMessageModel> _getRecentHistory(
-    List<ChatMessageModel> history, {
-    required String currentMessage,
-  }) {
-    if (history.isEmpty) return [];
-
-    final usableHistory = List<ChatMessageModel>.from(history);
-    usableHistory.removeWhere(
-      (msg) => msg.text.trim().isEmpty || msg.text.trim() == greetingText,
-    );
-    if (usableHistory.isNotEmpty &&
-        usableHistory.last.isUser &&
-        usableHistory.last.text.trim() == currentMessage.trim()) {
-      usableHistory.removeLast();
-    }
-
-    final recent = usableHistory.length > _maxHistoryMessages
-        ? usableHistory.sublist(usableHistory.length - _maxHistoryMessages)
-        : usableHistory;
-    return recent.map((m) {
-      final t = m.text.trim();
-      if (t.length > _maxHistoryChars) {
-        return ChatMessageModel(
-          id: m.id,
-          chatId: m.chatId,
-          text: _truncateAtSentence(t, _maxHistoryChars),
-          isUser: m.isUser,
-          timestamp: m.timestamp,
-        );
-      }
-      return m;
-    }).toList();
-  }
-
-  /// Cuts [text] at the last sentence boundary before [limit] so history
-  /// never ends mid-sentence. Falls back to a word boundary, then a hard cut.
-  String _truncateAtSentence(String text, int limit) {
-    final window = text.substring(0, limit);
-    var cut = -1;
-    for (final marker in ['. ', '! ', '? ', '.\n', '!\n', '?\n', '\n']) {
-      final idx = window.lastIndexOf(marker);
-      if (idx > cut) cut = idx;
-    }
-    if (cut > 0) {
-      final end = window[cut] == '\n' ? cut : cut + 1;
-      return '${window.substring(0, end).trim()}…';
-    }
-    final lastSpace = window.lastIndexOf(' ');
-    if (lastSpace > 0) {
-      return '${window.substring(0, lastSpace).trim()}…';
-    }
-    return '$window…';
-  }
-
-  /// Stages ONE turn of the per-send protocol (cycle-45 Phase 1 — the S1–S5
-  /// ruling). BOTH send paths run this method, so the two can never diverge.
+  /// Stages ONE turn of the per-send protocol.
   ///
-  /// The order is NORMATIVE:
-  ///   1. WIPE — `chat.clearHistory()`: the pinned core's FULL native wipe +
-  ///      session recreate (`_fullHistory`/`_prefixes`/`_modelHistory`
-  ///      cleared, `_currentTokens = 0`, `session.close()` + a fresh session —
-  ///      the cycle-45 ruling cited `flutter_edge_ai-1.11.4` core
-  ///      `chat.dart:966-980`; the resolved core 2.5.5 keeps the same
-  ///      shape at `chat.dart:1101-1112`, and the llama connector's
-  ///      override recreates the session the same way —
+  /// BOTH send paths run this method, so the two can never diverge. The
+  /// order is NORMATIVE:
+  ///
+  ///   1. WIPE - `chat.clearHistory()`: the pinned core's FULL native wipe +
+  ///      session recreate (the resolved core 2.5.5 keeps the C45 shape at
+  ///      `chat.dart:1101-1112`; the llama connector's override recreates the
+  ///      session the same way -
   ///      `flutter_edge_ai_llama-0.0.5/lib/src/llama_inference_chat.dart:96`).
-  ///      The wipe STAYS (S1): the protocol carries every context APP-side,
-  ///      so nothing depends on native response-retention (which stays
-  ///      unverified).
-  ///   2. PRIME — ONE role-marked priming chunk (`isUser: true`), staged
-  ///      FIRST into the fresh session. Its text carries the capped window
-  ///      with explicit `User: …` / `Assistant: …` blocks — role-marking is
-  ///      app-side TEXT, because the `.task` RAW boundary strips every role
-  ///      marker (`extensions.dart:57-69`/`:135-143`).
-  ///   3. MESSAGE — the new-message chunk, staged AFTER the priming chunk.
   ///
-  /// The protocol is UNCHANGED on the llama.cpp/GGUF path (cycle-46 P2 — the
-  /// C45 turn protocol survives the chat-surface migration): the app still
-  /// carries every context APP-side, and the history it replays is
-  /// assembled from the STORED messages only — so no thinking content can
-  /// enter it (the S7 stray-drop happens before an answer is stored).
+  ///   2. MESSAGE - the new message, staged as the FIRST and ONLY chunk of
+  ///      the fresh session (cycle-46, owner directive): the HISTORY is
+  ///      ABANDONED. No priming chunk exists any more - the staged prompt is
+  ///      EXACTLY the new message, so the prefill shrinks to the minimum and
+  ///      the phone's compute budget is spent on the answer, never on
+  ///      replaying old turns. The plugin's System-prefix attaches to the
+  ///      FIRST user chunk staged in the session (S4 - on `.task` the
+  ///      plugin does NOT inject the system instruction natively; native
+  ///      template injection is litertlm-only,
+  ///      `mobile_inference_session.dart:40-46`, prepending the prefix AS
+  ///      TEXT) - so the system instruction still reaches the model. The
+  ///      prefix belongs to the PLUGIN: the app never writes it.
   ///
-  /// The `[System: …]` prefix rides the PRIMING chunk deterministically, once
-  /// per send (S4): on `.task` the plugin does NOT inject the system
-  /// instruction natively — native template injection is litertlm-only
-  /// (`mobile_inference_session.dart:40-46`) — it prepends `'[System: …]\n\n'`
-  /// AS TEXT to the FIRST user chunk staged in the session
-  /// (`:77-86`), and the priming chunk is staged first into the fresh
-  /// session. The prefix belongs to the PLUGIN: the app never writes it.
-  ///
-  /// Rotation posture (S2 — dissolved, recorded): the plugin's session
-  /// rotation fires only AFTER a response was returned, and the per-send wipe
-  /// resets `_currentTokens` (`chat.dart:970`), so it is unreachable in
-  /// steady state and the next send's wipe discards any replay. There is NO
-  /// app-side token accounting here.
+  /// The `history` parameter is INTENTIONALLY unused: the public send
+  /// signatures (and their callers) stay unchanged, but the model never sees
+  /// past turns - every send is stateless and self-contained.
   Future<void> _stageTurn(
     InferenceChat chat, {
     required List<ChatMessageModel> history,
     required String newMessage,
   }) async {
-    final recentHistory = _getRecentHistory(
-      history,
-      currentMessage: newMessage,
-    );
     final stagedMessage = newMessage.trim();
-    // The TOTAL staged budget (S3): the priming text plus the new message.
-    final primingText = _primingBuilder.build(
-      recentHistory,
-      stagedNewMessageLength: stagedMessage.length,
-    );
 
-    // 1. WIPE — the full native wipe + session recreate.
+    // 1. WIPE - the full native wipe + session recreate.
     await chat.clearHistory();
-    // 2. PRIME — the role-marked history, staged FIRST (it carries the
-    //    '[System: …]' prefix — see the method doc).
-    await chat.addQueryChunk(Message.text(text: primingText, isUser: true));
-    // 3. MESSAGE — the new message, staged after the priming chunk.
+    // 2. MESSAGE - the new message only, staged as the first chunk (it
+    //    carries the system prefix - see the method doc).
     await chat.addQueryChunk(Message.text(text: stagedMessage, isUser: true));
   }
 

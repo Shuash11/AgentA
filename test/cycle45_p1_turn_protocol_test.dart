@@ -6,7 +6,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:aiproject/data/local/database_helper.dart';
 import 'package:aiproject/data/models/chat_message_model.dart';
 import 'package:aiproject/services/ai/gemma_service.dart';
-import 'package:aiproject/services/ai/turn_priming.dart';
 
 ChatMessageModel _msg(String text, {bool isUser = true, String id = 'm'}) {
   return ChatMessageModel(
@@ -22,7 +21,7 @@ ChatMessageModel _msg(String text, {bool isUser = true, String id = 'm'}) {
 ///
 /// Every chunk the service stages lands here, so the staged protocol is
 /// observable end to end. The pinned core's `clearHistory()` CLOSES the
-/// session and creates a fresh one (`chat.dart:966-980`), so the engine's
+/// session and creates a fresh one (`chat.dart:1101-1112`), so the engine's
 /// session-creator call count is the wipe counter.
 class _RecordingSession implements InferenceModelSession {
   _RecordingSession(this.engine);
@@ -99,15 +98,6 @@ class _FakeEngine {
   }
 }
 
-/// The role-marked turn blocks of [priming] — the turn structure the model
-/// sees. The trailing separator of the priming text yields an empty tail.
-List<String> _turnBlocks(String priming) {
-  return priming
-      .split(TurnPrimingBuilder.turnSeparator)
-      .where((block) => block.trim().isNotEmpty)
-      .toList();
-}
-
 void main() {
   late Database db;
   late GemmaService service;
@@ -156,40 +146,38 @@ void main() {
     service.chatOverrideForTest = null;
   });
 
-  group('cycle-45 Phase 1 — per-send turn protocol', () {
-    test(
-      'a send wipes once and stages the priming chunk before the message',
-      () async {
-        await service.sendMessage(
-          history: const [],
-          newMessage: 'my name is tester',
-        );
+  group('the per-send turn protocol — stateless (cycle-46, owner directive)', () {
+    test('a send wipes once and stages exactly ONE chunk: the new message',
+        () async {
+      await service.sendMessage(
+        history: const [],
+        newMessage: 'convert this binary 101 into decimal',
+      );
 
-        // One session per wipe: the initial one plus the one `clearHistory()`
-        // creates (the pinned core closes the session and creates a fresh one —
-        // chat.dart:966-980). The wipe happened BEFORE anything was staged, so
-        // the first session holds no chunks at all.
-        expect(engine.sessionCreations, 2);
-        expect(engine.sessions, hasLength(2));
-        expect(engine.sessions.first.queries, isEmpty);
+      // One session per wipe: the initial one plus the one `clearHistory()`
+      // creates. The wipe happened BEFORE anything was staged, so the first
+      // session holds no chunks at all.
+      expect(engine.sessionCreations, 2);
+      expect(engine.sessions, hasLength(2));
+      expect(engine.sessions.first.queries, isEmpty);
 
-        // Exactly TWO chunks: the priming chunk first, the new message second.
-        final staged = engine.sessions.last.queries;
-        expect(staged, hasLength(2));
-        expect(staged[0].isUser, isTrue);
-        expect(staged[1].isUser, isTrue);
-        expect(staged[1].text, 'my name is tester');
-      },
-    );
+      // Exactly ONE chunk — the new message. No history, no priming.
+      final staged = engine.sessions.last.queries;
+      expect(staged, hasLength(1));
+      expect(staged.single.isUser, isTrue);
+      expect(staged.single.text, 'convert this binary 101 into decimal');
+    });
 
-    test('two consecutive sends carry the prior turns role-marked', () async {
+    test('two consecutive sends stay STATELESS — the model never sees the '
+        'prior turns', () async {
       await service.sendMessage(
         history: const [],
         newMessage: 'my name is tester',
       );
 
       // The second send's history holds the finished first turn plus the new
-      // question — the shape the chat screen hands to the service.
+      // question — the shape the chat screen hands to the service. The model
+      // must NEVER see it: every send is self-contained.
       final history = [
         _msg('my name is tester', id: 'u1'),
         _msg('Nice to meet you, tester!', isUser: false, id: 'a1'),
@@ -206,33 +194,24 @@ void main() {
       expect(engine.sessions, hasLength(3));
 
       final staged = engine.sessions.last.queries;
-      expect(staged, hasLength(2));
-      // The prior turns are ROLE-MARKED — the only structure the .task RAW
-      // boundary can carry (extensions.dart:57-69/:135-143).
-      expect(staged[0].text, contains('User: my name is tester'));
-      expect(staged[0].text, contains('Assistant: Nice to meet you, tester!'));
-      expect(staged[1].text, 'what is my name');
+      expect(staged, hasLength(1));
+      expect(staged.single.text, 'what is my name');
+      // The prior turns are ABANDONED — not even the user's own name is
+      // replayed into the prompt.
+      expect(staged.single.text, isNot(contains('my name is tester')));
+      expect(staged.single.text, isNot(contains('Nice to meet you')));
     });
 
-    test(
-      'the current question is never duplicated inside the priming',
-      () async {
-        final history = [
-          _msg('my name is tester', id: 'u1'),
-          _msg('what is my name', id: 'u2'),
-        ];
-        await service.sendMessage(
-          history: history,
-          newMessage: 'what is my name',
-        );
+    test('a long message goes out intact as the single chunk', () async {
+      // A message far larger than any historical staged budget: it still
+      // goes out whole — there is no priming to crowd it out.
+      final longMessage = 'q' * 6000;
+      await service.sendMessage(history: const [], newMessage: longMessage);
 
-        final staged = engine.sessions.last.queries;
-        expect(staged[0].text, isNot(contains('what is my name')));
-        // The question is staged exactly ONCE — in the new-message chunk.
-        final allText = staged.map((m) => m.text).join('\n');
-        expect('what is my name'.allMatches(allText).length, 1);
-      },
-    );
+      final staged = engine.sessions.last.queries;
+      expect(staged, hasLength(1));
+      expect(staged.single.text, longMessage);
+    });
 
     test('the stream path runs the same per-send protocol', () async {
       final history = [
@@ -248,189 +227,33 @@ void main() {
       }
       expect(chunks.join(), 'pong');
 
-      // The same two chunks, in the same order, after the same single wipe.
+      // The same single chunk, after the same single wipe.
       expect(engine.sessionCreations, 2);
       final staged = engine.sessions.last.queries;
-      expect(staged, hasLength(2));
-      expect(staged[0].isUser, isTrue);
-      expect(staged[0].text, contains('User: my name is tester'));
-      expect(staged[1].text, 'what is my name');
+      expect(staged, hasLength(1));
+      expect(staged.single.isUser, isTrue);
+      expect(staged.single.text, 'what is my name');
     });
   });
 
-  group('cycle-45 Phase 1 — priming builder budget', () {
-    // Eight turns of ~800 chars each: the window is over the 5000-char TOTAL
-    // budget, so the budget — not the 8-message secondary cap — must bind.
-    List<ChatMessageModel> longHistory() => [
-      for (var i = 0; i < 8; i++) _msg('Turn $i. ' * 100, id: 'm$i'),
-    ];
+  group('the [System: …] prefix rides the first (only) chunk', () {
+    test('the protocol order is wipe → new message (source-level)', () {
+      final source = File(
+        'lib/services/ai/gemma_service.dart',
+      ).readAsStringSync();
+      final stage = _methodBody(source, 'Future<void> _stageTurn(');
+      expect(stage, isNotEmpty);
 
-    test('the priming text plus the new message stays inside the budget', () {
-      const newMessage = 'what is my name';
-      final priming = service.primingTextForTest(
-        longHistory(),
-        currentMessage: newMessage,
+      // The ORDER is normative: the wipe, then the new-message chunk — the
+      // FIRST and ONLY chunk of the fresh session. No priming chunk exists.
+      final wipe = stage.indexOf('await chat.clearHistory();');
+      final message = stage.indexOf(
+        'Message.text(text: stagedMessage, isUser: true)',
       );
-
-      // The binding rule (S3): the TOTAL staged text fits 5000 chars.
-      expect(priming.length + newMessage.length, lessThanOrEqualTo(5000));
-      expect(
-        TurnPrimingBuilder.defaultMaxStagedChars,
-        5000,
-        reason: 'the ruled TOTAL staged budget',
-      );
+      expect(wipe, greaterThan(-1));
+      expect(message, greaterThan(wipe));
+      expect(stage, isNot(contains('primingText')));
     });
-
-    test('the builder fills newest-first and drops the oldest turns', () {
-      final priming = service.primingTextForTest(
-        longHistory(),
-        currentMessage: 'what is my name',
-      );
-
-      final blocks = _turnBlocks(priming);
-      // The 8-message cap is SECONDARY: fewer turns than the cap survive.
-      expect(blocks.length, lessThan(8));
-      expect(blocks.length, greaterThan(0));
-      // The kept turns are the NEWEST ones, oldest-first inside the chunk.
-      expect(blocks.first, contains('Turn 2.'));
-      expect(blocks.last, contains('Turn 7.'));
-      expect(priming, isNot(contains('Turn 0.')));
-      expect(priming, isNot(contains('Turn 1.')));
-    });
-
-    test(
-      'the builder stops inside the budget — one more turn would not fit',
-      () {
-        const newMessage = 'what is my name';
-        final priming = service.primingTextForTest(
-          longHistory(),
-          currentMessage: newMessage,
-        );
-
-        // The next OLDER turn (m1) would push the staged text over the budget:
-        // the fill stopped because the budget was reached.
-        final nextOlderTurn = 'User: ${'Turn 1. ' * 100}';
-        expect(
-          priming.length + nextOlderTurn.length + 2 + newMessage.length,
-          greaterThan(TurnPrimingBuilder.defaultMaxStagedChars),
-        );
-      },
-    );
-
-    test('the builder keeps complete turns only (no dangling role label)', () {
-      final priming = service.primingTextForTest(
-        longHistory(),
-        currentMessage: 'what is my name',
-      );
-
-      for (final block in _turnBlocks(priming)) {
-        // Every role label is followed by its turn's text — a turn is never
-        // split and never left half-rendered.
-        expect(block, matches(RegExp(r'^(User|Assistant): \S')));
-      }
-      // The turn count matches the number of role labels: no extra label.
-      expect(
-        RegExp(r'(User|Assistant): ').allMatches(priming).length,
-        _turnBlocks(priming).length,
-      );
-    });
-
-    test('the new message is never truncated', () async {
-      // A message that alone exceeds the whole budget: it still goes out
-      // intact, and the priming gives way.
-      final longMessage = 'q' * 6000;
-      await service.sendMessage(history: const [], newMessage: longMessage);
-
-      final staged = engine.sessions.last.queries;
-      expect(staged.last.text, longMessage);
-      expect(staged.first.text, isEmpty);
-    });
-
-    test('the new message survives a crowded priming', () async {
-      final longMessage = 'm' * 3000;
-      await service.sendMessage(
-        history: longHistory(),
-        newMessage: longMessage,
-      );
-
-      final staged = engine.sessions.last.queries;
-      expect(staged.last.text, longMessage);
-      expect(
-        staged.first.text.length + longMessage.length,
-        lessThanOrEqualTo(TurnPrimingBuilder.defaultMaxStagedChars),
-      );
-    });
-  });
-
-  group('cycle-45 Phase 1 — de-dup and greeting rules', () {
-    test('the greeting never enters the priming chunk', () {
-      final priming = service.primingTextForTest([
-        _msg(GemmaService.greetingText, id: 'g'),
-        _msg('my name is tester', id: 'u1'),
-      ], currentMessage: 'what is my name');
-
-      expect(priming, isNot(contains(GemmaService.greetingText)));
-      expect(priming, contains('User: my name is tester'));
-      expect(_turnBlocks(priming), hasLength(1));
-    });
-
-    test('the builder honours both upstream de-dup rules', () {
-      final priming = service.primingTextForTest([
-        _msg('   ', id: 'blank'),
-        _msg(GemmaService.greetingText, id: 'g'),
-        _msg('my name is tester', id: 'u1'),
-        _msg('what is my name', id: 'u2'),
-      ], currentMessage: 'what is my name');
-
-      // The blank turn, the greeting and the trailing duplicate of the
-      // current message are all gone (the rules run upstream, in
-      // `_getRecentHistory`).
-      expect(_turnBlocks(priming), hasLength(1));
-      expect(priming, contains('User: my name is tester'));
-      expect(priming, isNot(contains('what is my name')));
-    });
-
-    test('the current message is never staged twice', () async {
-      final history = [
-        _msg('my name is tester', id: 'u1'),
-        _msg('what is my name', id: 'u2'),
-      ];
-      await service.sendMessage(
-        history: history,
-        newMessage: 'what is my name',
-      );
-
-      final staged = engine.sessions.last.queries;
-      final allText = staged.map((m) => m.text).join('\n');
-      expect('what is my name'.allMatches(allText).length, 1);
-      expect(staged.last.text, 'what is my name');
-    });
-  });
-
-  group('cycle-45 Phase 1 — the [System: …] prefix rides the priming chunk', () {
-    test(
-      'the protocol order is wipe → priming → new message (source-level)',
-      () {
-        final source = File(
-          'lib/services/ai/gemma_service.dart',
-        ).readAsStringSync();
-        final stage = _methodBody(source, 'Future<void> _stageTurn(');
-        expect(stage, isNotEmpty);
-
-        // The ORDER is normative: the wipe, then the priming chunk (staged
-        // FIRST into the fresh session), then the new-message chunk.
-        final wipe = stage.indexOf('await chat.clearHistory();');
-        final priming = stage.indexOf(
-          'Message.text(text: primingText, isUser: true)',
-        );
-        final message = stage.indexOf(
-          'Message.text(text: stagedMessage, isUser: true)',
-        );
-        expect(wipe, greaterThan(-1));
-        expect(priming, greaterThan(wipe));
-        expect(message, greaterThan(priming));
-      },
-    );
 
     test('both send paths run the same protocol (source-level)', () {
       final source = File(
@@ -454,13 +277,13 @@ void main() {
       final source = File(
         'lib/services/ai/gemma_service.dart',
       ).readAsStringSync();
-      // The prefix is the PLUGIN's: on .task it prepends '[System: …]' AS TEXT
-      // to the FIRST user chunk staged in the session (native template
-      // injection is litertlm-only) — so it lands on the priming chunk.
-      expect(source, contains(r"'[System: …]\n\n'"));
+      // The prefix is the PLUGIN's: on .task it prepends the system
+      // instruction AS TEXT to the FIRST user chunk staged in the session
+      // (native template injection is litertlm-only) — with the priming
+      // gone, that first chunk IS the new message.
       expect(source, contains('mobile_inference_session.dart:40-46'));
       expect(source, contains('FIRST user chunk'));
-      expect(source, contains('the priming chunk is staged first'));
+      expect(source, contains('FIRST and ONLY chunk'));
       // The instruction the prefix carries is still the spec-driven one.
       expect(
         source,
@@ -480,17 +303,17 @@ void main() {
     });
   });
 
-  group('cycle-45 Phase 1 — reset seam, failure paths and public surface', () {
+  group('the reset seam, failure paths and public surface', () {
     test(
-      'resetSession stays a bare wipe — no priming, no staged chunks',
+      'resetSession stays a bare wipe — no staged chunks',
       () async {
         await service.sendMessage(history: const [], newMessage: 'hello');
         final creationsBefore = engine.sessionCreations;
 
         await service.resetSession();
 
-        // The wipe recreates the session and stages NOTHING (S5): the priming
-        // is per-SEND.
+        // The wipe recreates the session and stages NOTHING: staging is
+        // per-SEND, and a send stages exactly its own message.
         expect(engine.sessionCreations, creationsBefore + 1);
         expect(engine.sessions.last.queries, isEmpty);
       },
@@ -507,9 +330,13 @@ void main() {
         newMessage: 'hi',
       );
 
-      final text = engine.sessions.last.queries.map((m) => m.text).join('\n');
-      expect(text, isNot(contains('secret from chat A')));
-      expect(text, contains('User: hello from chat B'));
+      // The last session holds EXACTLY the new message — nothing from chat A,
+      // not even role-marked history.
+      final staged = engine.sessions.last.queries;
+      expect(staged, hasLength(1));
+      expect(staged.single.text, 'hi');
+      expect(staged.single.text, isNot(contains('secret from chat A')));
+      expect(staged.single.text, isNot(contains('hello from chat B')));
     });
 
     test('a generation failure still surfaces the friendly copy', () async {
