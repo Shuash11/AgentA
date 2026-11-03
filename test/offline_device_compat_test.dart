@@ -644,7 +644,7 @@ void main() {
       tester,
     ) async {
       // An arm64 device (the ABI the old table routed to E2B) now gets the
-      // Qwen flow exactly like every other device — the ABI is not a
+      // selected flow exactly like every other device — the ABI is not a
       // selection input (plan §4.9).
       DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => true;
       DeviceCapabilities.totalMemoryOverrideForTest = () async =>
@@ -863,11 +863,11 @@ void main() {
     });
 
     testWidgets(
-      'an arm64 device offers the SAME Qwen bundle with the ~1.6GB chip',
+      'an arm64 device offers the SAME selected bundle with the ~1.6GB chip',
       (tester) async {
         // The ABI is NOT a selection input any more (plan §4.9): the arm64
-        // device that the old table routed to E2B gets the Qwen `.task`
-        // bundle — the MediaPipe `.task` engine is the multi-ABI engine.
+        // device that the old table routed to E2B gets the SAME selected
+        // bundle.
         DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => true;
         DeviceCapabilities.totalMemoryOverrideForTest = () async =>
             6 * 1024 * 1024 * 1024;
@@ -941,19 +941,26 @@ void main() {
       );
     });
 
-    test('the honest message states the RAM reason and no ABI', () {
-      // The wording is GENERALIZED to the RAM reason (plan §4.9): the ABI
-      // decides nothing about the selection, so it is not mentioned.
-      expect(DeviceCapabilities.incompatibleDeviceMessage, contains('4 GB'));
-      expect(
-        DeviceCapabilities.incompatibleDeviceMessage,
-        isNot(contains('ARM')),
-      );
-      expect(
-        DeviceCapabilities.incompatibleDeviceMessage,
-        isNot(contains('arm64')),
-      );
-    });
+    test(
+      'the honest message states BOTH reasons (arm64-v8a AND the RAM floor)',
+      () {
+        // C46 (plan §5.3; contract `offline-model-minicpm5` §3
+        // message_only_class + §9 message_only_wording): the ABI clause
+        // RETURNS to the wording — the message carries BOTH reasons, so it
+        // names arm64-v8a AND the 4 GB RAM floor. The RAM-only wording of
+        // C42-P2b is superseded on this path.
+        expect(
+          DeviceCapabilities.incompatibleDeviceMessage,
+          contains('arm64-v8a'),
+        );
+        expect(DeviceCapabilities.incompatibleDeviceMessage, contains('4 GB'));
+        expect(
+          DeviceCapabilities.incompatibleDeviceMessage,
+          'The offline AI requires a 64-bit ARM (arm64-v8a) device with at '
+          'least 4 GB of RAM.',
+        );
+      },
+    );
   });
 
   group('the chat card affordance (cycle-40 P1)', () {
@@ -1103,7 +1110,7 @@ void main() {
       _resetAckSeams();
     });
 
-    test('EVERY device class resolves to the single Qwen spec', () {
+    test('EVERY device class resolves to the single selected spec', () {
       // ONE selection key (the RAM verdict): the ABI decides nothing
       // (plan §4.9), so there is no ABI input to the table at all.
       expect(
@@ -1112,15 +1119,15 @@ void main() {
       );
       expect(
         OfflineModelSpecTable.specFor(OfflineModelClass.singleQwen),
-        OfflineModelSpecTable.qwen15b,
+        OfflineModelSpecTable.minicpm5,
       );
       final spec = OfflineModelSpecTable.specFor(OfflineModelClass.singleQwen)!;
-      expect(spec.identity, 'qwen2.5-1.5b-it');
-      expect(spec.modelType, ModelType.qwen);
-      expect(spec.fileType, ModelFileType.task);
+      expect(spec.identity, 'minicpm5-2b-q4km');
+      expect(spec.modelType, ModelType.llama);
+      expect(spec.fileType, ModelFileType.gguf);
       expect(
         spec.url,
-        'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task',
+        'https://huggingface.co/openbmb/MiniCPM5-2B-GGUF/resolve/main/MiniCPM5-2B-Q4_K_M.gguf',
       );
       expect(spec.sizeChip, 'Model size: ~1.6GB');
     });
@@ -1137,7 +1144,7 @@ void main() {
     });
 
     test(
-      'below-floor + ack resolves the SAME Qwen spec (the ruled verdict, cycle-43)',
+      'below-floor + ack resolves the SAME selected spec (the ruled verdict, cycle-43)',
       () {
         // The ruled formula (plan §4.3/§5-P2 item 1): totalMem >= floor OR
         // ack — below-floor + ack ⇒ eligible for the SAME spec, never a
@@ -1152,7 +1159,7 @@ void main() {
         // The SAME spec — nothing re-specified.
         expect(
           OfflineModelSpecTable.specFor(OfflineModelClass.singleQwen),
-          OfflineModelSpecTable.qwen15b,
+          OfflineModelSpecTable.minicpm5,
         );
       },
     );
@@ -1210,6 +1217,68 @@ void main() {
       );
     });
 
+    test(
+      "the user's device (arm64 + 3.64 GB): the C43 override path, and the GGUF installs post-ack",
+      () async {
+        // The lived reference device (cycle-43 plan §1.1): arm64-v8a
+        // PRESENT and 3.64 GB RAM — BELOW the 4 GB floor → the C43 OVERRIDE
+        // PATH (plan §5.3 / contract §3 `under_floor_override_class`):
+        // the honest warning + "Download anyway", never a default download.
+        addTearDown(() {
+          DeviceCapabilities.offlineAiSupportedOverrideForTest = null;
+          DeviceCapabilities.totalMemoryOverrideForTest = null;
+        });
+        DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => true;
+        DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+            _livedDeviceTotalMemoryBytes;
+
+        // BEFORE the ack: the message-only class WITH the below-floor fact —
+        // the warning-first override state (no asset, no auto-download).
+        final beforeAck = await OfflineModelSpecTable.resolve();
+        expect(beforeAck.deviceClass, OfflineModelClass.messageOnly);
+        expect(beforeAck.isBelowFloor, isTrue);
+        expect(beforeAck.spec, isNull);
+        expect(DeviceCapabilities.underFloorRiskCopy, contains('4 GB'));
+        expect(DeviceCapabilities.downloadAnywayButtonLabel, 'Download anyway');
+
+        // The tap — recorded through the REAL write path (the ack is a
+        // persisted user preference, never a migration marker).
+        await DeviceCapabilities.acknowledgeRamOverride();
+        DeviceCapabilities.resetRamOverrideAckForTest();
+        expect(await DeviceCapabilities.hasRamOverrideAck(), isTrue);
+
+        // POST-ack: the SAME GGUF spec becomes eligible — the override never
+        // selects a different model (below-floor + ack ⇒ eligible).
+        final afterAck = await OfflineModelSpecTable.resolve();
+        expect(afterAck.deviceClass, OfflineModelClass.singleQwen);
+        expect(afterAck.spec, OfflineModelSpecTable.minicpm5);
+        expect(afterAck.spec!.identity, 'minicpm5-2b-q4km');
+        expect(afterAck.spec!.modelType, ModelType.llama);
+        expect(afterAck.spec!.fileType, ModelFileType.gguf);
+        expect(afterAck.spec!.expectedSize, 1561318368);
+
+        // The GGUF installs: the install chain writes the GGUF identity.
+        SharedPreferences.setMockInitialValues({
+          'model_asset_v2': true,
+          'model_asset_v3': true,
+        });
+        final download = ModelDownloadService();
+        addTearDown(download.dispose);
+        var installs = 0;
+        download.installOverrideForTest = (token) async {
+          installs++;
+        };
+
+        await download.installModel();
+
+        expect(installs, 1);
+        expect(download.status, ModelStatus.ready);
+        final row = await db.query('offline_model_status');
+        expect(row.first['status'], 'ready');
+        expect(row.first['model_type'], 'minicpm5-2b-q4km');
+      },
+    );
+
     test('an unreadable ack store fails closed to NOT recorded (S1)', () async {
       // No platform instance → the constructor throws (the update_cubit
       // precedent) → the defensive read reports NOT recorded, and the
@@ -1239,12 +1308,12 @@ void main() {
         expect(below.isMessageOnly, isTrue);
         expect(below.isBelowFloor, isTrue);
 
-        // The same device with the recorded ack: the SAME Qwen spec, still
-        // below-floor (the retained risk line's basis).
+        // The same device with the recorded ack: the SAME selected spec,
+        // still below-floor (the retained risk line's basis).
         DeviceCapabilities.ramOverrideAckOverrideForTest = () async => true;
         final acked = await OfflineModelSpecTable.resolve();
         expect(acked.deviceClass, OfflineModelClass.singleQwen);
-        expect(acked.spec, OfflineModelSpecTable.qwen15b);
+        expect(acked.spec, OfflineModelSpecTable.minicpm5);
         expect(acked.hasModel, isTrue);
         expect(acked.isBelowFloor, isTrue);
 
@@ -1298,19 +1367,19 @@ void main() {
         service,
         contains("_e2bModelFileName = 'gemma-4-E2B-it.litertlm'"),
       );
-      // The E2B identity survives nowhere: the app's identity is Qwen-wide.
+      // The E2B identity survives nowhere: the app's identity is app-wide.
       expect(service, isNot(contains('gemma-4-e2b-it')));
     });
 
     test('the identity is app-wide — the message-only row carries it too', () {
-      expect(OfflineModelSpecTable.appIdentity, 'qwen2.5-1.5b-it');
-      expect(OfflineModelSpecTable.qwen15b.identity, 'qwen2.5-1.5b-it');
+      expect(OfflineModelSpecTable.appIdentity, 'minicpm5-2b-q4km');
+      expect(OfflineModelSpecTable.minicpm5.identity, 'minicpm5-2b-q4km');
       // The identity string is written ONCE in the whole app — the spec
       // table (contract §2 identity_invariant).
       final table = File(
         'lib/services/ai/offline_model_spec.dart',
       ).readAsStringSync();
-      expect("'qwen2.5-1.5b-it'".allMatches(table).length, 1);
+      expect("identity: 'minicpm5-2b-q4km'".allMatches(table).length, 1);
     });
 
     test(
@@ -1333,24 +1402,32 @@ void main() {
     );
 
     test('the device resolution follows the table', () async {
-      // An arm64 device (the class the old table routed to E2B) now gets
-      // the Qwen spec — the ABI is not consulted for the selection.
+      // An arm64 device (the class the old table routed to E2B) gets the
+      // selected spec: arm64-v8a AND the 4 GB RAM floor (C46, plan §5.3).
       DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => true;
       DeviceCapabilities.totalMemoryOverrideForTest = () async =>
           6 * 1024 * 1024 * 1024;
       final arm64 = await OfflineModelSpecTable.resolve();
       expect(arm64.deviceClass, OfflineModelClass.singleQwen);
-      expect(arm64.spec, OfflineModelSpecTable.qwen15b);
+      expect(arm64.spec, OfflineModelSpecTable.minicpm5);
       expect(arm64.hasModel, isTrue);
       expect(arm64.isMessageOnly, isFalse);
 
-      // A non-arm64 device with 6 GB → the SAME spec.
+      // A non-arm64 device with 6 GB → the message-only class (NO model, NO
+      // download CTA): the ABI RE-ENTERS the selection (C46, plan §5.3), so
+      // no arm64-v8a means message-only whatever the RAM.
       DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => false;
       final nonArm64 = await OfflineModelSpecTable.resolve();
-      expect(nonArm64.deviceClass, OfflineModelClass.singleQwen);
-      expect(nonArm64.spec, OfflineModelSpecTable.qwen15b);
-      expect(nonArm64.hasModel, isTrue);
-      expect(nonArm64.isMessageOnly, isFalse);
+      expect(nonArm64.deviceClass, OfflineModelClass.messageOnly);
+      expect(nonArm64.spec, isNull);
+      expect(nonArm64.hasModel, isFalse);
+      expect(nonArm64.isMessageOnly, isTrue);
+      // The RAM fact is NOT applied on a no-arm64 device: the under-floor
+      // override path is never entered (contract §3 message_only_class).
+      expect(nonArm64.isBelowFloor, isFalse);
+
+      // Back on an arm64 device: the RAM legs below are RAM-driven.
+      DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => true;
 
       // 2 GB → the message-only class (no model).
       DeviceCapabilities.totalMemoryOverrideForTest = () async =>

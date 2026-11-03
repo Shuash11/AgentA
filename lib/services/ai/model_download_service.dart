@@ -276,7 +276,8 @@ class ModelDownloadService extends ChangeNotifier {
       .replaceAll('.tflite', '')
       .replaceAll('.json', '')
       .replaceAll('.model', '')
-      .replaceAll('.litertlm', '');
+      .replaceAll('.litertlm', '')
+      .replaceAll('.gguf', '');
 
   /// Migration v5 — the load-path reconciliation (cycle-44 P2, branch A).
   ///
@@ -759,6 +760,7 @@ class ModelDownloadService extends ChangeNotifier {
                   resolvedModelUrlFor(spec),
                   token: AppConfig.hfToken.trim(),
                   foreground: AppConfig.foregroundDownload,
+                  expectedSize: spec.expectedSize,
                 )
                 .withProgress(_onDownloadProgress)
                 .withCancelToken(token)
@@ -1057,6 +1059,7 @@ class ModelDownloadService extends ChangeNotifier {
           resolvedModelUrlFor(spec),
           token: AppConfig.hfToken.trim(),
           foreground: AppConfig.foregroundDownload,
+          expectedSize: spec.expectedSize,
         )
         .install()
         .timeout(const Duration(minutes: 60));

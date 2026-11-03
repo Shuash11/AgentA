@@ -281,7 +281,7 @@ void main() {
       service = ModelDownloadService();
       await db.delete('offline_model_status');
       // Cycle-42 P2b: a device that clears the RAM floor resolves the ONE
-      // selection class - the install chain under test is the Qwen chain.
+      // selection class - the install chain under test is the selected chain.
       DeviceCapabilities.totalMemoryOverrideForTest = () async =>
           6 * 1024 * 1024 * 1024;
     });
@@ -464,7 +464,7 @@ void main() {
         expect(row.first['status'], 'notInstalled');
         // The row's identity is the app's offline-model identity — app-wide
         // (contract §2).
-        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
+        expect(row.first['model_type'], 'minicpm5-2b-q4km');
       },
     );
 
@@ -506,7 +506,7 @@ void main() {
     // The trigger is WIDENED: the capability-verdict clause is DELETED, so
     // v4 fires for ANY device holding the E2B asset — the asset's presence
     // is the whole trigger. The v3 self-reset lesson carries in its
-    // GENERALIZED form: a Qwen-asset user must NEVER fire v4.
+    // GENERALIZED form: a selected-asset user must NEVER fire v4.
 
     test(
       'v4 migration: a stranded E2B asset → marker first, uninstall, DAO reset',
@@ -542,28 +542,25 @@ void main() {
       },
     );
 
-    test(
-      'v4 migration: the reset row carries the app-wide Qwen identity',
-      () async {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.remove('model_asset_v4');
-        DeviceCapabilities.totalMemoryOverrideForTest = () async =>
-            6 * 1024 * 1024 * 1024;
-        ModelDownloadService.e2bAssetPresentOverrideForTest = () async => true;
-        ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
-            false;
-        ModelDownloadService.uninstallOverrideForTest = (modelId) async {};
+    test('v4 migration: the reset row carries the app-wide identity', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('model_asset_v4');
+      DeviceCapabilities.totalMemoryOverrideForTest = () async =>
+          6 * 1024 * 1024 * 1024;
+      ModelDownloadService.e2bAssetPresentOverrideForTest = () async => true;
+      ModelDownloadService.legacyAssetPresentOverrideForTest = () async =>
+          false;
+      ModelDownloadService.uninstallOverrideForTest = (modelId) async {};
 
-        await service.checkModelExists();
+      await service.checkModelExists();
 
-        // The row's identity is the app's offline-model identity — app-wide
-        // (contract §2).
-        final row = await db.query('offline_model_status');
-        expect(row, hasLength(1));
-        expect(row.first['status'], 'notInstalled');
-        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
-      },
-    );
+      // The row's identity is the app's offline-model identity — app-wide
+      // (contract §2).
+      final row = await db.query('offline_model_status');
+      expect(row, hasLength(1));
+      expect(row.first['status'], 'notInstalled');
+      expect(row.first['model_type'], 'minicpm5-2b-q4km');
+    });
 
     test(
       'v4 migration: an arm64 device with a stranded E2B asset ALSO fires — the trigger is class-independent',
@@ -616,12 +613,12 @@ void main() {
     );
 
     test(
-      'v4 migration: the both-assets composition fires ONCE, cleans E2B and the readiness read finds Qwen',
+      'v4 migration: the both-assets composition fires ONCE, cleans E2B and the readiness read finds the selected model',
       () async {
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove('model_asset_v4');
         final uninstalled = <String>[];
-        // The device already downloaded Qwen (its DB row is the durable
+        // The device already downloaded the selected model (its DB row is the durable
         // truth the gate's readiness read consults) AND still holds the
         // stranded E2B asset.
         await OfflineModelDao().setModelReady(
@@ -641,11 +638,11 @@ void main() {
         // v4 FIRED: the stranded E2B asset is cleaned up.
         expect(uninstalled, ['gemma-4-E2B-it.litertlm']);
         expect(prefs.getBool('model_asset_v4'), isTrue);
-        // The readiness read FINDS QWEN: no Qwen re-download is forced.
+        // The readiness read FINDS the model: no re-download is forced.
         expect(service.status, ModelStatus.ready);
         final row = await db.query('offline_model_status');
         expect(row.first['status'], 'ready');
-        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
+        expect(row.first['model_type'], 'minicpm5-2b-q4km');
 
         // It fires ONCE: the marker gates the second run.
         await service.checkModelExists();
@@ -654,11 +651,11 @@ void main() {
       },
     );
 
-    test('v4 migration: a Qwen-only user NEVER fires v4', () async {
+    test('v4 migration: a selected-asset-only user NEVER fires v4', () async {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('model_asset_v4');
       final uninstalled = <String>[];
-      // The device holds the Qwen asset only: both probe legs of the
+      // The device holds the selected asset only: both probe legs of the
       // trigger are false (the v3 self-reset lesson, generalized).
       await OfflineModelDao().setModelReady(
         modelType: OfflineModelSpecTable.appIdentity,
@@ -676,7 +673,7 @@ void main() {
 
       expect(uninstalled, isEmpty);
       expect(prefs.getBool('model_asset_v4'), isNull);
-      // The Qwen asset is untouched: the readiness read still finds it.
+      // The selected asset is untouched: the readiness read still finds it.
       expect(service.status, ModelStatus.ready);
     });
 
@@ -742,7 +739,7 @@ void main() {
     });
 
     test(
-      'the install path writes the app-wide Qwen identity — the selection class',
+      'the install path writes the app-wide identity — the selection class',
       () async {
         DeviceCapabilities.totalMemoryOverrideForTest = () async =>
             6 * 1024 * 1024 * 1024;
@@ -757,7 +754,7 @@ void main() {
         final row = await db.query('offline_model_status');
         expect(row, hasLength(1));
         expect(row.first['status'], 'ready');
-        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
+        expect(row.first['model_type'], 'minicpm5-2b-q4km');
       },
     );
 
@@ -780,7 +777,7 @@ void main() {
         final row = await db.query('offline_model_status');
         expect(row, hasLength(1));
         expect(row.first['status'], 'ready');
-        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
+        expect(row.first['model_type'], 'minicpm5-2b-q4km');
       },
     );
 
@@ -827,21 +824,21 @@ void main() {
   });
 
   group('P1 cycle-36 offline fix assertions', () {
-    test('the install URL points at the litert-community repo', () {
+    test('the install URL points at the openbmb MiniCPM5 GGUF repo', () {
       // The URL moved into the spec table (cycle-42 P2) — it is the ONLY
       // place the asset URLs are written now. E2B left selection (P2b): the
-      // ONE install URL is the Qwen 2.5 1.5B Instruct `.task` asset.
+      // ONE install URL is the MiniCPM5-2B Q4_K_M GGUF asset.
       expect(
-        OfflineModelSpecTable.qwen15b.url,
-        contains('litert-community/Qwen2.5-1.5B-Instruct'),
+        OfflineModelSpecTable.minicpm5.url,
+        contains('openbmb/MiniCPM5-2B-GGUF'),
       );
       expect(
-        OfflineModelSpecTable.qwen15b.url,
-        endsWith('/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task'),
+        OfflineModelSpecTable.minicpm5.url,
+        endsWith('/MiniCPM5-2B-Q4_K_M.gguf'),
       );
       expect(
-        OfflineModelSpecTable.qwen15b.url,
-        startsWith('https://huggingface.co/litert-community/'),
+        OfflineModelSpecTable.minicpm5.url,
+        startsWith('https://huggingface.co/openbmb/'),
       );
       // The E2B install URL survives nowhere: the asset is not offered any
       // more — only its uninstall id remains (migration v4).
@@ -894,7 +891,7 @@ void main() {
       // The installOverrideForTest seam bypasses the real chain by design —
       // assert the spec constants in the source, not the plugin call graph.
       // The chains are spec-driven: the table's ONE row carries the
-      // qwen + task claim.
+      // llama + gguf claim.
       final source = File(
         'lib/services/ai/model_download_service.dart',
       ).readAsStringSync();
@@ -904,8 +901,8 @@ void main() {
       expect(source, isNot(contains('ModelType.gemma4')));
       expect(source, isNot(contains('ModelFileType.litertlm')));
       expect(source, isNot(contains('ModelType.gemmaIt')));
-      expect(OfflineModelSpecTable.qwen15b.modelType, ModelType.qwen);
-      expect(OfflineModelSpecTable.qwen15b.fileType, ModelFileType.task);
+      expect(OfflineModelSpecTable.minicpm5.modelType, ModelType.llama);
+      expect(OfflineModelSpecTable.minicpm5.fileType, ModelFileType.gguf);
     });
 
     test('the HF token stays threaded in both install chains', () {
@@ -930,8 +927,10 @@ void main() {
       // override_caveat_amended). With no override configured the spec URL
       // is what the chain installs.
       expect(
-        ModelDownloadService.resolvedModelUrlFor(OfflineModelSpecTable.qwen15b),
-        OfflineModelSpecTable.qwen15b.url,
+        ModelDownloadService.resolvedModelUrlFor(
+          OfflineModelSpecTable.minicpm5,
+        ),
+        OfflineModelSpecTable.minicpm5.url,
       );
     });
 
@@ -953,16 +952,16 @@ void main() {
       ).readAsStringSync();
 
       // The identity lives in the table — once.
-      expect("identity: 'qwen2.5-1.5b-it'".allMatches(table).length, 1);
-      expect(OfflineModelSpecTable.qwen15b.identity, 'qwen2.5-1.5b-it');
-      expect(OfflineModelSpecTable.appIdentity, 'qwen2.5-1.5b-it');
+      expect("identity: 'minicpm5-2b-q4km'".allMatches(table).length, 1);
+      expect(OfflineModelSpecTable.minicpm5.identity, 'minicpm5-2b-q4km');
+      expect(OfflineModelSpecTable.appIdentity, 'minicpm5-2b-q4km');
       // The E2B identity is GONE from the table (E2B left selection).
       expect(table, isNot(contains("'gemma-4-e2b-it'")));
 
       // No duplicate identity string survives in any consumer.
       for (final source in [service, gemma, dao]) {
         expect(source, isNot(contains("'gemma-4-e2b-it'")));
-        expect(source, isNot(contains("'qwen2.5-1.5b-it'")));
+        expect(source, isNot(contains("'minicpm5-2b-q4km'")));
       }
 
       // The four sites resolve the identity from the spec.

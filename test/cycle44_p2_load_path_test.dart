@@ -5,6 +5,11 @@
 //   * migration v5 — the three legs (foreign file / foreign active / the
 //     lie), the COMPOSITE probe, the marker semantics and the four
 //     compositions the ruling names;
+//   * the four compositions against the C46 GGUF spec (plan §5.4,
+//     contract `offline-model-minicpm5` §4): the shipped `.task` + the E2B
+//     straggler are swept as foreign, the healthy GGUF device mutates
+//     NOTHING, and the message-only device (no arm64-v8a) is swept once
+//     with no uninstall loop and no download;
 //   * ensureModelActive() — the load-time VERIFICATION: a foreign active
 //     spec is cleared and the selected spec ends ACTIVE;
 //   * the caller guard — the restored foreign active spec now REACHES the
@@ -43,8 +48,7 @@ void main() {
 
   /// The selected asset's persisted filename — the id the plugin keys the
   /// model by.
-  const String selectedFileName =
-      'Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task';
+  const String selectedFileName = 'MiniCPM5-2B-Q4_K_M.gguf';
 
   /// The superseded Gemma 3 1B asset — the foreign file the user's device
   /// still held.
@@ -86,7 +90,7 @@ void main() {
     await db.delete('offline_model_status');
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
-    // The device clears the RAM floor — the ONE selection class (Qwen).
+    // The device clears the RAM floor — the ONE selection class.
     DeviceCapabilities.totalMemoryOverrideForTest = () async =>
         6 * 1024 * 1024 * 1024;
     // v3/v4 never fire in this file: their probes are the legacy assets,
@@ -107,12 +111,17 @@ void main() {
     ModelDownloadService.pluginOverrideForTest = null;
     ModelDownloadService.ensureInstallOverrideForTest = null;
     DeviceCapabilities.totalMemoryOverrideForTest = null;
+    // The ABI verdict is a C46 selection key (arm64-v8a ∈ SUPPORTED_ABIS):
+    // a test that refuses the ABI must not leak into the next case.
+    DeviceCapabilities.offlineAiSupportedOverrideForTest = null;
   });
 
   group('cycle-44 P2 — the selected asset identity', () {
     test('the selected filename is the asset\'s persisted filename', () {
       expect(
-        ModelDownloadService.selectedFileNameFor(OfflineModelSpecTable.qwen15b),
+        ModelDownloadService.selectedFileNameFor(
+          OfflineModelSpecTable.minicpm5,
+        ),
         selectedFileName,
       );
     });
@@ -133,7 +142,7 @@ void main() {
         );
         expect(
           ModelDownloadService.isSameModelIdentity(
-            'Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096',
+            'MiniCPM5-2B-Q4_K_M',
             selectedFileName,
           ),
           isTrue,
@@ -148,7 +157,7 @@ void main() {
         );
         expect(
           ModelDownloadService.isSameModelIdentity(
-            'Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm',
+            'MiniCPM5-2B-Q4_K_M.litertlm',
             selectedFileName,
           ),
           isFalse,
@@ -217,7 +226,7 @@ void main() {
         // The DAO reconciles to plugin truth...
         final row = await db.query('offline_model_status');
         expect(row.first['status'], 'notInstalled');
-        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
+        expect(row.first['model_type'], 'minicpm5-2b-q4km');
         // ...and the gate's readiness read honestly offers the fresh install.
         expect(service.status, ModelStatus.notInstalled);
       },
@@ -362,7 +371,7 @@ void main() {
 
   group('cycle-44 P2 — migration v5: the compositions', () {
     test(
-      'both assets: the foreign file goes, the Qwen file AND row survive',
+      'both assets: the foreign file goes, the selected file AND row survive',
       () async {
         await OfflineModelDao().setModelReady(
           modelType: OfflineModelSpecTable.appIdentity,
@@ -377,9 +386,9 @@ void main() {
         await service.checkModelExists();
 
         expect(plugin.uninstalled, [legacyFileName]);
-        // The Qwen file survives — no Qwen re-download is forced.
+        // The selected file survives — no re-download is forced.
         expect(plugin.installedIds, contains(selectedFileName));
-        // ...and its row survives: the readiness read FINDS Qwen.
+        // ...and its row survives: the readiness read FINDS the model.
         final row = await db.query('offline_model_status');
         expect(row.first['status'], 'ready');
         expect(service.status, ModelStatus.ready);
@@ -405,12 +414,16 @@ void main() {
         expect(plugin.clearCount, 1);
         final row = await db.query('offline_model_status');
         expect(row.first['status'], 'notInstalled');
-        // The gate offers the fresh Qwen install — the honest state.
+        // The gate offers the fresh install — the honest state.
         expect(service.status, ModelStatus.notInstalled);
       },
     );
 
-    test('the healthy Qwen device: zero mutations', () async {
+    test('the healthy selected device: zero mutations', () async {
+      // The healthy GGUF device: arm64-v8a present (the C46 ABI key) and
+      // the RAM floor cleared (setUp: 6 GB), with the GGUF installed AND
+      // active.
+      DeviceCapabilities.offlineAiSupportedOverrideForTest = () async => true;
       await OfflineModelDao().setModelReady(
         modelType: OfflineModelSpecTable.appIdentity,
       );
@@ -447,6 +460,110 @@ void main() {
       expect(plugin.uninstalled, [legacyFileName]);
       expect(plugin.clearCount, 1);
     });
+
+    // ── cycle-46 P2 (plan §5.4, contract `offline-model-minicpm5` §4):
+    // the FOUR compositions against the GGUF spec. The v5 reconciliation
+    // generalizes: the shipped `.task` and any E2B straggler are FOREIGN
+    // the moment the spec points at the GGUF, so NO new migration code
+    // (and NO v6 marker) is needed.
+
+    test(
+      "both foreign assets: the shipped .task AND the E2B straggler are swept",
+      () async {
+        // The ruling names the TWO assets by their persisted filenames
+        // (contract §4 `ruling_no_new_marker`): the shipped Qwen `.task`
+        // and the E2B straggler. v3/v4 never fire here (their probes are
+        // stubbed off in setUp) — the v5 sweep alone must carry both.
+        const String shippedTaskFileName =
+            'Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task';
+        const String e2bStragglerFileName = 'gemma-4-E2B-it.litertlm';
+
+        // The device lies: the DAO row claims the GGUF is installed while
+        // the plugin holds only the two foreign assets.
+        await OfflineModelDao().setModelReady(
+          modelType: OfflineModelSpecTable.appIdentity,
+        );
+        plugin = FakeOfflineModelPlugin(
+          installed: [shippedTaskFileName, e2bStragglerFileName],
+          activeModelName: shippedTaskFileName,
+          hasActive: true,
+        );
+        ModelDownloadService.pluginOverrideForTest = plugin;
+
+        await service.checkModelExists();
+
+        // BOTH foreign assets are swept — the selected GGUF filename is
+        // NEVER swept (no_stranded_downloads is absolute).
+        expect(plugin.uninstalled, [shippedTaskFileName, e2bStragglerFileName]);
+        expect(plugin.uninstalled, isNot(contains(selectedFileName)));
+        expect(plugin.installedIds, isNot(contains(selectedFileName)));
+        // The stale active identity is cleared (leg b).
+        expect(plugin.clearCount, 1);
+        expect(plugin.hasActive, isFalse);
+        // The LYING DAO row is reset (leg c) → the gate honestly offers the
+        // fresh GGUF install.
+        final row = await db.query('offline_model_status');
+        expect(row.first['status'], 'notInstalled');
+        expect(service.status, ModelStatus.notInstalled);
+        // The v5 marker records the verified-clean state — and NO v6 marker
+        // exists (the composition needed no new migration code).
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getBool('model_asset_v5'), isTrue);
+        expect(prefs.getBool('model_asset_v6'), isNull);
+      },
+    );
+
+    test(
+      'the message-only device (no arm64-v8a) holding files: swept once, no loop, no download',
+      () async {
+        // C46 §5.3: NO arm64-v8a → the message-only class (no legal asset),
+        // so EVERY id is foreign and the v5 sweep removes them (contract §4
+        // composition 4). The sweep runs ONCE — the verified-clean marker
+        // gates the next pass, so the device never enters an uninstall
+        // loop — and the message-only class NEVER starts a download.
+        DeviceCapabilities.offlineAiSupportedOverrideForTest = () async =>
+            false;
+        const String shippedTaskFileName =
+            'Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task';
+
+        // The device resolves the message-only class: no asset → no CTA.
+        final selection = await OfflineModelSpecTable.resolve();
+        expect(selection.deviceClass, OfflineModelClass.messageOnly);
+        expect(selection.spec, isNull);
+        expect(selection.hasModel, isFalse);
+
+        plugin = FakeOfflineModelPlugin(
+          installed: [shippedTaskFileName],
+          activeModelName: shippedTaskFileName,
+          hasActive: true,
+        );
+        ModelDownloadService.pluginOverrideForTest = plugin;
+
+        await service.checkModelExists();
+
+        // The file is swept (every id is foreign when spec == null) and the
+        // stale active identity is cleared.
+        expect(plugin.uninstalled, [shippedTaskFileName]);
+        expect(plugin.clearCount, 1);
+
+        // NO uninstall loop: the next pass sweeps NOTHING (the marker
+        // records the verified-clean state).
+        await service.checkModelExists();
+        expect(plugin.uninstalled, [shippedTaskFileName]);
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getBool('model_asset_v5'), isTrue);
+
+        // NO download: the message-only class has no asset to install.
+        var installs = 0;
+        service.installOverrideForTest = (token) async {
+          installs++;
+        };
+        await service.installModel();
+
+        expect(installs, 0);
+        expect(service.status, ModelStatus.notInstalled);
+      },
+    );
   });
 
   group('cycle-44 P2 — the load seam: ensureModelActive', () {
@@ -658,7 +775,7 @@ void main() {
       expect(source, isNot(contains('_systemInstruction')));
     });
 
-    test('the picker copy states the honest ~1.6GB Qwen download', () {
+    test('the picker copy states the honest ~1.6GB download', () {
       expect(
         AIModel.gemma.description,
         'Smarter offline AI — ~1.6GB download, runs on your device',
@@ -710,9 +827,8 @@ class FakeOfflineModelPlugin implements OfflineModelPlugin {
 
   /// The plugin's install-path identity of the selected asset — the
   /// extension-stripped basename (`inference_installation_builder.dart:419`
-  /// — `FileNameUtils.getBaseName(...)` strips the `.task`).
-  static const String selectedInstallPathName =
-      'Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096';
+  /// — `FileNameUtils.getBaseName(...)` strips the `.gguf`).
+  static const String selectedInstallPathName = 'MiniCPM5-2B-Q4_K_M';
 
   final List<String> _installed;
   final Set<String> _installedFiles;

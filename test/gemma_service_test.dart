@@ -4,6 +4,7 @@ import 'package:flutter_edge_ai/flutter_edge_ai.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:aiproject/data/local/database_helper.dart';
+import 'package:aiproject/data/local/local_message_dao.dart';
 import 'package:aiproject/data/local/offline_model_dao.dart';
 import 'package:aiproject/data/models/chat_message_model.dart';
 import 'package:aiproject/presentation/chats/chats.dart';
@@ -712,6 +713,136 @@ void main() {
       expect(source, contains('await gemmaService.loadInstalled();'));
     });
   });
+
+  group('chat-creation seam (contract v1.1.0 §11)', () {
+    test(
+      'every engine chat creation passes enableThinking: false EXPLICITLY',
+      () {
+        // The seam is the ENGINE-chat creation — the call that creates a
+        // chat on the active model. (The transcript's chat-SESSION
+        // creation in the repository is a different call and takes no
+        // engine argument, so the scan is scoped to the AI service layer.)
+        //
+        // The plugin call cannot be intercepted without a seam in lib/ (off
+        // limits here), so the seam is asserted AT ITS SOURCE — the same
+        // way this file already asserts the other createChat arguments
+        // (the load shape above).
+        final sites = _engineChatCreationSites();
+
+        // Every creation site is covered (criterion 7): there is exactly
+        // one, and it is the service's.
+        expect(sites, hasLength(1));
+        expect(
+          sites.single.file,
+          endsWith('lib/services/ai/gemma_service.dart'),
+        );
+
+        final call = sites.single.arguments;
+        // The argument is PRESENT and FALSE — not merely absent, never
+        // defaulted (an unset kwarg lets the MODEL decide).
+        expect(call, contains('enableThinking: false'));
+        expect(call, isNot(contains('enableThinking: true')));
+        // ...and it is passed exactly ONCE: never omitted, never doubled
+        // with a contradicting value.
+        expect(RegExp(r'enableThinking\s*:').allMatches(call).length, 1);
+      },
+    );
+  });
+
+  group('stray thinking drop (contract v1.1.0 §11)', () {
+    late Database db;
+
+    setUpAll(() async {
+      sqfliteFfiInit();
+      db = await databaseFactoryFfi.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(
+          version: 1,
+          onCreate: (db, version) async {
+            await db.execute('''
+              CREATE TABLE offline_model_status (
+                id INTEGER PRIMARY KEY,
+                model_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                downloaded_at INTEGER,
+                file_path TEXT,
+                version TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE messages (
+                id TEXT PRIMARY KEY,
+                chat_id TEXT NOT NULL,
+                text TEXT NOT NULL,
+                is_user INTEGER NOT NULL,
+                timestamp INTEGER NOT NULL,
+                is_synced INTEGER DEFAULT 0,
+                is_deleted INTEGER DEFAULT 0
+              )
+            ''');
+          },
+        ),
+      );
+      DatabaseHelper.testDatabase = db;
+    });
+
+    tearDownAll(() async {
+      DatabaseHelper.clearTestDatabase();
+      await db.close();
+    });
+
+    test(
+      'a stray ThinkingResponse never reaches the answer or the transcript',
+      () async {
+        // The engine hands the service a typed ThinkingResponse DESPITE the
+        // app's explicit-false pin (the shape the step-0 smoke recorded on
+        // the llama path) — the APP's seam must drop it.
+        final chat = _FakeTypedChat(
+          responses: const [
+            ThinkingResponse('secret reasoning'),
+            TextResponse('Final answer.'),
+          ],
+        );
+        await chat.initSession();
+        service.chatOverrideForTest = () async => chat;
+
+        await service.loadInstalled();
+
+        // The premise: the engine really did hand the service a typed
+        // ThinkingResponse — so the drop below is not vacuous.
+        final rawEvents = await chat.generateChatResponseAsync().toList();
+        expect(rawEvents.whereType<ThinkingResponse>(), hasLength(1));
+
+        final chunks = await service
+            .sendMessageStream(history: const [], newMessage: 'hello')
+            .toList();
+
+        // The stray never reaches the surfaced answer: the stream carries
+        // ONLY the final TextResponse content.
+        expect(chunks, ['Final answer.']);
+        final answer = chunks.join();
+        expect(answer, isNot(contains('secret reasoning')));
+
+        // ...and the transcript write path receives ONLY that content: the
+        // stored row is the final answer, with nothing of the stray.
+        await LocalMessageDao.instance.insert(
+          ChatMessageModel(
+            id: 'assistant-1',
+            chatId: 'chat-1',
+            text: answer,
+            isUser: false,
+            timestamp: DateTime(2026, 1, 1),
+          ),
+        );
+        final stored = await LocalMessageDao.instance.getByChat('chat-1');
+        expect(stored, hasLength(1));
+        expect(stored.single.text, 'Final answer.');
+        expect(stored.single.text, isNot(contains('secret reasoning')));
+      },
+    );
+  });
 }
 
 /// Extracts ONE method body from [source].
@@ -772,4 +903,89 @@ Future<InferenceChat> _fakeChat() async {
   );
   await chat.initSession();
   return chat;
+}
+
+/// A chat whose stream carries the scripted RESPONSE EVENTS straight onto
+/// the wire — including a typed [ThinkingResponse], the shape the llama
+/// connector emits natively (the step-0 smoke recorded branch (a)).
+///
+/// The engine-side hide is BYPASSED on purpose: the app pins
+/// `enableThinking: false`, but a stray that arrives ANYWAY must still be
+/// dropped by the APP's seam (contract v1.1.0 §11 `p2_chat_send_path`).
+class _FakeTypedChat extends InferenceChat {
+  final List<ModelResponse> responses;
+
+  _FakeTypedChat({required this.responses})
+    : super(
+        sessionCreator: () async => _FakeSession(),
+        maxTokens: 2048,
+        modelType: ModelType.llama,
+        fileType: ModelFileType.gguf,
+        // The chat carries the app's own pin — thinking OFF, explicitly.
+        enableThinking: false,
+      );
+
+  @override
+  Stream<ModelResponse> generateChatResponseAsync() async* {
+    for (final response in responses) {
+      yield response;
+    }
+  }
+}
+
+/// One engine-chat creation site: the file it lives in and the ARGUMENT
+/// LIST of the call.
+class _CreationSite {
+  final String file;
+  final String arguments;
+
+  _CreationSite(this.file, this.arguments);
+}
+
+/// The engine-chat creation sites in the AI service layer: every
+/// `createChat(` / `openChat(` call, with the argument list of the call.
+///
+/// The argument list is what the seam is about, so the extraction keeps the
+/// comments inside the call — a value that only ever appears in a comment
+/// is not an argument.
+List<_CreationSite> _engineChatCreationSites() {
+  final sites = <_CreationSite>[];
+  final pattern = RegExp(r'\.(?:createChat|openChat)\s*\(');
+  for (final file in Directory(
+    'lib/services/ai',
+  ).listSync(recursive: true).whereType<File>()) {
+    if (!file.path.endsWith('.dart')) continue;
+    final lines = file.readAsLinesSync();
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      // A mention inside a comment is not a call site.
+      final trimmed = line.trimLeft();
+      if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+      if (!pattern.hasMatch(line)) continue;
+      sites.add(
+        _CreationSite(
+          file.path.replaceAll('\\', '/'),
+          _callArguments(lines, i),
+        ),
+      );
+    }
+  }
+  return sites;
+}
+
+/// The argument list of the call that starts on [lineIndex]: every line up
+/// to the call's closing parenthesis.
+String _callArguments(List<String> lines, int lineIndex) {
+  final buffer = <String>[];
+  var depth = 0;
+  for (var i = lineIndex; i < lines.length; i++) {
+    final line = lines[i];
+    buffer.add(line);
+    for (final char in line.split('')) {
+      if (char == '(') depth++;
+      if (char == ')') depth--;
+    }
+    if (depth <= 0) break;
+  }
+  return buffer.join('\n');
 }

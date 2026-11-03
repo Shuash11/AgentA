@@ -18,10 +18,17 @@ dependencies:
 
   http: ^1.2.1
 
-  flutter_edge_ai: ^1.11.4
-  flutter_edge_ai_mediapipe: ^1.0.8
-  # 1.8.6 = the only litertlm release compatible with core ^1.11.4; see plans/cycle-38 §1.3
-  flutter_edge_ai_litertlm: 1.8.6
+  # C46 P2 (plan §5.2, contract §2 cascade): the core-2.x cascade.
+  #   flutter_edge_ai ^2.5.5      — the core the llama connector requires (^2.5.0)
+  #   flutter_edge_ai_llama ^0.0.5 — the llama.cpp engine connector (pins llamadart 0.15.1)
+  #   flutter_edge_ai_mediapipe ^1.2.5 — RETAINED (core ^2.3.0-compatible); keeps the
+  #                                   old-asset uninstall machinery and the .task ladder honest
+  #   the LiteRT-LM connector — REMOVED (no .litertlm model is selectable any more; the
+  #                             connector docs mandate its omission — "Core itself bundles
+  #                             no inference runtime")
+  flutter_edge_ai: ^2.5.5
+  flutter_edge_ai_mediapipe: ^1.2.5
+  flutter_edge_ai_llama: ^0.0.5
   path_provider: ^2.1.4
 
   connectivity_plus: ^7.3.2
@@ -58,6 +65,22 @@ dependencies:
   google_sign_in: ^7.2.0
   local_auth: ^3.0.2
   supabase_flutter: ^2.17.2
+
+# C46 P2 (plan §5.2, contract §2 build_hook): the llamadart build hook.
+#
+# The llama.cpp runtime is NOT bundled by the app's own dependency graph —
+# llamadart's build hook resolves and downloads its pinned native runtime
+# (leehack/llamadart-native @ the pin llamadart 0.15.1 carries) when this
+# selection names `llama_cpp`. Without the selection llamadart would also
+# build its LiteRT-LM runtime, which the app does not ship (the LiteRT-LM
+# connector is gone — contract §2 litertlm_removal).
+#
+# The block lives in the APPLICATION's pubspec: dependency settings do not
+# propagate, so only the app's own pubspec can select the runtime.
+hooks:
+  user_defines:
+    llamadart:
+      llamadart_native_runtimes: [llama_cpp]
 
 dev_dependencies:
   flutter_test:

@@ -44,6 +44,133 @@ enum OfflineModelState {
   modelMissing,
 }
 
+/// The stray-thinking dropper (cycle-46 P2 — plan §6.2/§9 S7 as amended,
+/// contract v1.1.0 §10 S7).
+///
+/// The thinking FEATURE is withdrawn: there is no toggle, no UI surface and
+/// no persistence of thinking text. What survives is the SEAM DISCIPLINE —
+/// every chat is created with `enableThinking: false` EXPLICITLY, and this
+/// transform drops whatever thinking content arrives anyway:
+///
+///   * the TYPED leg — a [ThinkingResponse] token is DROPPED outright (the
+///     resolved source exposes a typed stream: `ModelResponse`);
+///   * the MARKER leg — think-span TEXT that arrives inside a
+///     [TextResponse] token is DROPPED too: core splits `<think>` spans
+///     into a thinking channel for the Qwen/DeepSeek families ONLY
+///     (`extensions.dart:378` puts `ModelType.llama` in the pass-through
+///     arm), so on the GGUF path a raw span would otherwise reach the user
+///     as ordinary answer text.
+///
+/// The transform is BOUNDED: at most one marker is ever held back, and an
+/// UNCLOSED span at the end of a turn is thinking-only — it is dropped,
+/// never persisted as an answer (plan §5.6, branch (b)).
+///
+/// Nothing that passes through here reaches the caller, the UI, the
+/// transcript DB or the next turn's history: the drop happens AT THE SEAM.
+class StrayThinkingFilter {
+  /// The opening marker of a raw think span.
+  static const String thinkStart = '<think>';
+
+  /// The closing marker of a raw think span.
+  static const String thinkEnd = '</think>';
+
+  /// Whether the filter is currently inside a think span.
+  bool _insideThinkSpan = false;
+
+  /// The text held back because it may be the start of a marker.
+  final StringBuffer _held = StringBuffer();
+
+  /// Feeds one response and returns the VISIBLE answer text it carries —
+  /// empty when the response was thinking content.
+  String addResponse(ModelResponse response) {
+    if (response is ThinkingResponse) {
+      // The TYPED leg — DROPPED: never surfaced, never persisted.
+      return '';
+    }
+    if (response is TextResponse) {
+      return addText(response.token);
+    }
+    return '';
+  }
+
+  /// Feeds one text chunk and returns the VISIBLE answer text it carries.
+  ///
+  /// Text outside a think span is returned as it arrives; text inside one
+  /// is dropped. A marker split across two chunks is held back until it
+  /// resolves, so a span can never leak through the seam.
+  String addText(String chunk) {
+    if (chunk.isEmpty) return '';
+    _held.write(chunk);
+
+    final visible = StringBuffer();
+    while (true) {
+      final buffer = _held.toString();
+      if (buffer.isEmpty) break;
+
+      if (_insideThinkSpan) {
+        final end = buffer.indexOf(thinkEnd);
+        if (end >= 0) {
+          _held.clear();
+          _held.write(buffer.substring(end + thinkEnd.length));
+          _insideThinkSpan = false;
+          continue;
+        }
+        // Inside the span: everything but a possible SPLIT closing marker
+        // is thinking content — dropped.
+        final keep = _partialMarkerLength(buffer, thinkEnd);
+        _held.clear();
+        _held.write(buffer.substring(buffer.length - keep));
+        break;
+      }
+
+      final start = buffer.indexOf(thinkStart);
+      if (start >= 0) {
+        visible.write(buffer.substring(0, start));
+        _held.clear();
+        _held.write(buffer.substring(start + thinkStart.length));
+        _insideThinkSpan = true;
+        continue;
+      }
+
+      final keep = _partialMarkerLength(buffer, thinkStart);
+      visible.write(buffer.substring(0, buffer.length - keep));
+      _held.clear();
+      _held.write(buffer.substring(buffer.length - keep));
+      break;
+    }
+    return visible.toString();
+  }
+
+  /// The end-of-stream tail: the text held back by a split marker — or
+  /// nothing at all when the turn ended inside an UNCLOSED think span
+  /// (thinking-only, never an answer).
+  String finish() {
+    final tail = _held.toString();
+    _held.clear();
+    if (_insideThinkSpan) return '';
+    return tail;
+  }
+
+  /// The think-span-free text of a COMPLETE answer.
+  static String strip(String text) {
+    final filter = StrayThinkingFilter();
+    return '${filter.addText(text)}${filter.finish()}';
+  }
+
+  /// The length of the longest suffix of [buffer] that is a proper prefix
+  /// of [marker] — the text that may still turn out to be a split marker.
+  static int _partialMarkerLength(String buffer, String marker) {
+    final maxLength = marker.length - 1;
+    if (maxLength <= 0) return 0;
+    final take = buffer.length < maxLength ? buffer.length : maxLength;
+    for (var length = take; length > 0; length--) {
+      final suffix = buffer.substring(buffer.length - length);
+      if (suffix == marker.substring(0, length)) return length;
+    }
+    return 0;
+  }
+}
+
 class GemmaService extends ChangeNotifier {
   final OfflineModelDao _dao = OfflineModelDao();
   OfflineModelState _state = OfflineModelState.idle;
@@ -62,11 +189,36 @@ class GemmaService extends ChangeNotifier {
   /// retry affordances depend on a later attempt being able to run.
   Future<void>? _loadInFlight;
 
+  /// The generation stall watchdog, armed while a turn generates and reset
+  /// on every token the engine emits. Null when no generation is in flight.
+  Timer? _generationWatchdog;
+
+  /// Set when the watchdog fires: the turn is stopped AND the failure is
+  /// surfaced — a stalled generation is never a silently truncated answer.
+  bool _generationStalled = false;
+
   static const Duration _streamFlushInterval = Duration(milliseconds: 45);
   static const int _streamFlushChars = 8;
   static const int _maxHistoryMessages = 8;
   static const int _maxTokens = 2048;
   static const int _maxHistoryChars = 1000;
+
+  /// The output cap of EVERY send (cycle-46 P2 — plan §5.5, contract §2
+  /// `load_shape`): at most 2048 GENERATED tokens per turn. On the llama
+  /// path the thinking text would count toward it too — the app pins
+  /// thinking off, so the cap belongs to the answer.
+  static const int _maxOutputTokens = 2048;
+
+  /// The generation stall watchdog window: 3 minutes with NO token at all.
+  ///
+  /// The app's download stall watchdog uses the same 3-minute window
+  /// (`model_download_service.dart:143`); the generation watchdog EXTENDS
+  /// that posture to the turn itself (plan §5.5: "the stall watchdog extends
+  /// to generation via `stopGeneration()` on timeout"; contract §10
+  /// `watchdog_extension`). Generous on purpose: a cold 2B model on a phone
+  /// CPU can take a while to emit its FIRST token, and a slow turn still
+  /// emits tokens — which reset the timer.
+  static const Duration _generationStallTimeout = Duration(minutes: 3);
 
   /// The role-marked priming builder (cycle-45 Phase 1, the S3 ruling).
   /// The TOTAL staged budget (priming + new message) lives on the builder.
@@ -99,15 +251,80 @@ class GemmaService extends ChangeNotifier {
 
   void cancelGeneration() {
     _isCancelled = true;
+    _cancelGenerationWatchdog();
 
     final chat = _chat;
     if (chat != null) {
-      try {
-        unawaited(chat.stopGeneration());
-      } catch (e) {
-        if (kDebugMode) debugPrint('[GemmaService] stopGeneration failed: $e');
-      }
+      _stopGeneration(chat);
     }
+  }
+
+  /// Stops the in-flight generation through the SAME path the stop
+  /// affordance uses — `session.stopGeneration()` on the live chat.
+  ///
+  /// The stop affordance (the user pressing stop) and the generation stall
+  /// watchdog (cycle-46 P2 — plan §5.5) share this one seam, so neither can
+  /// drift from the other.
+  void _stopGeneration(InferenceChat chat) {
+    try {
+      unawaited(
+        chat.stopGeneration().catchError((Object error) {
+          if (kDebugMode) {
+            debugPrint('[GemmaService] stopGeneration failed: $error');
+          }
+        }),
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint('[GemmaService] stopGeneration failed: $e');
+    }
+  }
+
+  /// Arms (or re-arms) the generation stall watchdog.
+  ///
+  /// Every token the engine emits proves the turn is alive, so the watchdog
+  /// restarts from there — the same discipline the download watchdog uses
+  /// (`model_download_service.dart:430`).
+  void _armGenerationWatchdog() {
+    _cancelGenerationWatchdog();
+    _generationWatchdog = Timer(
+      generationStallTimeoutOverrideForTest ?? _generationStallTimeout,
+      _onGenerationStall,
+    );
+  }
+
+  /// Cancels the generation stall watchdog. Safe when no timer is pending.
+  void _cancelGenerationWatchdog() {
+    _generationWatchdog?.cancel();
+    _generationWatchdog = null;
+  }
+
+  /// The watchdog handler: no token arrived within the window, so the turn
+  /// is presumed silently dead. The generation is STOPPED — exactly what
+  /// the user's stop affordance does — and the turn is reported as failed
+  /// rather than persisted as a truncated answer.
+  void _onGenerationStall() {
+    _generationWatchdog = null;
+    if (_isCancelled) return;
+    _generationStalled = true;
+    _isCancelled = true;
+
+    final chat = _chat;
+    if (chat != null) {
+      _stopGeneration(chat);
+    }
+    if (kDebugMode) {
+      debugPrint('[GemmaService] generation stalled — generation stopped');
+    }
+  }
+
+  /// Overrides the generation stall-watchdog window (test-only).
+  @visibleForTesting
+  Duration? generationStallTimeoutOverrideForTest;
+
+  @override
+  void dispose() {
+    _cancelGenerationWatchdog();
+    super.dispose();
   }
 
   /// Wipes the session so the next turn starts clean (cycle-45 Phase 1, S5).
@@ -207,6 +424,21 @@ class GemmaService extends ChangeNotifier {
           randomSeed: 1,
           topK: 30,
           topP: 0.85,
+          // THINKING OFF — EXPLICITLY, NEVER OMITTED, NEVER DEFAULTED
+          // (cycle-46 P2 — plan §6.2/§9 S7 as amended, contract v1.1.0
+          // §10 S7; the reasoning: plan §2.4). The GGUF's embedded chat
+          // template takes `enable_thinking` as a kwarg: an UNSET kwarg
+          // lets the MODEL decide, and llamadart's own default is TRUE
+          // (`llamadart-0.15.1/lib/src/core/engine/chat_session.dart:185`).
+          // The app therefore pins it false on EVERY chat creation — the
+          // llama.cpp connector forwards it to the template and to the
+          // generation call
+          // (`flutter_edge_ai_llama-0.0.5/lib/src/llama_inference_session
+          // .dart:608`/`:639`).
+          enableThinking: false,
+          // The output cap of every send (plan §5.5, contract §2
+          // `load_shape`): 2048 generated tokens at most.
+          maxOutputTokens: _maxOutputTokens,
           // The SHORT, SPEC-DRIVEN system instruction (cycle-44 P2, the
           // rider): the instruction belongs to the asset, next to the
           // identity — the ~700-char rule-list that lived here is retired.
@@ -527,15 +759,26 @@ class GemmaService extends ChangeNotifier {
   ///   1. WIPE — `chat.clearHistory()`: the pinned core's FULL native wipe +
   ///      session recreate (`_fullHistory`/`_prefixes`/`_modelHistory`
   ///      cleared, `_currentTokens = 0`, `session.close()` + a fresh session —
-  ///      `flutter_edge_ai-1.11.4` core `chat.dart:966-980`). The wipe STAYS
-  ///      (S1): the protocol carries every context APP-side, so nothing
-  ///      depends on native response-retention (which stays unverified).
+  ///      the cycle-45 ruling cited `flutter_edge_ai-1.11.4` core
+  ///      `chat.dart:966-980`; the resolved core 2.5.5 keeps the same
+  ///      shape at `chat.dart:1101-1112`, and the llama connector's
+  ///      override recreates the session the same way —
+  ///      `flutter_edge_ai_llama-0.0.5/lib/src/llama_inference_chat.dart:96`).
+  ///      The wipe STAYS (S1): the protocol carries every context APP-side,
+  ///      so nothing depends on native response-retention (which stays
+  ///      unverified).
   ///   2. PRIME — ONE role-marked priming chunk (`isUser: true`), staged
   ///      FIRST into the fresh session. Its text carries the capped window
   ///      with explicit `User: …` / `Assistant: …` blocks — role-marking is
   ///      app-side TEXT, because the `.task` RAW boundary strips every role
   ///      marker (`extensions.dart:57-69`/`:135-143`).
   ///   3. MESSAGE — the new-message chunk, staged AFTER the priming chunk.
+  ///
+  /// The protocol is UNCHANGED on the llama.cpp/GGUF path (cycle-46 P2 — the
+  /// C45 turn protocol survives the chat-surface migration): the app still
+  /// carries every context APP-side, and the history it replays is
+  /// assembled from the STORED messages only — so no thinking content can
+  /// enter it (the S7 stray-drop happens before an answer is stored).
   ///
   /// The `[System: …]` prefix rides the PRIMING chunk deterministically, once
   /// per send (S4): on `.task` the plugin does NOT inject the system
@@ -588,15 +831,31 @@ class GemmaService extends ChangeNotifier {
 
     try {
       await _stageTurn(chat, history: history, newMessage: newMessage);
+
+      // The generation stall watchdog is armed for the TURN (plan §5.5).
+      _generationStalled = false;
+      _armGenerationWatchdog();
+
       final response = await chat.generateChatResponse();
 
-      if (response is TextResponse) {
-        return response.token;
+      if (_generationStalled) {
+        throw Exception('generation stalled');
       }
+
+      if (response is TextResponse) {
+        // The stray-thinking drop (S7): a think span that rode along with
+        // the answer text is removed HERE — before it can reach the caller,
+        // the UI or the transcript DB.
+        return StrayThinkingFilter.strip(response.token);
+      }
+      // A typed thinking response (or any non-text response) is never an
+      // answer: it is dropped, not surfaced.
       return 'Unable to generate response.';
     } catch (e) {
       if (kDebugMode) debugPrint('[GemmaService] sendMessage failed: $e');
       throw Exception('Offline AI could not respond. Please try again.');
+    } finally {
+      _cancelGenerationWatchdog();
     }
   }
 
@@ -624,19 +883,34 @@ class GemmaService extends ChangeNotifier {
     try {
       await _stageTurn(chat, history: history, newMessage: newMessage);
 
+      // The generation stall watchdog is armed for the TURN (plan §5.5).
+      _generationStalled = false;
+      _armGenerationWatchdog();
+
       final flushTimer = Stopwatch()..start();
       final tokenBuffer = StringBuffer();
+      // The stray-thinking drop (S7): the typed leg (a `ThinkingResponse`
+      // token) and the marker leg (think-span text inside a text token)
+      // are dropped AT THE SEAM — never rendered, never persisted, never
+      // re-sent in the next turn's history.
+      final strayThinking = StrayThinkingFilter();
       await for (final response in chat.generateChatResponseAsync()) {
+        // ANY response — even a dropped one — proves the engine is alive,
+        // so the stall watchdog restarts from here.
+        _armGenerationWatchdog();
+
         if (_isCancelled) {
           break;
         }
-        if (response is TextResponse) {
-          tokenBuffer.write(response.token);
+
+        final visible = strayThinking.addResponse(response);
+        if (visible.isNotEmpty) {
+          tokenBuffer.write(visible);
 
           final shouldFlush =
               flushTimer.elapsed >= _streamFlushInterval ||
               tokenBuffer.length >= _streamFlushChars ||
-              _endsAtNaturalBreak(response.token);
+              _endsAtNaturalBreak(visible);
 
           if (shouldFlush) {
             yield tokenBuffer.toString();
@@ -651,15 +925,31 @@ class GemmaService extends ChangeNotifier {
           break;
         }
       }
+
+      // The end-of-stream tail: text held back because a marker may have
+      // been split across tokens. An UNCLOSED think span is thinking-only
+      // — dropped, never flushed as an answer.
+      final tail = strayThinking.finish();
+      if (tail.isNotEmpty) {
+        tokenBuffer.write(tail);
+      }
       if (tokenBuffer.isNotEmpty && !_isCancelled) {
         yield tokenBuffer.toString();
+        tokenBuffer.clear();
+      }
+
+      if (_generationStalled) {
+        throw Exception('generation stalled');
       }
     } catch (e) {
-      if (_isCancelled) {
+      // A user stop is silent; a STALL is a failure the caller must see.
+      if (_isCancelled && !_generationStalled) {
         return;
       }
       if (kDebugMode) debugPrint('[GemmaService] sendMessageStream failed: $e');
       throw Exception('Offline AI could not respond. Please try again.');
+    } finally {
+      _cancelGenerationWatchdog();
     }
   }
 

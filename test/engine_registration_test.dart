@@ -1,20 +1,20 @@
 import 'dart:io';
 
 import 'package:flutter_edge_ai/flutter_edge_ai.dart';
-import 'package:flutter_edge_ai_litertlm/flutter_edge_ai_litertlm.dart';
+import 'package:flutter_edge_ai_llama/flutter_edge_ai_llama.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('LiteRT-LM engine registration (cycle-38 P2)', () {
-    test('the engine claims .litertlm specs and refuses .task specs', () {
-      const engine = LiteRtLmEngine();
+  group('llama.cpp engine registration (C46 P2)', () {
+    test('the engine claims .gguf specs and refuses .task specs', () {
+      const engine = LlamaEngineProvider();
       expect(
         engine.canHandle(
           InferenceModelSpec(
-            name: 'gemma-4-E2B-it.litertlm',
-            modelSource: FileSource('/tmp/gemma-4-E2B-it.litertlm'),
-            modelType: ModelType.gemma4,
-            fileType: ModelFileType.litertlm,
+            name: 'MiniCPM5-2B-Q4_K_M.gguf',
+            modelSource: FileSource('/tmp/MiniCPM5-2B-Q4_K_M.gguf'),
+            modelType: ModelType.llama,
+            fileType: ModelFileType.gguf,
           ),
         ),
         isTrue,
@@ -32,33 +32,31 @@ void main() {
       );
     });
 
-    test('main.dart registers LiteRT-LM alongside MediaPipe', () {
+    test('main.dart registers the llama engine alongside MediaPipe', () {
       final source = File('lib/main.dart').readAsStringSync();
       expect(
         source,
         contains(
-          "import 'package:flutter_edge_ai_litertlm/flutter_edge_ai_litertlm.dart';",
+          "import 'package:flutter_edge_ai_llama/flutter_edge_ai_llama.dart';",
         ),
       );
       expect(
         source,
         contains(
-          'inferenceEngines: const [MediaPipeEngine(), LiteRtLmEngine()]',
+          'inferenceEngines: const [MediaPipeEngine(), LlamaEngineProvider()]',
         ),
       );
     });
 
-    test('the pubspec pins litertlm 1.8.6 exactly (core pairing)', () {
+    test('the pubspec carries the core-2.x cascade and no litertlm', () {
       final source = File('pubspec.yaml').readAsStringSync();
-      expect(source, contains('flutter_edge_ai_litertlm: 1.8.6'));
-      expect(source, isNot(contains('flutter_edge_ai_litertlm: ^')));
-      // The core + mediapipe pins stay untouched (litertlm 1.8.7+ demands
-      // core ^2.x).
-      expect(source, contains('flutter_edge_ai: ^1.11.4'));
-      expect(source, contains('flutter_edge_ai_mediapipe: ^1.0.8'));
+      expect(source, contains('flutter_edge_ai: ^2.5.5'));
+      expect(source, contains('flutter_edge_ai_mediapipe: ^1.2.5'));
+      expect(source, contains('flutter_edge_ai_llama: ^0.0.5'));
+      expect(source, isNot(contains('flutter_edge_ai_litertlm')));
     });
 
-    test('the lockfile keeps the core + mediapipe pins unchanged', () {
+    test('the lockfile resolves the cascade', () {
       final lock = File('pubspec.lock').readAsStringSync();
       String lockedVersion(String pkg) {
         final match = RegExp(
@@ -67,9 +65,10 @@ void main() {
         return match?.group(1) ?? '';
       }
 
-      expect(lockedVersion('flutter_edge_ai'), '1.11.4');
-      expect(lockedVersion('flutter_edge_ai_mediapipe'), '1.0.8');
-      expect(lockedVersion('flutter_edge_ai_litertlm'), '1.8.6');
+      expect(lockedVersion('flutter_edge_ai'), '2.5.5');
+      expect(lockedVersion('flutter_edge_ai_mediapipe'), '1.2.5');
+      expect(lockedVersion('flutter_edge_ai_llama'), '0.0.5');
+      expect(lock, isNot(contains('flutter_edge_ai_litertlm')));
     });
   });
 }

@@ -9,7 +9,7 @@ android {
     namespace = "com.agenta.AgentA"
     compileSdk = flutter.compileSdkVersion
     // Pinned to preinstalled runner NDK (actions/runner-images #14745 removed NDK 28).
-    ndkVersion = "27.3.13750724"
+    ndkVersion = "28.2.13676358"
 
     // C4: release signing via android/key.properties (never committed;
     // values come from CI secrets). Debug builds keep the debug key.
@@ -30,10 +30,32 @@ android {
 
     defaultConfig {
         applicationId = "com.agenta.AgentA"
-        minSdk = 26
+        // C46 P2 (F10): the llama.cpp connector's conservative deployment floor
+        // is Android API 28 ("The example uses API 28 as a conservative floor;
+        // older Android versions remain unqualified" — the connector README).
+        // The app was at 26 — BELOW the floor — so it is raised to 28.
+        //
+        // The honest gate: with minSdk 28 the OS itself refuses to install
+        // the app on an API-26/27 device, so such a device NEVER reaches the
+        // engine and never fails a silent load. There is no in-app clause to
+        // reach — the gate is the install gate, and it is explicit.
+        minSdk = 28
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // C46 P2: llama.cpp supplies arm64-v8a + x86_64 ONLY — the 32-bit
+        // ABIs (armeabi-v7a, x86) must be excluded, or the fat APK carries a
+        // runtime the app never uses (the connector's fat-APK rule). The
+        // inherited filters are cleared FIRST so the set is exactly these two
+        // ABIs (a leftover filter would silently ship an unsupported ABI).
+        // Note: with `--split-per-abi` Flutter owns the filters instead
+        // (`--target-platform android-arm64,android-x64`) — combining the two
+        // is an Android Gradle Plugin conflict (the connector README).
+        ndk {
+            abiFilters.clear()
+            abiFilters 'arm64-v8a', 'x86_64'
+        }
     }
 
     signingConfigs {

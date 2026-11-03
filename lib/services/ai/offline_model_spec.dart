@@ -1,9 +1,10 @@
-// The offline-model selection table (cycle-42 P2, amended by P2b).
+// The offline-model selection table (cycle-42 P2, amended by P2b; the
+// ONE asset re-pointed to the C46 GGUF spec).
 //
-// ONE source of truth for WHICH model a device runs. The table is the
-// authoritative implementation of `contracts/offline-model-qwen15b.yaml`
-// §3 — the ONE-class selection table the lived-evidence amendment recorded
-// (plan §4.9: the user's directive "make the qwen the main model offline").
+// ONE source of truth for WHICH model a device runs. The ONE asset's
+// figures are the authoritative implementation of
+// `contracts/offline-model-minicpm5.yaml` §1-§2 — the owner's directive
+// pick recorded at cycle-46 P1 (plan §5.1).
 //
 // ONE key, read from the EXISTING capability seam
 // (`device_capabilities.dart`):
@@ -38,8 +39,9 @@
 // constraint satisfied by construction.
 //
 // The spec table is also the ONLY place the identity string and the asset
-// URL are written: the identity sites (contract §2) reference the resolved
-// spec, so the DAO row and the plugin identity can never drift.
+// URL are written: the identity sites (contract §4 identity_semantics)
+// reference the resolved spec, so the DAO row and the plugin identity can
+// never drift.
 import 'package:flutter/foundation.dart';
 import 'package:flutter_edge_ai/flutter_edge_ai.dart';
 
@@ -73,7 +75,8 @@ class OfflineModelSpec {
   /// A stable id for the asset (used in logs and tests).
   final String id;
 
-  /// The model identity the DB rows and the plugin carry (contract §2).
+  /// The model identity the DB rows and the plugin carry (contract §4
+  /// identity_semantics).
   final String identity;
 
   /// The install URL of the asset.
@@ -85,7 +88,14 @@ class OfflineModelSpec {
   /// The file type that selects the engine — never inferred from the URL.
   final ModelFileType fileType;
 
-  /// The size chip the download gate renders for this asset (contract §6).
+  /// The exact download size the install chain's size-integrity check
+  /// verifies (contract §1 `expected_size`, §2 install_shape).
+  ///
+  /// Passed as `expectedSize:` on the install call, so a corrupted or
+  /// truncated transfer dies at install, never at load.
+  final int expectedSize;
+
+  /// The size chip the download gate renders for this asset (contract §9).
   final String sizeChip;
 
   /// The system instruction the offline chat runs with.
@@ -108,6 +118,7 @@ class OfflineModelSpec {
     required this.url,
     required this.modelType,
     required this.fileType,
+    required this.expectedSize,
     required this.sizeChip,
     required this.systemInstruction,
   });
@@ -154,24 +165,26 @@ class OfflineModelSpecTable {
 
   // §1 THE TABLE — the ONE asset.
   //
-  // Every figure is verbatim from `contracts/offline-model-qwen15b.yaml`
-  // §1-§2 (v1.1.0): install URL, size 1,598,556,720 B ≈ 1.60 GB, identity
-  // `qwen2.5-1.5b-it`, `ModelType.qwen` + `ModelFileType.task` on the
-  // EXISTING MediaPipeEngine.
+  // Every figure is verbatim from `contracts/offline-model-minicpm5.yaml`
+  // §1-§2 (v1.0.0): install URL, size 1,561,318,368 B ≈ 1.56 GB, identity
+  // `minicpm5-2b-q4km`, `ModelType.llama` + `ModelFileType.gguf` on the
+  // llama.cpp engine.
 
-  /// Qwen 2.5 1.5B Instruct via the MediaPipe `.task` engine — the ONE
-  /// selection class (every device with at least 4 GB of total memory).
+  /// MiniCPM5-2B Q4_K_M GGUF via the llama.cpp engine — the ONE selection
+  /// class.
   ///
-  /// The q8 ekv4096 build is mandatory: its 4096-token KV ceiling covers the
-  /// app's 2048-token context window (the ekv1280 build would clamp it).
-  /// Ungated, 1,598,556,720 B (≈1.60 GB), no token needed.
-  static const OfflineModelSpec qwen15b = OfflineModelSpec(
-    id: 'qwen2.5-1.5b',
-    identity: 'qwen2.5-1.5b-it',
+  /// The GGUF embeds its own chat template (contract §1 embedded_template),
+  /// so the file — not `ModelType.llama`'s turn markers — drives prompting.
+  /// Ungated (no token required), 1,561,318,368 B (≈1.56 GB, rendered as the
+  /// ~1.6GB chip), with the install's `expectedSize` integrity check.
+  static const OfflineModelSpec minicpm5 = OfflineModelSpec(
+    id: 'minicpm5-2b-q4km',
+    identity: 'minicpm5-2b-q4km',
     url:
-        'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task',
-    modelType: ModelType.qwen,
-    fileType: ModelFileType.task,
+        'https://huggingface.co/openbmb/MiniCPM5-2B-GGUF/resolve/main/MiniCPM5-2B-Q4_K_M.gguf',
+    modelType: ModelType.llama,
+    fileType: ModelFileType.gguf,
+    expectedSize: 1561318368,
     sizeChip: 'Model size: ~1.6GB',
     // The SHORT system instruction (cycle-44 P2, branch A — the rider):
     // the ~700-char rule-list is retired (a small local model drowns in
@@ -226,7 +239,7 @@ class OfflineModelSpecTable {
   static OfflineModelSpec? specFor(OfflineModelClass deviceClass) {
     switch (deviceClass) {
       case OfflineModelClass.singleQwen:
-        return qwen15b;
+        return minicpm5;
       case OfflineModelClass.messageOnly:
         return null;
     }
@@ -280,18 +293,19 @@ class OfflineModelSpecTable {
   /// message-only class never loads a model, so the instruction is only
   /// ever read on the model path — a caller that has no model never needs
   /// it.
-  static String get systemInstruction => qwen15b.systemInstruction;
+  static String get systemInstruction => minicpm5.systemInstruction;
 
   //
   // §4 THE IDENTITY — what the DB rows carry.
   //
 
-  /// The app's offline-model identity — APP-WIDE (contract §3).
+  /// The app's offline-model identity — APP-WIDE (contract §4
+  /// identity_semantics).
   ///
   /// The identity is the app's offline-model NAME, not the installed asset:
   /// the message-only row never installs anything, yet its DB rows still
-  /// record the app's identity (`qwen2.5-1.5b-it`). The identity string is
-  /// written HERE and NOWHERE else in `lib/` (contract §2
-  /// identity_invariant).
-  static String get appIdentity => qwen15b.identity;
+  /// record the app's identity (`minicpm5-2b-q4km`). The identity string is
+  /// written HERE and NOWHERE else in `lib/` (contract §4
+  /// identity_semantics).
+  static String get appIdentity => minicpm5.identity;
 }

@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_edge_ai/flutter_edge_ai.dart';
 import 'package:flutter_edge_ai_mediapipe/flutter_edge_ai_mediapipe.dart';
-import 'package:flutter_edge_ai_litertlm/flutter_edge_ai_litertlm.dart';
+import 'package:flutter_edge_ai_llama/flutter_edge_ai_llama.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'theme/app_theme.dart';
@@ -168,18 +168,26 @@ class _AppLoaderState extends State<AppLoader> {
     }
 
     try {
-      // flutter_edge_ai 1.x: core registers NO engine by default — every
-      // engine must be registered explicitly. MediaPipe (.task) runs the
-      // current Qwen bundle; LiteRT-LM (.litertlm) stays registered so the
-      // stranded Gemma 4 E2B asset's uninstall id still resolves (migration
-      // v4 — E2B left model selection, plan §4.9).
+      // flutter_edge_ai 2.x: core registers NO engine by default — every
+      // engine must be registered explicitly.
+      //
+      // C46 P2 (plan §5.2, contract §2 engine_registration): the llama.cpp
+      // engine is IN (it claims the `.gguf` spec — the MiniCPM5-2B asset),
+      // MediaPipe STAYS (it claims the `.task` spec — the ladder rung (b)
+      // revert target, and the old-asset uninstall machinery it carries),
+      // and LiteRT-LM is OUT (no `.litertlm` model is selectable any more;
+      // the connector docs mandate its omission — "Core itself bundles no
+      // inference runtime"). The LiteRT-LM registration used to exist so
+      // the stranded E2B asset's uninstall id would resolve; the uninstall
+      // id is a FILENAME, so the v4 sweep still resolves it without the
+      // engine (migration v4 — E2B left model selection, plan §4.9).
       // Retry budget: 3. Each attempt can run up to the 60-min install
       // ceiling in ModelDownloadService (the 3-min stall watchdog covers
       // the silent case), so a larger budget could never complete within
       // the timeout — 3 keeps the worst case inside a plausible session
       // while transient errors still get retried.
       await FlutterEdgeAi.initialize(
-        inferenceEngines: const [MediaPipeEngine(), LiteRtLmEngine()],
+        inferenceEngines: const [MediaPipeEngine(), LlamaEngineProvider()],
         maxDownloadRetries: 3,
       );
     } catch (e) {

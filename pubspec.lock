@@ -265,6 +265,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.2.6"
+  dinja:
+    dependency: transitive
+    description:
+      name: dinja
+      sha256: a3addbe07ebb562c062256f7c644ac498ab2ab3d97a85d9f95aafac7f53fa808
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.3.2"
   email_validator:
     dependency: transitive
     description:
@@ -330,26 +338,26 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_edge_ai
-      sha256: e2f59ff31072094285ddede81ec0ca799b88afceff01bdddf1149ef54cb86927
+      sha256: e768469f5bc6e59e40e9cc172327d2cbca9abf6b23cb4b154b7deebac1ff6c57
       url: "https://pub.dev"
     source: hosted
-    version: "1.11.4"
-  flutter_edge_ai_litertlm:
+    version: "2.5.5"
+  flutter_edge_ai_llama:
     dependency: "direct main"
     description:
-      name: flutter_edge_ai_litertlm
-      sha256: "387ec7e5c005ffc0bb6a188508f4614d73a3a3e41eb72570b8ead2b106e216d7"
+      name: flutter_edge_ai_llama
+      sha256: "68f0a664686996c9614a9c785b63e8c0072fa07f7f5c446edfdba6451f8b0e87"
       url: "https://pub.dev"
     source: hosted
-    version: "1.8.6"
+    version: "0.0.5"
   flutter_edge_ai_mediapipe:
     dependency: "direct main"
     description:
       name: flutter_edge_ai_mediapipe
-      sha256: "286cf0949bb240a6ffdc0d1216689294283b2671750f92f83e176efb3518d789"
+      sha256: "5e8c4505402659298c57365ef5be33e17788e20333a7b86d56a176cb0eca3a63"
       url: "https://pub.dev"
     source: hosted
-    version: "1.0.8"
+    version: "1.2.5"
   flutter_launcher_icons:
     dependency: "direct dev"
     description:
@@ -680,6 +688,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.1.0"
+  llamadart:
+    dependency: transitive
+    description:
+      name: llamadart
+      sha256: "5d0d5f06d1a38cd6252f3b622402862c79685f7ab5327f5b000c5ff38b62c87c"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.15.1"
   local_auth:
     dependency: "direct main"
     description:
