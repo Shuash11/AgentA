@@ -215,13 +215,22 @@ class GemmaService extends ChangeNotifier {
 
   static const Duration _streamFlushInterval = Duration(milliseconds: 45);
   static const int _streamFlushChars = 8;
-  static const int _maxTokens = 2048;
 
-  /// The output cap of EVERY send (cycle-46 P2 — plan §5.5, contract §2
-  /// `load_shape`): at most 2048 GENERATED tokens per turn. On the llama
-  /// path the thinking text would count toward it too — the app pins
+  /// The ACTIVE context size at load (cycle-46 speed ruling, owner-directed):
+  /// 1500, chosen between the two officially benchmarked points of the
+  /// shipped `q8_ekv4096.task` (litert-community model card, S25 Ultra:
+  /// 4096 → 26.1 t/s decode / 2216 MB peak; 1280 → 34.3 t/s / 1997 MB).
+  /// 1500 keeps most of the decode gain (~+25-30%) and the RAM relief while
+  /// leaving generous message headroom. The KV is built for 4096; this loads
+  /// a smaller active window, which is why the speed scales.
+  static const int _maxTokens = 1500;
+
+  /// The output cap of EVERY send: at most 1200 GENERATED tokens per turn,
+  /// sized so prompt + answer always fit the 1500 active context (the
+  /// stateless send stages only the new message, so prompts are small). On
+  /// the llama path thinking would count toward it too — the app pins
   /// thinking off, so the cap belongs to the answer.
-  static const int _maxOutputTokens = 2048;
+  static const int _maxOutputTokens = 1200;
 
   /// The generation stall watchdog window: 3 minutes with NO token at all.
   ///

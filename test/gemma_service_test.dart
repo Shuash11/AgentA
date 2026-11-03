@@ -112,9 +112,11 @@ void main() {
       final source = File(
         'lib/services/ai/gemma_service.dart',
       ).readAsStringSync();
-      // Load shape unchanged by the engine swap: 2048-token context window
-      // on the CPU backend (the LiteRT-LM engine clamps to its KV floor).
-      expect(source, contains('static const int _maxTokens = 2048;'));
+      // Load shape (cycle-46 speed ruling): the 1500-token ACTIVE context
+      // window on the CPU backend (chosen between the two officially
+      // benchmarked points of the shipped q8_ekv4096.task — 4096 → 26.1 t/s,
+      // 1280 → 34.3 t/s; 1500 keeps most of the gain with message headroom).
+      expect(source, contains('static const int _maxTokens = 1500;'));
       expect(source, contains('maxTokens: _maxTokens'));
       expect(source, contains('preferredBackend: PreferredBackend.cpu'));
       // Identity coherence across the files that carry it (cycle-42 P2b: the
