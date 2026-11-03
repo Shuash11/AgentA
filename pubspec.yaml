@@ -1,7 +1,7 @@
-name: aiproject
+﻿name: aiproject
 description: "AgentA"
 publish_to: 'none'
-version: 1.10.2+1
+version: 1.10.3+1
 
 environment:
   sdk: ^3.12.0
@@ -18,13 +18,13 @@ dependencies:
 
   http: ^1.2.1
 
-  # C46 P2 (plan §5.2, contract §2 cascade): the core-2.x cascade.
-  #   flutter_edge_ai ^2.5.5      — the core the llama connector requires (^2.5.0)
-  #   flutter_edge_ai_llama ^0.0.5 — the llama.cpp engine connector (pins llamadart 0.15.1)
-  #   flutter_edge_ai_mediapipe ^1.2.5 — RETAINED (core ^2.3.0-compatible); keeps the
+  # C46 P2 (plan Â§5.2, contract Â§2 cascade): the core-2.x cascade.
+  #   flutter_edge_ai ^2.5.5      â€” the core the llama connector requires (^2.5.0)
+  #   flutter_edge_ai_llama ^0.0.5 â€” the llama.cpp engine connector (pins llamadart 0.15.1)
+  #   flutter_edge_ai_mediapipe ^1.2.5 â€” RETAINED (core ^2.3.0-compatible); keeps the
   #                                   old-asset uninstall machinery and the .task ladder honest
-  #   the LiteRT-LM connector — REMOVED (no .litertlm model is selectable any more; the
-  #                             connector docs mandate its omission — "Core itself bundles
+  #   the LiteRT-LM connector â€” REMOVED (no .litertlm model is selectable any more; the
+  #                             connector docs mandate its omission â€” "Core itself bundles
   #                             no inference runtime")
   flutter_edge_ai: ^2.5.5
   flutter_edge_ai_mediapipe: ^1.2.5
@@ -45,7 +45,7 @@ dependencies:
 
   # Staged rollout complete: v1.2.4 shipped ^10 (9->10 auto-migration ran on
   # first access). v11 keeps the v10 default ciphers, so v10 data survives;
-  # direct 9->11 remains documented data-loss — detected at boot by the
+  # direct 9->11 remains documented data-loss â€” detected at boot by the
   # checkUpgradeStatus() hook (lib/main.dart) and degraded to
   # re-login/re-enroll, never silent. See plans/cycle-22.
   flutter_secure_storage: ^11.2.0
@@ -53,7 +53,7 @@ dependencies:
   crypto: ^3.0.6
 
   # Argon2id password hashing (F6/C5). Pure Dart, resolves at the same 4.0.0
-  # already in the lockfile via dart_jsonwebtoken (supabase chain) — promoted
+  # already in the lockfile via dart_jsonwebtoken (supabase chain) â€” promoted
   # to a direct dependency so the version is under our control.
   pointycastle: ^4.0.0
 
@@ -66,14 +66,14 @@ dependencies:
   local_auth: ^3.0.2
   supabase_flutter: ^2.17.2
 
-# C46 P2 (plan §5.2, contract §2 build_hook): the llamadart build hook.
+# C46 P2 (plan Â§5.2, contract Â§2 build_hook): the llamadart build hook.
 #
-# The llama.cpp runtime is NOT bundled by the app's own dependency graph —
+# The llama.cpp runtime is NOT bundled by the app's own dependency graph â€”
 # llamadart's build hook resolves and downloads its pinned native runtime
 # (leehack/llamadart-native @ the pin llamadart 0.15.1 carries) when this
 # selection names `llama_cpp`. Without the selection llamadart would also
 # build its LiteRT-LM runtime, which the app does not ship (the LiteRT-LM
-# connector is gone — contract §2 litertlm_removal).
+# connector is gone â€” contract Â§2 litertlm_removal).
 #
 # The block lives in the APPLICATION's pubspec: dependency settings do not
 # propagate, so only the app's own pubspec can select the runtime.
