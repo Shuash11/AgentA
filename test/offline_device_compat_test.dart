@@ -1119,15 +1119,15 @@ void main() {
       );
       expect(
         OfflineModelSpecTable.specFor(OfflineModelClass.singleQwen),
-        OfflineModelSpecTable.minicpm5,
+        OfflineModelSpecTable.qwen15b,
       );
       final spec = OfflineModelSpecTable.specFor(OfflineModelClass.singleQwen)!;
-      expect(spec.identity, 'minicpm5-2b-q4km');
-      expect(spec.modelType, ModelType.llama);
-      expect(spec.fileType, ModelFileType.gguf);
+      expect(spec.identity, 'qwen2.5-1.5b-it');
+      expect(spec.modelType, ModelType.qwen);
+      expect(spec.fileType, ModelFileType.task);
       expect(
         spec.url,
-        'https://huggingface.co/openbmb/MiniCPM5-2B-GGUF/resolve/main/MiniCPM5-2B-Q4_K_M.gguf',
+        'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task',
       );
       expect(spec.sizeChip, 'Model size: ~1.6GB');
     });
@@ -1159,7 +1159,7 @@ void main() {
         // The SAME spec — nothing re-specified.
         expect(
           OfflineModelSpecTable.specFor(OfflineModelClass.singleQwen),
-          OfflineModelSpecTable.minicpm5,
+          OfflineModelSpecTable.qwen15b,
         );
       },
     );
@@ -1251,11 +1251,11 @@ void main() {
         // selects a different model (below-floor + ack ⇒ eligible).
         final afterAck = await OfflineModelSpecTable.resolve();
         expect(afterAck.deviceClass, OfflineModelClass.singleQwen);
-        expect(afterAck.spec, OfflineModelSpecTable.minicpm5);
-        expect(afterAck.spec!.identity, 'minicpm5-2b-q4km');
-        expect(afterAck.spec!.modelType, ModelType.llama);
-        expect(afterAck.spec!.fileType, ModelFileType.gguf);
-        expect(afterAck.spec!.expectedSize, 1561318368);
+        expect(afterAck.spec, OfflineModelSpecTable.qwen15b);
+        expect(afterAck.spec!.identity, 'qwen2.5-1.5b-it');
+        expect(afterAck.spec!.modelType, ModelType.qwen);
+        expect(afterAck.spec!.fileType, ModelFileType.task);
+        expect(afterAck.spec!.expectedSize, 1598556720);
 
         // The GGUF installs: the install chain writes the GGUF identity.
         SharedPreferences.setMockInitialValues({
@@ -1275,7 +1275,7 @@ void main() {
         expect(download.status, ModelStatus.ready);
         final row = await db.query('offline_model_status');
         expect(row.first['status'], 'ready');
-        expect(row.first['model_type'], 'minicpm5-2b-q4km');
+        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
       },
     );
 
@@ -1313,7 +1313,7 @@ void main() {
         DeviceCapabilities.ramOverrideAckOverrideForTest = () async => true;
         final acked = await OfflineModelSpecTable.resolve();
         expect(acked.deviceClass, OfflineModelClass.singleQwen);
-        expect(acked.spec, OfflineModelSpecTable.minicpm5);
+        expect(acked.spec, OfflineModelSpecTable.qwen15b);
         expect(acked.hasModel, isTrue);
         expect(acked.isBelowFloor, isTrue);
 
@@ -1372,14 +1372,14 @@ void main() {
     });
 
     test('the identity is app-wide — the message-only row carries it too', () {
-      expect(OfflineModelSpecTable.appIdentity, 'minicpm5-2b-q4km');
-      expect(OfflineModelSpecTable.minicpm5.identity, 'minicpm5-2b-q4km');
+      expect(OfflineModelSpecTable.appIdentity, 'qwen2.5-1.5b-it');
+      expect(OfflineModelSpecTable.qwen15b.identity, 'qwen2.5-1.5b-it');
       // The identity string is written ONCE in the whole app — the spec
       // table (contract §2 identity_invariant).
       final table = File(
         'lib/services/ai/offline_model_spec.dart',
       ).readAsStringSync();
-      expect("identity: 'minicpm5-2b-q4km'".allMatches(table).length, 1);
+      expect("identity: 'qwen2.5-1.5b-it'".allMatches(table).length, 1);
     });
 
     test(
@@ -1409,7 +1409,7 @@ void main() {
           6 * 1024 * 1024 * 1024;
       final arm64 = await OfflineModelSpecTable.resolve();
       expect(arm64.deviceClass, OfflineModelClass.singleQwen);
-      expect(arm64.spec, OfflineModelSpecTable.minicpm5);
+      expect(arm64.spec, OfflineModelSpecTable.qwen15b);
       expect(arm64.hasModel, isTrue);
       expect(arm64.isMessageOnly, isFalse);
 

@@ -173,24 +173,41 @@ void main() {
         modelType: OfflineModelSpecTable.appIdentity,
       );
       var attempts = 0;
+      // Under the lazy startup (cycle-46 RAM fix) the failure surface comes
+      // from the startup VERIFY (the plugin is absent here), and the retry
+      // performs the FIRST real load — which succeeds.
       gemmaService.chatOverrideForTest = () async {
         attempts++;
-        if (attempts == 1) throw Exception('engine init');
         return _readyChat();
       };
 
       await tester.pumpWidget(buildGate());
       await _pumpUntilFound(tester, find.text('Failed to load offline model'));
-      expect(attempts, 1);
+      // The STARTUP path verifies only (cycle-46 RAM fix): no engine/chat
+      // attempt has run yet — the weights load on first use.
+      expect(attempts, 0);
 
+      // The RETRY performs the real load and recovers without a restart:
+      // the app is shown again. The idle-release override is set BEFORE the
+      // load so the armed timer uses the short window.
+      gemmaService.idleReleaseTimeoutOverrideForTest = const Duration(
+        minutes: 1,
+      );
       await tester.tap(find.text('Retry'));
       await tester.pump();
 
-      // The retry recovers without a restart: the app is shown again.
+      // The RETRY performs the real load and recovers without a restart:
+      // the app is shown again.
       await _pumpUntilFound(tester, find.byKey(_appChildKey));
-      expect(attempts, 2);
+      expect(attempts, 1);
       expect(gemmaService.isReady, isTrue);
       expect(find.byType(DownloadPromptScreen), findsNothing);
+
+      // Settle the idle-release timer (cycle-46 RAM fix): pump past the
+      // window so the test ends with no pending timers — and prove the
+      // release actually fires (the model leaves RAM).
+      await tester.pump(const Duration(minutes: 2));
+      expect(gemmaService.isReady, isFalse);
     });
 
     testWidgets(

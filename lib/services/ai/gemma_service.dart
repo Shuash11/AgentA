@@ -35,6 +35,11 @@ enum OfflineModelState {
   /// The model is loaded and usable.
   loaded,
 
+  /// Installed and identity-verified, but NOT in RAM (cycle-46 RAM fix):
+  /// the app loads on first use and releases after the chat goes idle.
+  /// A send via [GemmaService.ensureReady] transparently loads it.
+  readyIdle,
+
   /// The last load attempt failed although the asset is installed — a retry
   /// can recover it (cycle-38 P6: the failed-load dead-end).
   loadFailed,
@@ -193,6 +198,18 @@ class GemmaService extends ChangeNotifier {
   /// on every token the engine emits. Null when no generation is in flight.
   Timer? _generationWatchdog;
 
+  /// Idle-release (cycle-46 RAM fix): how long the loaded model stays in RAM
+  /// after the last send before the engine is disposed and the weights leave
+  /// memory. The next send reloads via [ensureReady].
+  static const Duration _idleReleaseTimeout = Duration(minutes: 5);
+
+  /// The pending idle-release timer. Null when no release is scheduled.
+  Timer? _idleReleaseTimer;
+
+  /// Overrides the idle-release window (test-only).
+  @visibleForTesting
+  Duration? idleReleaseTimeoutOverrideForTest;
+
   /// Set when the watchdog fires: the turn is stopped AND the failure is
   /// surfaced — a stalled generation is never a silently truncated answer.
   bool _generationStalled = false;
@@ -324,7 +341,69 @@ class GemmaService extends ChangeNotifier {
   @override
   void dispose() {
     _cancelGenerationWatchdog();
+    _cancelIdleRelease();
+    final model = _model;
+    _model = null;
+    _chat = null;
+    if (model != null) {
+      unawaited(
+        model.close().catchError((Object e) {
+          if (kDebugMode)
+            debugPrint('[GemmaService] dispose release failed: $e');
+        }),
+      );
+    }
     super.dispose();
+  }
+
+  /// Arms (or re-arms) the idle-release timer (cycle-46 RAM fix).
+  void _armIdleRelease() {
+    _cancelIdleRelease();
+    _idleReleaseTimer = Timer(
+      idleReleaseTimeoutOverrideForTest ?? _idleReleaseTimeout,
+      _onIdleRelease,
+    );
+  }
+
+  void _cancelIdleRelease() {
+    _idleReleaseTimer?.cancel();
+    _idleReleaseTimer = null;
+  }
+
+  /// The idle window closed with no send: dispose the engine so the weights
+  /// and context buffers leave RAM. A live turn re-arms instead — its own
+  /// finally re-arms the timer when it settles.
+  Future<void> _onIdleRelease() async {
+    _idleReleaseTimer = null;
+    if (_generationWatchdog != null) {
+      _armIdleRelease();
+      return;
+    }
+    await releaseModel();
+  }
+
+  /// Releases the loaded model (cycle-46 RAM fix): disposes the engine —
+  /// the native weights and context buffers leave RAM — and settles in
+  /// [OfflineModelState.readyIdle]. The installed asset and its DAO row are
+  /// untouched; the next send reloads via [ensureReady].
+  Future<void> releaseModel() async {
+    _cancelIdleRelease();
+    final model = _model;
+    _model = null;
+    _chat = null;
+    if (model != null) {
+      try {
+        await model.close();
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[GemmaService] model release failed: $e');
+        }
+      }
+    }
+    if (_state == OfflineModelState.loaded) {
+      _state = OfflineModelState.readyIdle;
+      notifyListeners();
+    }
   }
 
   /// Wipes the session so the next turn starts clean (cycle-45 Phase 1, S5).
@@ -453,37 +532,74 @@ class GemmaService extends ChangeNotifier {
       _state = OfflineModelState.loaded;
       _lastError = null;
       _lastFailureClass = null;
+      // The idle release arms here too (cycle-46 RAM fix): a load without a
+      // following send (the gate's eager path) does not hold RAM forever.
+      _armIdleRelease();
       notifyListeners();
     } catch (e) {
-      _model = null;
-      _chat = null;
-      final classification = _classifyLoadFailure(e, rehydrationFailed);
-      final failure = await _resolveFailureState(classification);
-      _state = failure;
-      _lastFailureClass = classification.failureClass;
-      _lastError = _friendlyCopyFor(classification, failure);
-      // Record the failure so the broken-but-installed state survives a
-      // restart and routes to RETRY LOAD. The DAO write must never mask the
-      // original failure, so it is guarded separately.
-      try {
-        await _dao.setModelError(_lastError);
-        // The class is written after the error row: that write replaces the
-        // whole row, so a class stored before it would be dropped.
-        await _dao.setFailureClass(_lastFailureClass);
-      } catch (daoError) {
-        if (kDebugMode) {
-          debugPrint('[GemmaService] setModelError failed: $daoError');
-        }
-      }
-      // S4 evidence: the raw exception CLASS stays in the debug log (the
-      // device log decides "state defect" vs "engine-native failure"). It
-      // never reaches the UI copy.
+      await _settleLoadFailure(e, rehydrationFailed);
+      rethrow;
+    }
+  }
+
+  /// The shared failure settle (classification → state → DAO row): both the
+  /// RAM load ([_performLoad]) and the no-RAM verify ([verifyInstalled])
+  /// land here.
+  Future<void> _settleLoadFailure(Object e, bool rehydrationFailed) async {
+    _model = null;
+    _chat = null;
+    final classification = _classifyLoadFailure(e, rehydrationFailed);
+    final failure = await _resolveFailureState(classification);
+    _state = failure;
+    _lastFailureClass = classification.failureClass;
+    _lastError = _friendlyCopyFor(classification, failure);
+    // Record the failure so the broken-but-installed state survives a
+    // restart and routes to RETRY LOAD. The DAO write must never mask the
+    // original failure, so it is guarded separately.
+    try {
+      await _dao.setModelError(_lastError);
+      // The class is written after the error row: that write replaces the
+      // whole row, so a class stored before it would be dropped.
+      await _dao.setFailureClass(_lastFailureClass);
+    } catch (daoError) {
       if (kDebugMode) {
-        debugPrint(
-          '[GemmaService] loadInstalled failed: $e (type: ${e.runtimeType})',
-        );
+        debugPrint('[GemmaService] setModelError failed: $daoError');
       }
+    }
+    // S4 evidence: the raw exception CLASS stays in the debug log (the
+    // device log decides "state defect" vs "engine-native failure"). It
+    // never reaches the UI copy.
+    if (kDebugMode) {
+      debugPrint(
+        '[GemmaService] load/verify failed: $e (type: ${e.runtimeType})',
+      );
+    }
+    notifyListeners();
+  }
+
+  /// Verifies the installed asset WITHOUT loading it into RAM (cycle-46 RAM
+  /// fix): the cycle-44 identity repair runs (cheap — no engine), the DAO row
+  /// settles at ready, and the service lands in [OfflineModelState.readyIdle].
+  /// The first send loads the weights via [ensureReady]. A failed repair is a
+  /// FAILED verify — it settles exactly like a failed load, so the gate's
+  /// retry surface keeps covering a broken-but-installed asset.
+  Future<void> verifyInstalled() async {
+    if (_state == OfflineModelState.loaded ||
+        _state == OfflineModelState.readyIdle) {
+      return;
+    }
+    try {
+      final rehydrated = await ModelDownloadService.ensureModelActive();
+      if (!rehydrated) {
+        throw Exception('model rehydration failed');
+      }
+      await _dao.setModelReady(modelType: OfflineModelSpecTable.appIdentity);
+      _state = OfflineModelState.readyIdle;
+      _lastError = null;
+      _lastFailureClass = null;
       notifyListeners();
+    } catch (e) {
+      await _settleLoadFailure(e, true);
       rethrow;
     }
   }
@@ -856,6 +972,7 @@ class GemmaService extends ChangeNotifier {
       throw Exception('Offline AI could not respond. Please try again.');
     } finally {
       _cancelGenerationWatchdog();
+      _armIdleRelease();
     }
   }
 
@@ -950,6 +1067,7 @@ class GemmaService extends ChangeNotifier {
       throw Exception('Offline AI could not respond. Please try again.');
     } finally {
       _cancelGenerationWatchdog();
+      _armIdleRelease();
     }
   }
 

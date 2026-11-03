@@ -919,8 +919,8 @@ class _FakeTypedChat extends InferenceChat {
     : super(
         sessionCreator: () async => _FakeSession(),
         maxTokens: 2048,
-        modelType: ModelType.llama,
-        fileType: ModelFileType.gguf,
+        modelType: ModelType.qwen,
+        fileType: ModelFileType.task,
         // The chat carries the app's own pin — thinking OFF, explicitly.
         enableThinking: false,
       );

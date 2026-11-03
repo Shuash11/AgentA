@@ -617,11 +617,29 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
 
     setState(() {
       _isChecking = false;
-      _isLoadingModel = true;
+      _isLoadingModel = false;
       _isInstalled = true;
     });
 
-    await _attemptLoad();
+    // Startup verify WITHOUT the RAM load (cycle-46 RAM fix): the installed
+    // asset's identity is verified (cheap — no engine) and the gate opens on
+    // OfflineModelState.readyIdle; the first send loads the weights. The
+    // post-download and retry paths keep the real load — they prove the
+    // asset works, and the service's idle release frees it again.
+    final gemmaService = context.read<GemmaService>();
+    try {
+      await gemmaService.verifyInstalled();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+          '[OfflineModelGate] verify failed: $e (type: ${e.runtimeType})',
+        );
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _modelState = gemmaService.state;
+    });
   }
 
   /// Loads the model and records the outcome.
@@ -733,7 +751,8 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
       );
     }
 
-    if (_modelState == OfflineModelState.loaded) {
+    if (_modelState == OfflineModelState.loaded ||
+        _modelState == OfflineModelState.readyIdle) {
       return widget.child;
     }
 
@@ -799,10 +818,14 @@ class _OfflineModelGateState extends State<OfflineModelGate> {
                 ElevatedButton(
                   onPressed: () {
                     setState(() {
-                      _isChecking = true;
-                      _isLoadingModel = false;
+                      _isChecking = false;
+                      _isLoadingModel = true;
                     });
-                    unawaited(_checkModelStatus());
+                    // The RETRY performs a REAL load (cycle-46 RAM fix): the
+                    // startup path verifies only, so the retry is the one
+                    // affordance that proves a broken asset can load — never
+                    // a verify-only loop.
+                    unawaited(_attemptLoad());
                   },
                   child: const Text('Retry'),
                 ),

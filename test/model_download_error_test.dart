@@ -464,7 +464,7 @@ void main() {
         expect(row.first['status'], 'notInstalled');
         // The row's identity is the app's offline-model identity — app-wide
         // (contract §2).
-        expect(row.first['model_type'], 'minicpm5-2b-q4km');
+        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
       },
     );
 
@@ -559,7 +559,7 @@ void main() {
       final row = await db.query('offline_model_status');
       expect(row, hasLength(1));
       expect(row.first['status'], 'notInstalled');
-      expect(row.first['model_type'], 'minicpm5-2b-q4km');
+      expect(row.first['model_type'], 'qwen2.5-1.5b-it');
     });
 
     test(
@@ -642,7 +642,7 @@ void main() {
         expect(service.status, ModelStatus.ready);
         final row = await db.query('offline_model_status');
         expect(row.first['status'], 'ready');
-        expect(row.first['model_type'], 'minicpm5-2b-q4km');
+        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
 
         // It fires ONCE: the marker gates the second run.
         await service.checkModelExists();
@@ -754,7 +754,7 @@ void main() {
         final row = await db.query('offline_model_status');
         expect(row, hasLength(1));
         expect(row.first['status'], 'ready');
-        expect(row.first['model_type'], 'minicpm5-2b-q4km');
+        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
       },
     );
 
@@ -777,7 +777,7 @@ void main() {
         final row = await db.query('offline_model_status');
         expect(row, hasLength(1));
         expect(row.first['status'], 'ready');
-        expect(row.first['model_type'], 'minicpm5-2b-q4km');
+        expect(row.first['model_type'], 'qwen2.5-1.5b-it');
       },
     );
 
@@ -824,21 +824,22 @@ void main() {
   });
 
   group('P1 cycle-36 offline fix assertions', () {
-    test('the install URL points at the openbmb MiniCPM5 GGUF repo', () {
+    test('the install URL points at the litert-community Qwen .task repo', () {
       // The URL moved into the spec table (cycle-42 P2) — it is the ONLY
-      // place the asset URLs are written now. E2B left selection (P2b): the
-      // ONE install URL is the MiniCPM5-2B Q4_K_M GGUF asset.
+      // place the asset URLs are written now. RESTORED by the cycle-46
+      // ladder (rung b): the ONE install URL is the proven Qwen 2.5 1.5B
+      // .task asset again.
       expect(
-        OfflineModelSpecTable.minicpm5.url,
-        contains('openbmb/MiniCPM5-2B-GGUF'),
+        OfflineModelSpecTable.qwen15b.url,
+        contains('litert-community/Qwen2.5-1.5B-Instruct'),
       );
       expect(
-        OfflineModelSpecTable.minicpm5.url,
-        endsWith('/MiniCPM5-2B-Q4_K_M.gguf'),
+        OfflineModelSpecTable.qwen15b.url,
+        endsWith('/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task'),
       );
       expect(
-        OfflineModelSpecTable.minicpm5.url,
-        startsWith('https://huggingface.co/openbmb/'),
+        OfflineModelSpecTable.qwen15b.url,
+        startsWith('https://huggingface.co/litert-community/'),
       );
       // The E2B install URL survives nowhere: the asset is not offered any
       // more — only its uninstall id remains (migration v4).
@@ -901,8 +902,8 @@ void main() {
       expect(source, isNot(contains('ModelType.gemma4')));
       expect(source, isNot(contains('ModelFileType.litertlm')));
       expect(source, isNot(contains('ModelType.gemmaIt')));
-      expect(OfflineModelSpecTable.minicpm5.modelType, ModelType.llama);
-      expect(OfflineModelSpecTable.minicpm5.fileType, ModelFileType.gguf);
+      expect(OfflineModelSpecTable.qwen15b.modelType, ModelType.qwen);
+      expect(OfflineModelSpecTable.qwen15b.fileType, ModelFileType.task);
     });
 
     test('the HF token stays threaded in both install chains', () {
@@ -935,9 +936,9 @@ void main() {
         // spec's own URL — the plugin's model id and the app's identity agree.
         expect(
           ModelDownloadService.selectedFileNameFor(
-            OfflineModelSpecTable.minicpm5,
+            OfflineModelSpecTable.qwen15b,
           ),
-          'MiniCPM5-2B-Q4_K_M.gguf',
+          'Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task',
         );
         expect('spec.url,'.allMatches(service).length, 2);
       },
@@ -961,16 +962,16 @@ void main() {
       ).readAsStringSync();
 
       // The identity lives in the table — once.
-      expect("identity: 'minicpm5-2b-q4km'".allMatches(table).length, 1);
-      expect(OfflineModelSpecTable.minicpm5.identity, 'minicpm5-2b-q4km');
-      expect(OfflineModelSpecTable.appIdentity, 'minicpm5-2b-q4km');
+      expect("identity: 'qwen2.5-1.5b-it'".allMatches(table).length, 1);
+      expect(OfflineModelSpecTable.qwen15b.identity, 'qwen2.5-1.5b-it');
+      expect(OfflineModelSpecTable.appIdentity, 'qwen2.5-1.5b-it');
       // The E2B identity is GONE from the table (E2B left selection).
       expect(table, isNot(contains("'gemma-4-e2b-it'")));
 
       // No duplicate identity string survives in any consumer.
       for (final source in [service, gemma, dao]) {
         expect(source, isNot(contains("'gemma-4-e2b-it'")));
-        expect(source, isNot(contains("'minicpm5-2b-q4km'")));
+        expect(source, isNot(contains("'qwen2.5-1.5b-it'")));
       }
 
       // The four sites resolve the identity from the spec.

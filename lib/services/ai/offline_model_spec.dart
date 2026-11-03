@@ -165,26 +165,32 @@ class OfflineModelSpecTable {
 
   // §1 THE TABLE — the ONE asset.
   //
-  // Every figure is verbatim from `contracts/offline-model-minicpm5.yaml`
-  // §1-§2 (v1.0.0): install URL, size 1,561,318,368 B ≈ 1.56 GB, identity
-  // `minicpm5-2b-q4km`, `ModelType.llama` + `ModelFileType.gguf` on the
-  // llama.cpp engine.
+  // RESTORED by the cycle-46 ladder (plan §5.1 rung (b), stop rule S6): the
+  // MiniCPM5-2B GGUF cannot sustain generation on the owner's 3.64 GB device
+  // (the engine loads but dies a few tokens into every turn — the RAM
+  // requirement exceeds what the device grants; the peak estimate of
+  // plan §2.5 failed its device gate). The .task is the PROVEN asset: it
+  // shipped v1.9.0–v1.9.3 and ran four device cycles. Every figure below is
+  // verbatim from `contracts/offline-model-qwen15b.yaml` §1, live-verified
+  // 2026-11-03: final-hop 200, Content-Length 1,598,556,720, ETag sha256
+  // 82968d0a… — 1,598,556,720 B ≈ 1.60 GB, ungated, identity
+  // `qwen2.5-1.5b-it`, `ModelType.qwen` + `ModelFileType.task` on the
+  // MediaPipe engine.
 
-  /// MiniCPM5-2B Q4_K_M GGUF via the llama.cpp engine — the ONE selection
-  /// class.
+  /// Qwen 2.5 1.5B Instruct (q8, ekv4096) `.task` via the MediaPipe engine —
+  /// the ONE selection class, restored by the cycle-46 ladder (rung (b)).
   ///
-  /// The GGUF embeds its own chat template (contract §1 embedded_template),
-  /// so the file — not `ModelType.llama`'s turn markers — drives prompting.
-  /// Ungated (no token required), 1,561,318,368 B (≈1.56 GB, rendered as the
-  /// ~1.6GB chip), with the install's `expectedSize` integrity check.
-  static const OfflineModelSpec minicpm5 = OfflineModelSpec(
-    id: 'minicpm5-2b-q4km',
-    identity: 'minicpm5-2b-q4km',
+  /// The install's `expectedSize` integrity check is CARRIED OVER from the
+  /// qwen15b attempt (a corrupted/truncated download dies at install, never
+  /// at load). The size chip renders ~1.6GB for this asset too (1.60 GB).
+  static const OfflineModelSpec qwen15b = OfflineModelSpec(
+    id: 'qwen2.5-1.5b',
+    identity: 'qwen2.5-1.5b-it',
     url:
-        'https://huggingface.co/openbmb/MiniCPM5-2B-GGUF/resolve/main/MiniCPM5-2B-Q4_K_M.gguf',
-    modelType: ModelType.llama,
-    fileType: ModelFileType.gguf,
-    expectedSize: 1561318368,
+        'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task',
+    modelType: ModelType.qwen,
+    fileType: ModelFileType.task,
+    expectedSize: 1598556720,
     sizeChip: 'Model size: ~1.6GB',
     // The SHORT system instruction (cycle-44 P2, branch A — the rider):
     // the ~700-char rule-list is retired (a small local model drowns in
@@ -239,7 +245,7 @@ class OfflineModelSpecTable {
   static OfflineModelSpec? specFor(OfflineModelClass deviceClass) {
     switch (deviceClass) {
       case OfflineModelClass.singleQwen:
-        return minicpm5;
+        return qwen15b;
       case OfflineModelClass.messageOnly:
         return null;
     }
@@ -293,7 +299,7 @@ class OfflineModelSpecTable {
   /// message-only class never loads a model, so the instruction is only
   /// ever read on the model path — a caller that has no model never needs
   /// it.
-  static String get systemInstruction => minicpm5.systemInstruction;
+  static String get systemInstruction => qwen15b.systemInstruction;
 
   //
   // §4 THE IDENTITY — what the DB rows carry.
@@ -304,8 +310,8 @@ class OfflineModelSpecTable {
   ///
   /// The identity is the app's offline-model NAME, not the installed asset:
   /// the message-only row never installs anything, yet its DB rows still
-  /// record the app's identity (`minicpm5-2b-q4km`). The identity string is
+  /// record the app's identity (`qwen2.5-1.5b-it`). The identity string is
   /// written HERE and NOWHERE else in `lib/` (contract §4
   /// identity_semantics).
-  static String get appIdentity => minicpm5.identity;
+  static String get appIdentity => qwen15b.identity;
 }

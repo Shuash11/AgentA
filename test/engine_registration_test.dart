@@ -8,6 +8,9 @@ void main() {
   group('llama.cpp engine registration (C46 P2)', () {
     test('the engine claims .gguf specs and refuses .task specs', () {
       const engine = LlamaEngineProvider();
+      // The llama engine claims the GGUF TYPE — it stays registered after
+      // the cycle-46 revert (idle while no GGUF spec is selected, and the
+      // ladder's light-quant experiment would claim it again).
       expect(
         engine.canHandle(
           InferenceModelSpec(
